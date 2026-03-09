@@ -1,0 +1,3589 @@
+if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("ScannerLoaded") then
+local data = Instance.new("NumberValue")
+data.Name = "ScannerLoaded"
+data.Parent = game:GetService("Players").LocalPlayer.PlayerScripts
+
+local Rayfield = nil
+for i = 1, 10 do
+	local s, r = pcall(function()
+		return loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+	end)
+	if s and r then Rayfield = r break end
+	task.wait(2)
+end
+
+if not Rayfield then
+	local urls = {
+		"https://raw.githubusercontent.com/shlexware/Rayfield/main/source",
+		"https://raw.githubusercontent.com/UI-Interface/Rayfield/main/source",
+	}
+	for _, url in ipairs(urls) do
+		local s, r = pcall(function()
+			return loadstring(game:HttpGet(url))()
+		end)
+		if s and r then Rayfield = r break end
+	end
+end
+
+if not Rayfield then
+	warn("[BackdoorScanner] Cannot load UI library")
+	local m = game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("ScannerLoaded")
+	if m then m:Destroy() end
+	return
+end
+
+-- ==========================================
+-- SERVICES
+-- ==========================================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ReplicatedFirst = game:GetService("ReplicatedFirst")
+local RunService = game:GetService("RunService")
+local Lighting = game:GetService("Lighting")
+local StarterPack = game:GetService("StarterPack")
+local StarterGui = game:GetService("StarterGui")
+local StarterPlayer = game:GetService("StarterPlayer")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local Chat = game:GetService("Chat")
+local Teams = game:GetService("Teams")
+local SoundService = game:GetService("SoundService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local TeleportService = game:GetService("TeleportService")
+
+local player = Players.LocalPlayer
+local backpack = player:WaitForChild("Backpack")
+
+-- ==========================================
+-- SCANNER STATE v3
+-- ==========================================
+local scanResults = {}
+local remoteEvents = {}
+local remoteFunctions = {}
+local bindableEvents = {}
+local bindableFunctions = {}
+local moduleScripts = {}
+local hiddenRemotes = {}
+
+local totalScanned = 0
+local totalVulnerable = 0
+local totalErrors = 0
+local totalItems = 0
+local totalResponses = 0
+
+local isScanning = false
+local isFiring = false
+local scanDelay = 0.03
+local fireDelay = 0.05
+local safeMode = true
+local deepScanEnabled = true
+local ultraDeepScan = false
+local maxArgCombinations = 10
+local bruteForceLevel = 2 -- 1=light, 2=medium, 3=heavy
+local autoRetry = true
+local retryCount = 3
+local responseAnalysis = true
+local moduleScanning = true
+local obfuscationDetection = true
+local networkMonitor = true
+local fingerprinting = true
+
+local scanLog = {}
+local vulnerableRemotes = {}
+local itemsObtained = {}
+local responseLog = {}
+local spyLog = {}
+local moduleLog = {}
+local fingerprintLog = {}
+local networkLog = {}
+
+-- ==========================================
+-- EXPANDED KEYWORD DATABASE
+-- ==========================================
+local giveKeywords = {
+	"give","add","equip","buy","purchase","get","obtain","reward","claim","collect",
+	"pickup","take","grab","loot","drop","spawn","create","unlock","open","chest",
+	"crate","box","pack","roll","gacha","summon","hatch","redeem","code","free",
+	"gift","deliver","send","transfer","receive","accept","grant","bestow","award",
+	"distribute","supply","provide","offer","present","donate","contribute","yield",
+	"fetch","acquire","earn","win","prize","bonus","jackpot","payout","cashout",
+	"withdraw","deposit","trade","exchange","swap","convert","forge","craft",
+	"build","make","produce","generate","manufacture","assemble","combine","merge",
+	"fuse","evolve","upgrade","enhance","improve","boost","buff","empower","strengthen",
+	"levelup","rankup","prestige","ascend","transcend","awaken","rebirth","reborn"
+}
+
+local itemKeywords = {
+	"item","weapon","tool","sword","gun","knife","pet","egg","fruit","ability",
+	"power","skill","gear","armor","hat","accessory","badge","gamepass","product",
+	"currency","money","coin","gem","diamond","cash","gold","silver","token",
+	"crystal","star","point","exp","xp","level","rank","tier","rarity","legendary",
+	"epic","rare","uncommon","common","mythic","divine","godly","supreme","ultra",
+	"mega","super","hyper","ultimate","infinite","eternal","immortal","celestial",
+	"cosmic","void","shadow","dark","light","fire","ice","water","earth","wind",
+	"thunder","lightning","storm","nature","poison","heal","speed","strength",
+	"defense","attack","damage","health","mana","energy","stamina","shield",
+	"potion","elixir","scroll","rune","enchant","spell","magic","aura","effect",
+	"skin","costume","outfit","clothes","wear","mount","vehicle","car","boat",
+	"plane","helicopter","bike","skateboard","surfboard","hoverboard","jetpack",
+	"backpack","bag","inventory","slot","storage","vault","bank","safe","locker",
+	"camo","trail","particle","animation","emote","dance","taunt","pose","stance",
+	"katana","blade","axe","hammer","spear","bow","arrow","staff","wand","rod",
+	"pistol","rifle","shotgun","sniper","smg","lmg","rpg","launcher","grenade",
+	"bomb","mine","trap","turret","drone","robot","mech","titan","golem","dragon",
+	"phoenix","unicorn","griffin","hydra","kraken","leviathan","behemoth","colossus"
+}
+
+local adminKeywords = {
+	"admin","command","cmd","execute","run","eval","load","script","remote",
+	"back","door","backdoor","debug","dev","test","console","terminal","system",
+	"server","ss","fe","bypass","exploit","hack","cheat","mod","moderator",
+	"owner","creator","developer","staff","operator","sudo","root","master",
+	"control","panel","dashboard","manager","handler","processor","dispatcher",
+	"config","configuration","setting","option","parameter","variable","flag",
+	"override","force","skip","ignore","disable","enable","toggle","switch",
+	"inject","insert","append","prepend","modify","alter","change","update",
+	"patch","fix","repair","restore","reset","clear","wipe","purge","flush",
+	"destroy","delete","remove","kill","terminate","shutdown","restart","reboot",
+	"loadstring","require","getfenv","setfenv","rawget","rawset","newproxy",
+	"httpget","httppost","request","fetch","download","upload","sync","async",
+	"callback","hook","intercept","proxy","relay","forward","redirect","route",
+	"auth","authenticate","authorize","permission","privilege","access","role",
+	"whitelist","blacklist","allowlist","blocklist","filter","censor","sanitize"
+}
+
+local dangerKeywords = {
+	"ban","kick","punish","report","detect","anticheat","anti","cheat","security",
+	"log","flag","warn","blacklist","verify","check","validate","monitor","watch",
+	"track","trace","audit","inspect","examine","analyze","scan","probe","sweep",
+	"guard","protect","defend","shield","block","deny","reject","refuse","decline",
+	"restrict","limit","throttle","rate","cooldown","timeout","lockout","freeze",
+	"suspend","mute","silence","gag","censor","filter","moderate","review",
+	"captcha","challenge","puzzle","verification","confirmation","approval"
+}
+
+local backpackKeywords = {
+	"backpack","inventory","inv","storage","slot","hotbar","toolbar","loadout",
+	"kit","class","set","collection","arsenal","armory","warehouse","stockpile",
+	"stash","cache","repository","container","holder","carrier","pocket","pouch",
+	"satchel","sack","bundle","package","parcel","crate","chest","trunk","locker",
+	"drawer","shelf","rack","stand","display","showcase","exhibit","gallery"
+}
+
+local networkKeywords = {
+	"request","send","fire","invoke","call","trigger","emit","dispatch","broadcast",
+	"notify","signal","event","action","command","message","packet","data","payload",
+	"body","header","param","query","response","result","return","output","reply",
+	"answer","feedback","status","state","code","error","success","failure","timeout"
+}
+
+-- Game-specific pattern database
+local gamePatterns = {
+	-- Anime games
+	anime = {"fruit","devil","stand","jojo","naruto","bleach","onepiece","dragonball","dbz","quirk","kagune","titan","breathing","haki","nen","chakra","jutsu","bankai","gear","mode","form","transformation","awakening"},
+	-- Simulator games
+	simulator = {"rebirth","prestige","multiplier","boost","auto","collect","merge","evolve","hatch","fuse","enchant","upgrade","rank","tier","zone","area","world","realm","dimension","island","planet"},
+	-- FPS/Combat games
+	combat = {"weapon","gun","ammo","bullet","clip","magazine","scope","attachment","suppressor","grip","stock","barrel","muzzle","sight","optic","laser","flashlight","bipod","tripod","bayonet","knife","grenade","smoke","flash","frag","molotov","c4","claymore","mine","trap","turret","killstreak","scorestreak","uav","nuke","airstrike","orbital"},
+	-- RPG games
+	rpg = {"quest","mission","dungeon","raid","boss","mob","npc","dialogue","shop","merchant","vendor","trader","blacksmith","alchemist","enchanter","guild","party","team","clan","alliance","faction","kingdom","empire"},
+	-- Tycoon games
+	tycoon = {"dropper","conveyor","upgrader","furnace","processor","collector","storage","capacity","income","revenue","profit","expand","unlock","research","technology","automation"},
+	-- Horror games
+	horror = {"flashlight","battery","key","door","lock","puzzle","clue","hint","escape","hide","run","monster","entity","creature","ghost","spirit","demon","angel","curse","blessing"},
+}
+
+-- ==========================================
+-- UTILITY FUNCTIONS v3
+-- ==========================================
+local function addLog(msg, logType)
+	local entry = {
+		time = os.clock(),
+		message = msg,
+		type = logType or "info"
+	}
+	table.insert(scanLog, entry)
+	if #scanLog > 2000 then table.remove(scanLog, 1) end
+
+	if logType == "success" then
+		print("[✓] " .. msg)
+	elseif logType == "vuln" then
+		warn("[!!!] VULNERABLE: " .. msg)
+	elseif logType == "error" then
+		warn("[✗] " .. msg)
+	elseif logType == "warning" then
+		warn("[⚠] " .. msg)
+	elseif logType == "critical" then
+		warn("[🔴 CRITICAL] " .. msg)
+	elseif logType == "discovery" then
+		print("[🔍] " .. msg)
+	else
+		print("[i] " .. msg)
+	end
+end
+
+local function isValidInstance(obj)
+	local ok, r = pcall(function() return obj and obj.Parent ~= nil and obj.Name end)
+	return ok and r ~= nil
+end
+
+local function containsAnyKeyword(name, keywords)
+	local nl = name:lower()
+	local matches = {}
+	for _, kw in ipairs(keywords) do
+		if nl:find(kw:lower()) then
+			table.insert(matches, kw)
+		end
+	end
+	return #matches > 0, matches
+end
+
+local function getRemotePath(remote)
+	local path = {}
+	local current = remote
+	local depth = 0
+	while current and current ~= game and depth < 20 do
+		table.insert(path, 1, current.Name)
+		current = current.Parent
+		depth = depth + 1
+	end
+	return table.concat(path, ".")
+end
+
+local function getRemoteDepth(remote)
+	local depth = 0
+	local current = remote
+	while current and current ~= game do
+		depth = depth + 1
+		current = current.Parent
+	end
+	return depth
+end
+
+local function isDangerous(name)
+	return containsAnyKeyword(name, dangerKeywords)
+end
+
+local function isGiveRelated(name)
+	return containsAnyKeyword(name, giveKeywords)
+end
+
+local function isItemRelated(name)
+	return containsAnyKeyword(name, itemKeywords)
+end
+
+local function isAdminRelated(name)
+	return containsAnyKeyword(name, adminKeywords)
+end
+
+local function isBackpackRelated(name)
+	return containsAnyKeyword(name, backpackKeywords)
+end
+
+-- ==========================================
+-- OBFUSCATION DETECTION v3
+-- ==========================================
+local function isObfuscatedName(name)
+	-- Check for base64-like patterns
+	if name:match("^[A-Za-z0-9+/]+=*$") and #name > 8 then return true, "base64" end
+
+	-- Check for hex patterns
+	if name:match("^[0-9a-fA-F]+$") and #name >= 8 then return true, "hex" end
+
+	-- Check for random character strings
+	local consonants = 0
+	local vowels = 0
+	local digits = 0
+	local specials = 0
+	for c in name:gmatch(".") do
+		local l = c:lower()
+		if l:match("[aeiou]") then vowels = vowels + 1
+		elseif l:match("[bcdfghjklmnpqrstvwxyz]") then consonants = consonants + 1
+		elseif l:match("[0-9]") then digits = digits + 1
+		else specials = specials + 1 end
+	end
+
+	-- Too many consonants without vowels = likely obfuscated
+	if #name > 5 and vowels == 0 then return true, "no_vowels" end
+	if #name > 8 and consonants > vowels * 4 then return true, "consonant_heavy" end
+
+	-- Single or double character names
+	if #name <= 2 then return true, "short" end
+
+	-- UUID-like patterns
+	if name:match("^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$") then
+		return true, "uuid"
+	end
+
+	-- All numbers
+	if name:match("^%d+$") then return true, "numeric" end
+
+	-- Mixed case chaos
+	local upperCount = 0
+	local lowerCount = 0
+	for c in name:gmatch(".") do
+		if c:match("%u") then upperCount = upperCount + 1 end
+		if c:match("%l") then lowerCount = lowerCount + 1 end
+	end
+	if upperCount > 0 and lowerCount > 0 and #name > 6 then
+		local ratio = upperCount / (upperCount + lowerCount)
+		if ratio > 0.4 and ratio < 0.6 then return true, "mixed_case" end
+	end
+
+	-- Repeating patterns
+	if #name > 6 then
+		local half = name:sub(1, math.floor(#name/2))
+		if name:find(half, math.floor(#name/2) + 1, true) then return true, "repeating" end
+	end
+
+	return false, nil
+end
+
+local function detectHiddenRemotes()
+	hiddenRemotes = {}
+	addLog("Scanning for hidden/obfuscated remotes...", "info")
+
+	local allRemotes = {}
+
+	-- Scan all accessible services deeply
+	local function deepSearch(parent, depth)
+		if depth > 15 then return end
+		pcall(function()
+			for _, child in ipairs(parent:GetChildren()) do
+				pcall(function()
+					if child:IsA("RemoteEvent") or child:IsA("RemoteFunction") then
+						local isObf, obfType = isObfuscatedName(child.Name)
+						if isObf then
+							table.insert(hiddenRemotes, {
+								instance = child,
+								name = child.Name,
+								path = getRemotePath(child),
+								className = child.ClassName,
+								obfuscationType = obfType,
+								depth = depth
+							})
+							addLog(string.format("Hidden remote found: %s [%s] type=%s depth=%d",
+								child.Name, child.ClassName, obfType, depth), "discovery")
+						end
+					end
+					deepSearch(child, depth + 1)
+				end)
+			end
+		end)
+	end
+
+	for _, service in ipairs(game:GetChildren()) do
+		pcall(function()
+			deepSearch(service, 0)
+		end)
+	end
+
+	addLog(string.format("Found %d hidden/obfuscated remotes", #hiddenRemotes), "info")
+	return hiddenRemotes
+end
+
+-- ==========================================
+-- MODULE SCRIPT SCANNER v3
+-- ==========================================
+local function scanModuleScripts()
+	if not moduleScanning then return end
+	moduleScripts = {}
+	moduleLog = {}
+
+	addLog("Scanning ModuleScripts for remote references...", "info")
+
+	local function searchModules(parent)
+		pcall(function()
+			for _, desc in ipairs(parent:GetDescendants()) do
+				pcall(function()
+					if desc:IsA("ModuleScript") then
+						table.insert(moduleScripts, desc)
+
+						-- Try to require and analyze
+						local success, result = pcall(function()
+							return require(desc)
+						end)
+
+						if success and type(result) == "table" then
+							local moduleInfo = {
+								name = desc.Name,
+								path = getRemotePath(desc),
+								functions = {},
+								remoteRefs = {},
+								interesting = false
+							}
+
+							for key, value in pairs(result) do
+								local keyStr = tostring(key):lower()
+								if type(value) == "function" then
+									table.insert(moduleInfo.functions, tostring(key))
+
+									-- Check if function name relates to giving/items
+									local isG = containsAnyKeyword(tostring(key), giveKeywords)
+									local isI = containsAnyKeyword(tostring(key), itemKeywords)
+									local isA = containsAnyKeyword(tostring(key), adminKeywords)
+									if isG or isI or isA then
+										moduleInfo.interesting = true
+										addLog(string.format("Interesting module function: %s.%s",
+											desc.Name, tostring(key)), "discovery")
+									end
+								elseif typeof(value) == "Instance" then
+									if value:IsA("RemoteEvent") or value:IsA("RemoteFunction") then
+										table.insert(moduleInfo.remoteRefs, {
+											key = tostring(key),
+											remote = value,
+											remoteName = value.Name,
+											remotePath = getRemotePath(value)
+										})
+										moduleInfo.interesting = true
+										addLog(string.format("Module %s references remote: %s -> %s",
+											desc.Name, tostring(key), value.Name), "discovery")
+									end
+								elseif type(value) == "table" then
+									-- Deep check tables for remotes
+									pcall(function()
+										for k2, v2 in pairs(value) do
+											if typeof(v2) == "Instance" and (v2:IsA("RemoteEvent") or v2:IsA("RemoteFunction")) then
+												table.insert(moduleInfo.remoteRefs, {
+													key = tostring(key) .. "." .. tostring(k2),
+													remote = v2,
+													remoteName = v2.Name,
+													remotePath = getRemotePath(v2)
+												})
+												moduleInfo.interesting = true
+											end
+										end
+									end)
+								end
+							end
+
+							table.insert(moduleLog, moduleInfo)
+						end
+					end
+				end)
+			end
+		end)
+	end
+
+	searchModules(ReplicatedStorage)
+	pcall(function() searchModules(ReplicatedFirst) end)
+	pcall(function() searchModules(StarterPlayer) end)
+	pcall(function() searchModules(player.PlayerScripts) end)
+	pcall(function() searchModules(player.PlayerGui) end)
+	pcall(function() searchModules(Workspace) end)
+
+	addLog(string.format("Scanned %d ModuleScripts, found %d interesting",
+		#moduleScripts,
+		#(function()
+			local t = {}
+			for _, m in ipairs(moduleLog) do if m.interesting then table.insert(t, m) end end
+			return t
+		end)()
+	), "info")
+end
+
+-- ==========================================
+-- GAME FINGERPRINTING v3
+-- ==========================================
+local gameFingerprint = {
+	placeId = 0,
+	gameName = "",
+	gameType = "unknown",
+	detectedPatterns = {},
+	remoteNaming = "unknown", -- standard, obfuscated, mixed
+	securityLevel = "unknown", -- low, medium, high
+	hasAntiCheat = false,
+	hasRemoteValidation = false,
+}
+
+local function fingerprintGame()
+	gameFingerprint.placeId = game.PlaceId
+	pcall(function()
+		gameFingerprint.gameName = MarketplaceService:GetProductInfo(game.PlaceId).Name
+	end)
+
+	-- Detect game type based on content
+	local allNames = {}
+	pcall(function()
+		for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+			table.insert(allNames, desc.Name:lower())
+		end
+		for _, desc in ipairs(Workspace:GetDescendants()) do
+			table.insert(allNames, desc.Name:lower())
+		end
+	end)
+
+	local allNamesStr = table.concat(allNames, " ")
+
+	for gameType, keywords in pairs(gamePatterns) do
+		local matchCount = 0
+		for _, kw in ipairs(keywords) do
+			if allNamesStr:find(kw) then matchCount = matchCount + 1 end
+		end
+		if matchCount >= 3 then
+			table.insert(gameFingerprint.detectedPatterns, {type = gameType, matches = matchCount})
+		end
+	end
+
+	-- Sort detected patterns
+	table.sort(gameFingerprint.detectedPatterns, function(a, b) return a.matches > b.matches end)
+	if #gameFingerprint.detectedPatterns > 0 then
+		gameFingerprint.gameType = gameFingerprint.detectedPatterns[1].type
+	end
+
+	-- Detect remote naming convention
+	collectAllRemotes()
+	local obfCount = 0
+	local normalCount = 0
+	for _, re in ipairs(remoteEvents) do
+		if isValidInstance(re) then
+			if isObfuscatedName(re.Name) then obfCount = obfCount + 1
+			else normalCount = normalCount + 1 end
+		end
+	end
+	for _, rf in ipairs(remoteFunctions) do
+		if isValidInstance(rf) then
+			if isObfuscatedName(rf.Name) then obfCount = obfCount + 1
+			else normalCount = normalCount + 1 end
+		end
+	end
+
+	if obfCount > normalCount then gameFingerprint.remoteNaming = "obfuscated"
+	elseif obfCount > 0 then gameFingerprint.remoteNaming = "mixed"
+	else gameFingerprint.remoteNaming = "standard" end
+
+	-- Detect anti-cheat presence
+	local acKeywords = {"anticheat","anti_cheat","ac_","security","validation","integrity","protection","guardian","sentinel","watchdog","shield"}
+	for _, name in ipairs(allNames) do
+		for _, kw in ipairs(acKeywords) do
+			if name:find(kw) then
+				gameFingerprint.hasAntiCheat = true
+				break
+			end
+		end
+		if gameFingerprint.hasAntiCheat then break end
+	end
+
+	-- Security level assessment
+	if gameFingerprint.hasAntiCheat and gameFingerprint.remoteNaming == "obfuscated" then
+		gameFingerprint.securityLevel = "high"
+	elseif gameFingerprint.hasAntiCheat or gameFingerprint.remoteNaming == "obfuscated" then
+		gameFingerprint.securityLevel = "medium"
+	else
+		gameFingerprint.securityLevel = "low"
+	end
+
+	addLog(string.format("Game: %s | Type: %s | Security: %s | Naming: %s | AntiCheat: %s",
+		gameFingerprint.gameName,
+		gameFingerprint.gameType,
+		gameFingerprint.securityLevel,
+		gameFingerprint.remoteNaming,
+		tostring(gameFingerprint.hasAntiCheat)
+	), "info")
+
+	return gameFingerprint
+end
+
+-- ==========================================
+-- ENHANCED BACKPACK MONITOR v3
+-- ==========================================
+local backpackBefore = {}
+local characterBefore = {}
+local playerGuiBefore = {}
+local leaderstatsBeefore = {}
+
+local function deepSnapshot()
+	backpackBefore = {}
+	characterBefore = {}
+	leaderstatsBeefore = {}
+
+	for _, item in ipairs(backpack:GetChildren()) do
+		backpackBefore[item.Name .. "_" .. item.ClassName] = true
+	end
+
+	local char = player.Character
+	if char then
+		for _, item in ipairs(char:GetChildren()) do
+			if item:IsA("Tool") or item:IsA("Accessory") then
+				characterBefore[item.Name .. "_" .. item.ClassName] = true
+			end
+		end
+	end
+
+	-- Snapshot leaderstats
+	local ls = player:FindFirstChild("leaderstats")
+	if ls then
+		for _, stat in ipairs(ls:GetChildren()) do
+			pcall(function()
+				leaderstatsBeefore[stat.Name] = stat.Value
+			end)
+		end
+	end
+
+	-- Snapshot other value containers
+	for _, child in ipairs(player:GetChildren()) do
+		pcall(function()
+			if child:IsA("Folder") or child:IsA("Configuration") then
+				for _, val in ipairs(child:GetChildren()) do
+					if val:IsA("ValueBase") then
+						leaderstatsBeefore[child.Name .. "." .. val.Name] = val.Value
+					end
+				end
+			end
+		end)
+	end
+end
+
+local function deepCheckChanges(remoteName)
+	local changes = {
+		newItems = {},
+		newCharItems = {},
+		statChanges = {},
+		hasChanges = false
+	}
+
+	-- Check backpack
+	for _, item in ipairs(backpack:GetChildren()) do
+		local key = item.Name .. "_" .. item.ClassName
+		if not backpackBefore[key] then
+			table.insert(changes.newItems, {name = item.Name, class = item.ClassName})
+			changes.hasChanges = true
+			totalItems = totalItems + 1
+			table.insert(itemsObtained, {
+				name = item.Name,
+				className = item.ClassName,
+				remote = remoteName,
+				time = os.clock(),
+				source = "backpack"
+			})
+		end
+	end
+
+	-- Check character
+	local char = player.Character
+	if char then
+		for _, item in ipairs(char:GetChildren()) do
+			if (item:IsA("Tool") or item:IsA("Accessory")) then
+				local key = item.Name .. "_" .. item.ClassName
+				if not characterBefore[key] then
+					table.insert(changes.newCharItems, {name = item.Name, class = item.ClassName})
+					changes.hasChanges = true
+					totalItems = totalItems + 1
+					table.insert(itemsObtained, {
+						name = item.Name,
+						className = item.ClassName,
+						remote = remoteName,
+						time = os.clock(),
+						source = "character"
+					})
+				end
+			end
+		end
+	end
+
+	-- Check stat changes
+	local ls = player:FindFirstChild("leaderstats")
+	if ls then
+		for _, stat in ipairs(ls:GetChildren()) do
+			pcall(function()
+				local oldVal = leaderstatsBeefore[stat.Name]
+				if oldVal ~= nil and stat.Value ~= oldVal then
+					table.insert(changes.statChanges, {
+						name = stat.Name,
+						oldValue = oldVal,
+						newValue = stat.Value,
+						diff = (type(stat.Value) == "number" and type(oldVal) == "number") and (stat.Value - oldVal) or "changed"
+					})
+					changes.hasChanges = true
+				end
+			end)
+		end
+	end
+
+	-- Check other value containers
+	for _, child in ipairs(player:GetChildren()) do
+		pcall(function()
+			if child:IsA("Folder") or child:IsA("Configuration") then
+				for _, val in ipairs(child:GetChildren()) do
+					if val:IsA("ValueBase") then
+						local key = child.Name .. "." .. val.Name
+						local oldVal = leaderstatsBeefore[key]
+						if oldVal ~= nil and val.Value ~= oldVal then
+							table.insert(changes.statChanges, {
+								name = key,
+								oldValue = oldVal,
+								newValue = val.Value,
+								diff = (type(val.Value) == "number" and type(oldVal) == "number") and (val.Value - oldVal) or "changed"
+							})
+							changes.hasChanges = true
+						end
+					end
+				end
+			end
+		end)
+	end
+
+	return changes
+end
+
+-- ==========================================
+-- ENHANCED ARGUMENT GENERATOR v3
+-- ==========================================
+local function generateSmartArgs(remoteName, remoteInfo, level)
+	level = level or bruteForceLevel
+	local args = {}
+	local char = player.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	local humanoid = char and char:FindFirstChild("Humanoid")
+
+	-- ===== LEVEL 1: Basic Args =====
+	-- Empty
+	table.insert(args, {})
+
+	-- Player refs
+	table.insert(args, {player})
+	table.insert(args, {player.Name})
+	table.insert(args, {player.UserId})
+	table.insert(args, {tostring(player.UserId)})
+
+	-- Basic values
+	table.insert(args, {true})
+	table.insert(args, {false})
+	table.insert(args, {1})
+	table.insert(args, {0})
+	table.insert(args, {-1})
+	table.insert(args, {100})
+	table.insert(args, {999})
+	table.insert(args, {999999})
+	table.insert(args, {math.huge})
+	table.insert(args, {"all"})
+	table.insert(args, {"give"})
+	table.insert(args, {"get"})
+	table.insert(args, {"buy"})
+	table.insert(args, {"equip"})
+	table.insert(args, {"claim"})
+	table.insert(args, {"redeem"})
+	table.insert(args, {"open"})
+	table.insert(args, {"unlock"})
+	table.insert(args, {"spawn"})
+	table.insert(args, {"use"})
+
+	if level < 2 then return args end
+
+	-- ===== LEVEL 2: Smart Args =====
+	-- Player + value combos
+	table.insert(args, {player, "all"})
+	table.insert(args, {player, true})
+	table.insert(args, {player, 1})
+	table.insert(args, {player, 999})
+	table.insert(args, {player, 999999})
+	table.insert(args, {player.Name, 1})
+	table.insert(args, {player.Name, "all"})
+	table.insert(args, {player.Name, true})
+	table.insert(args, {player.UserId, 1})
+
+	-- Action + target combos
+	table.insert(args, {"give", player})
+	table.insert(args, {"give", player.Name})
+	table.insert(args, {"give", "all"})
+	table.insert(args, {"equip", player})
+	table.insert(args, {"buy", 1})
+	table.insert(args, {"buy", player})
+	table.insert(args, {"claim", player})
+	table.insert(args, {"add", player, 999})
+	table.insert(args, {"set", player, 999999})
+	table.insert(args, {"spawn", player})
+
+	-- Triple combos
+	table.insert(args, {player, "give", "all"})
+	table.insert(args, {player, "all", true})
+	table.insert(args, {player, 1, true})
+	table.insert(args, {"give", player, "all"})
+	table.insert(args, {"give", player.Name, "all"})
+	table.insert(args, {"give", player, 999})
+	table.insert(args, {player, "buy", 1})
+	table.insert(args, {true, player, 1})
+	table.insert(args, {1, player, "all"})
+
+	-- Table/Dictionary args (common patterns)
+	table.insert(args, {{Player = player, Action = "give"}})
+	table.insert(args, {{player = player, action = "give", item = "all"}})
+	table.insert(args, {{Type = "give", Amount = 999}})
+	table.insert(args, {{type = "give", amount = 999}})
+	table.insert(args, {{item = "all", quantity = 999}})
+	table.insert(args, {{Action = "Buy", ItemId = 1}})
+	table.insert(args, {{action = "buy", itemId = 1, amount = 999}})
+	table.insert(args, {{cmd = "give", target = player.Name}})
+	table.insert(args, {{command = "give", target = player.Name, item = "all"}})
+	table.insert(args, {{id = 1}})
+	table.insert(args, {{Id = 1}})
+	table.insert(args, {{name = "all"}})
+	table.insert(args, {{Name = "all"}})
+	table.insert(args, {{player = player.Name}})
+	table.insert(args, {{Player = player.Name}})
+	table.insert(args, {{userId = player.UserId}})
+	table.insert(args, {{UserId = player.UserId}})
+
+	-- Position based
+	if hrp then
+		local pos = hrp.Position
+		table.insert(args, {pos})
+		table.insert(args, {CFrame.new(pos)})
+		table.insert(args, {player, pos})
+		table.insert(args, {pos, player})
+		table.insert(args, {{Position = pos}})
+		table.insert(args, {{position = pos, player = player}})
+	end
+
+	-- Context-aware args based on remote name
+	if remoteInfo then
+		if remoteInfo.isGiveRelated or remoteInfo.isItemRelated then
+			-- Try all common item names
+			local commonItems = {
+				"Sword","Katana","Blade","Axe","Hammer","Spear","Bow","Staff","Wand",
+				"Pistol","Rifle","Shotgun","Sniper","SMG","RPG","Grenade",
+				"Shield","Armor","Helmet","Boots","Gloves","Cape","Ring","Amulet",
+				"Potion","Elixir","Scroll","Rune","Gem","Crystal","Orb","Stone",
+				"Key","Ticket","Pass","Card","Badge","Medal","Trophy","Crown",
+				"Apple","Bread","Meat","Fish","Water","Juice","Cake","Cookie",
+				"Wood","Stone","Iron","Gold","Diamond","Emerald","Ruby","Sapphire",
+				"Dog","Cat","Dragon","Phoenix","Unicorn","Wolf","Bear","Eagle",
+				"Default","Basic","Starter","Common","Uncommon","Rare","Epic","Legendary","Mythic"
+			}
+			for _, itemName in ipairs(commonItems) do
+				table.insert(args, {itemName})
+				table.insert(args, {player, itemName})
+				table.insert(args, {"give", itemName})
+				table.insert(args, {itemName, player})
+				table.insert(args, {{item = itemName}})
+				table.insert(args, {{Item = itemName, Player = player}})
+			end
+
+			-- Try number IDs
+			for i = 1, 20 do
+				table.insert(args, {i})
+				table.insert(args, {player, i})
+				table.insert(args, {{id = i}})
+				table.insert(args, {{Id = i, Player = player}})
+			end
+		end
+
+		if remoteInfo.isAdminRelated then
+			local adminCmds = {
+				":give all", ":giveall", ":givetools", ":tools me", ":gear me all",
+				":btools me", ":btools", "give", "giveall", "tools",
+				":ff me", ":speed me 100", ":jump me 100", ":fly me",
+				":god me", ":heal me", ":respawn me", ":refresh me",
+				":give me all", "give me all", ":tp me", ":to me",
+				"loadstring('')", "print('test')", "game:GetService",
+				":admin me", ":mod me", ":op me", ":sudo me",
+				":item all", ":weapon all", ":tool all",
+				player.Name, player.UserId, ":give " .. player.Name .. " all",
+				"give " .. player.Name .. " all",
+			}
+			for _, cmd in ipairs(adminCmds) do
+				table.insert(args, {cmd})
+				table.insert(args, {player, cmd})
+				table.insert(args, {player.Name, cmd})
+				table.insert(args, {cmd, player})
+				table.insert(args, {cmd, player.Name})
+			end
+		end
+
+		if remoteInfo.isBackpackRelated then
+			table.insert(args, {player, backpack})
+			table.insert(args, {backpack})
+			table.insert(args, {"fill"})
+			table.insert(args, {"loadout", 1})
+			table.insert(args, {player, "fill"})
+			table.insert(args, {player, "loadall"})
+			table.insert(args, {{action = "fill", player = player}})
+		end
+	end
+
+	if level < 3 then return args end
+
+	-- ===== LEVEL 3: Aggressive Args =====
+	-- Game-type specific args
+	if gameFingerprint.gameType == "anime" then
+		local animeItems = {"Mera Mera no Mi","Gomu Gomu no Mi","Gura Gura no Mi","Yami Yami no Mi",
+			"Hie Hie no Mi","Pika Pika no Mi","Magu Magu no Mi","Ope Ope no Mi",
+			"Leopard","Dragon","Phoenix","Buddha","Dough","Control","Gravity","Portal",
+			"Light","Dark","Ice","Fire","Magma","Quake","String","Barrier","Door",
+			"Star Platinum","The World","King Crimson","Gold Experience","Killer Queen",
+			"Sharingan","Rinnegan","Byakugan","Mangekyo","Susanoo","Rasengan","Chidori"}
+		for _, item in ipairs(animeItems) do
+			table.insert(args, {item})
+			table.insert(args, {player, item})
+			table.insert(args, {{fruit = item}})
+			table.insert(args, {{Fruit = item}})
+			table.insert(args, {{stand = item}})
+			table.insert(args, {{ability = item}})
+		end
+	elseif gameFingerprint.gameType == "simulator" then
+		for i = 1, 50 do
+			table.insert(args, {i})
+			table.insert(args, {player, i})
+			table.insert(args, {{zone = i}})
+			table.insert(args, {{tier = i}})
+			table.insert(args, {"rebirth", i})
+			table.insert(args, {"prestige", i})
+		end
+		table.insert(args, {"auto", true})
+		table.insert(args, {"multiplier", 999})
+		table.insert(args, {{boost = "all", duration = 999999}})
+	elseif gameFingerprint.gameType == "combat" then
+		local weapons = {"AK47","M4A1","M16","AR15","MP5","UZI","P90","SCAR","AUG","FAMAS",
+			"Glock","M1911","Desert Eagle","Revolver","Beretta","Magnum",
+			"Remington","Mossberg","SPAS12","AA12","KSG",
+			"AWP","Barrett","Dragunov","L96","Intervention",
+			"RPG","Stinger","Javelin","M203","MGL",
+			"Knife","Machete","Katana","Baseball Bat","Crowbar"}
+		for _, w in ipairs(weapons) do
+			table.insert(args, {w})
+			table.insert(args, {player, w})
+			table.insert(args, {{weapon = w}})
+			table.insert(args, {{gun = w}})
+			table.insert(args, {"equip", w})
+			table.insert(args, {"give", w, player})
+		end
+	end
+
+	-- Extreme brute force - every combination of basic types
+	local basicVals = {player, player.Name, player.UserId, true, false, 1, 0, 999, "all", "give"}
+	for _, v1 in ipairs(basicVals) do
+		for _, v2 in ipairs(basicVals) do
+			if v1 ~= v2 then
+				table.insert(args, {v1, v2})
+			end
+		end
+	end
+
+	-- Instance references
+	pcall(function()
+		for _, child in ipairs(ReplicatedStorage:GetChildren()) do
+			table.insert(args, {child})
+			table.insert(args, {child.Name})
+			table.insert(args, {player, child})
+			table.insert(args, {player, child.Name})
+		end
+	end)
+
+	-- Try tools that exist in game
+	pcall(function()
+		for _, desc in ipairs(ReplicatedStorage:GetDescendants()) do
+			if desc:IsA("Tool") then
+				table.insert(args, {desc.Name})
+				table.insert(args, {player, desc.Name})
+				table.insert(args, {"give", desc.Name})
+				table.insert(args, {{item = desc.Name}})
+				table.insert(args, {{tool = desc.Name}})
+			end
+		end
+	end)
+
+	-- Backpack items as references
+	for _, item in ipairs(backpack:GetChildren()) do
+		table.insert(args, {item})
+		table.insert(args, {item.Name})
+		table.insert(args, {player, item})
+		table.insert(args, {player, item.Name})
+	end
+
+	return args
+end
+
+-- ==========================================
+-- RESPONSE ANALYZER v3
+-- ==========================================
+local function analyzeResponse(response, remoteName, args)
+	if response == nil then return nil end
+
+	local analysis = {
+		type = typeof(response),
+		interesting = false,
+		details = {},
+		raw = tostring(response):sub(1, 500)
+	}
+
+	if typeof(response) == "table" then
+		local function analyzeTable(t, prefix, depth)
+			if depth > 5 then return end
+			for k, v in pairs(t) do
+				local fullKey = prefix .. tostring(k)
+				local kl = tostring(k):lower()
+				local vl = tostring(v):lower()
+
+				-- Check for interesting keys
+				if containsAnyKeyword(kl, {"item","weapon","tool","reward","loot","drop","give","success","unlocked","obtained","granted"}) then
+					analysis.interesting = true
+					table.insert(analysis.details, {key = fullKey, value = tostring(v), reason = "interesting_key"})
+				end
+
+				-- Check for success indicators
+				if kl:find("success") or kl:find("result") or kl:find("status") then
+					if vl == "true" or vl == "success" or vl == "ok" or vl == "1" then
+						analysis.interesting = true
+						table.insert(analysis.details, {key = fullKey, value = tostring(v), reason = "success_indicator"})
+					end
+				end
+
+				-- Check for item data
+				if typeof(v) == "Instance" and (v:IsA("Tool") or v:IsA("Model")) then
+					analysis.interesting = true
+					table.insert(analysis.details, {key = fullKey, value = v.Name, reason = "instance_ref"})
+				end
+
+				-- Recurse into sub-tables
+				if type(v) == "table" then
+					analyzeTable(v, fullKey .. ".", depth + 1)
+				end
+			end
+		end
+
+		analyzeTable(response, "", 0)
+	elseif typeof(response) == "boolean" then
+		if response == true then
+			analysis.interesting = true
+			table.insert(analysis.details, {key = "return", value = "true", reason = "success_bool"})
+		end
+	elseif typeof(response) == "string" then
+		local rl = response:lower()
+		if rl:find("success") or rl:find("granted") or rl:find("given") or rl:find("unlocked") or rl:find("obtained") then
+			analysis.interesting = true
+			table.insert(analysis.details, {key = "return", value = response:sub(1, 200), reason = "success_string"})
+		end
+	elseif typeof(response) == "Instance" then
+		if response:IsA("Tool") or response:IsA("Model") then
+			analysis.interesting = true
+			table.insert(analysis.details, {key = "return", value = response.Name, reason = "instance_return"})
+		end
+	end
+
+	if analysis.interesting then
+		addLog(string.format("Interesting response from %s: %s",
+			remoteName, analysis.raw:sub(1, 150)), "discovery")
+	end
+
+	return analysis
+end
+
+-- ==========================================
+-- SCANNER CORE v3
+-- ==========================================
+local function collectAllRemotes()
+	remoteEvents = {}
+	remoteFunctions = {}
+	bindableEvents = {}
+	bindableFunctions = {}
+
+	local seen = {}
+
+	local function addRemote(remote)
+		local id = tostring(remote)
+		if seen[id] then return end
+		seen[id] = true
+
+		if remote:IsA("RemoteEvent") then
+			table.insert(remoteEvents, remote)
+		elseif remote:IsA("RemoteFunction") then
+			table.insert(remoteFunctions, remote)
+		elseif remote:IsA("BindableEvent") then
+			table.insert(bindableEvents, remote)
+		elseif remote:IsA("BindableFunction") then
+			table.insert(bindableFunctions, remote)
+		end
+	end
+
+	local function searchLocation(location)
+		pcall(function()
+			for _, desc in ipairs(location:GetDescendants()) do
+				pcall(function()
+					if desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") or
+					   desc:IsA("BindableEvent") or desc:IsA("BindableFunction") then
+						addRemote(desc)
+					end
+				end)
+			end
+		end)
+	end
+
+	-- Primary locations
+	searchLocation(ReplicatedStorage)
+	searchLocation(Workspace)
+	searchLocation(Lighting)
+	searchLocation(StarterGui)
+	searchLocation(StarterPack)
+
+	-- Player locations
+	pcall(function() searchLocation(player.PlayerGui) end)
+	pcall(function() searchLocation(player.PlayerScripts) end)
+	pcall(function() searchLocation(player.Backpack) end)
+	if player.Character then searchLocation(player.Character) end
+
+	-- Additional locations
+	pcall(function() searchLocation(ReplicatedFirst) end)
+	pcall(function() searchLocation(StarterPlayer) end)
+	pcall(function() searchLocation(Chat) end)
+	pcall(function() searchLocation(Teams) end)
+	pcall(function() searchLocation(SoundService) end)
+
+	-- Deep scan - all services
+	if deepScanEnabled then
+		for _, service in ipairs(game:GetChildren()) do
+			pcall(function() searchLocation(service) end)
+		end
+	end
+
+	-- Ultra deep scan - use getinstances if available
+	if ultraDeepScan then
+		pcall(function()
+			if getinstances then
+				for _, inst in ipairs(getinstances()) do
+					pcall(function()
+						if inst:IsA("RemoteEvent") or inst:IsA("RemoteFunction") then
+							addRemote(inst)
+						end
+					end)
+				end
+			end
+		end)
+
+		-- Try getnilinstances
+		pcall(function()
+			if getnilinstances then
+				for _, inst in ipairs(getnilinstances()) do
+					pcall(function()
+						if inst:IsA("RemoteEvent") or inst:IsA("RemoteFunction") then
+							addRemote(inst)
+							addLog("NIL instance found: " .. inst.Name .. " [" .. inst.ClassName .. "]", "discovery")
+						end
+					end)
+				end
+			end
+		end)
+	end
+
+	-- Monitor for new remotes
+	pcall(function()
+		local conn
+		conn = ReplicatedStorage.DescendantAdded:Connect(function(desc)
+			if desc:IsA("RemoteEvent") or desc:IsA("RemoteFunction") then
+				addRemote(desc)
+				addLog("New remote added: " .. desc.Name .. " at " .. getRemotePath(desc), "discovery")
+			end
+		end)
+		-- Auto disconnect after 60 seconds
+		task.delay(60, function() pcall(function() conn:Disconnect() end) end)
+	end)
+
+	addLog(string.format("Found: %d RE, %d RF, %d BE, %d BF",
+		#remoteEvents, #remoteFunctions, #bindableEvents, #bindableFunctions), "info")
+end
+
+local function analyzeRemote(remote)
+	local info = {
+		name = remote.Name,
+		path = getRemotePath(remote),
+		className = remote.ClassName,
+		isGiveRelated = false,
+		isItemRelated = false,
+		isAdminRelated = false,
+		isDangerous = false,
+		isBackpackRelated = false,
+		isObfuscated = false,
+		obfuscationType = nil,
+		priority = 0,
+		keywords = {},
+		responses = {},
+		vulnerable = false,
+		itemsGiven = {},
+		statChanges = {},
+		depth = getRemoteDepth(remote),
+		parentInfo = "",
+	}
+
+	local name = remote.Name
+
+	-- Keyword analysis
+	local isGive, giveKws = containsAnyKeyword(name, giveKeywords)
+	if isGive then info.isGiveRelated = true info.priority = info.priority + 3
+		for _, kw in ipairs(giveKws) do table.insert(info.keywords, kw) end
+	end
+
+	local isItem, itemKws = containsAnyKeyword(name, itemKeywords)
+	if isItem then info.isItemRelated = true info.priority = info.priority + 2
+		for _, kw in ipairs(itemKws) do table.insert(info.keywords, kw) end
+	end
+
+	local isAdmin, adminKws = containsAnyKeyword(name, adminKeywords)
+	if isAdmin then info.isAdminRelated = true info.priority = info.priority + 5
+		for _, kw in ipairs(adminKws) do table.insert(info.keywords, kw) end
+	end
+
+	local isDanger, dangerKws = containsAnyKeyword(name, dangerKeywords)
+	if isDanger then info.isDangerous = true info.priority = info.priority - 10
+		for _, kw in ipairs(dangerKws) do table.insert(info.keywords, kw) end
+	end
+
+	local isBP, bpKws = containsAnyKeyword(name, backpackKeywords)
+	if isBP then info.isBackpackRelated = true info.priority = info.priority + 2
+		for _, kw in ipairs(bpKws) do table.insert(info.keywords, kw) end
+	end
+
+	-- Obfuscation check
+	local isObf, obfType = isObfuscatedName(name)
+	if isObf then
+		info.isObfuscated = true
+		info.obfuscationType = obfType
+		info.priority = info.priority + 4 -- obfuscated = potentially interesting
+	end
+
+	-- Check parent path for keywords
+	local pathStr = info.path:lower()
+	for _, kw in ipairs(adminKeywords) do
+		if pathStr:find(kw) and not info.isAdminRelated then
+			info.isAdminRelated = true
+			info.priority = info.priority + 3
+		end
+	end
+	for _, kw in ipairs(giveKeywords) do
+		if pathStr:find(kw) and not info.isGiveRelated then
+			info.isGiveRelated = true
+			info.priority = info.priority + 2
+		end
+	end
+
+	-- Parent context
+	pcall(function()
+		if remote.Parent then
+			info.parentInfo = remote.Parent.Name .. " [" .. remote.Parent.ClassName .. "]"
+		end
+	end)
+
+	-- Depth bonus (deeply nested = more suspicious)
+	if info.depth > 5 then info.priority = info.priority + 2 end
+
+	return info
+end
+
+local function fireRemoteWithRetry(remote, args, info, isEvent)
+	if safeMode and info and info.isDangerous then
+		addLog("SKIPPED (dangerous): " .. remote.Name, "warning")
+		return nil, "skipped_dangerous", nil
+	end
+
+	deepSnapshot()
+
+	local success, result
+	local attempts = autoRetry and retryCount or 1
+
+	for attempt = 1, attempts do
+		if isEvent then
+			success, result = pcall(function()
+				remote:FireServer(unpack(args))
+			end)
+		else
+			success, result = pcall(function()
+				return remote:InvokeServer(unpack(args))
+			end)
+		end
+
+		if success then break end
+		if attempt < attempts then task.wait(0.05) end
+	end
+
+	task.wait(0.15) -- wait for server response
+
+	local changes = deepCheckChanges(remote.Name)
+	local responseAnalysis = nil
+
+	if not isEvent and success and result ~= nil then
+		responseAnalysis = analyzeResponse(result, remote.Name, args)
+		totalResponses = totalResponses + 1
+
+		local responseStr = tostring(result)
+		if typeof(result) == "table" then
+			pcall(function()
+				responseStr = HttpService:JSONEncode(result)
+			end)
+			if responseStr == nil or responseStr == "" then
+				pcall(function()
+					local parts = {}
+					for k, v in pairs(result) do
+						table.insert(parts, tostring(k) .. "=" .. tostring(v))
+						if #parts > 15 then table.insert(parts, "...") break end
+					end
+					responseStr = "{" .. table.concat(parts, ", ") .. "}"
+				end)
+			end
+		end
+
+		table.insert(responseLog, {
+			remote = remote.Name,
+			path = getRemotePath(remote),
+			args = #args,
+			response = responseStr:sub(1, 500),
+			interesting = responseAnalysis and responseAnalysis.interesting or false,
+			time = os.clock()
+		})
+	end
+
+	if changes.hasChanges then
+		info.vulnerable = true
+		totalVulnerable = totalVulnerable + 1
+
+		local changeMsg = ""
+		if #changes.newItems > 0 then
+			local names = {}
+			for _, i in ipairs(changes.newItems) do table.insert(names, i.name) end
+			changeMsg = changeMsg .. "Items: " .. table.concat(names, ", ")
+			info.itemsGiven = changes.newItems
+		end
+		if #changes.newCharItems > 0 then
+			local names = {}
+			for _, i in ipairs(changes.newCharItems) do table.insert(names, i.name) end
+			if changeMsg ~= "" then changeMsg = changeMsg .. " | " end
+			changeMsg = changeMsg .. "Char: " .. table.concat(names, ", ")
+		end
+		if #changes.statChanges > 0 then
+			local stats = {}
+			for _, s in ipairs(changes.statChanges) do
+				table.insert(stats, s.name .. ":" .. tostring(s.diff))
+			end
+			if changeMsg ~= "" then changeMsg = changeMsg .. " | " end
+			changeMsg = changeMsg .. "Stats: " .. table.concat(stats, ", ")
+			info.statChanges = changes.statChanges
+		end
+
+		addLog(string.format("🔓 VULNERABLE: %s -> %s (args: %d)",
+			remote.Name, changeMsg, #args), "vuln")
+
+		table.insert(vulnerableRemotes, {
+			remote = remote,
+			name = remote.Name,
+			path = getRemotePath(remote),
+			className = remote.ClassName,
+			args = args,
+			items = changes.newItems,
+			charItems = changes.newCharItems,
+			statChanges = changes.statChanges,
+			response = result,
+			time = os.clock(),
+			argTypes = (function()
+				local types = {}
+				for _, a in ipairs(args) do table.insert(types, typeof(a)) end
+				return types
+			end)()
+		})
+	end
+
+	if success then
+		totalScanned = totalScanned + 1
+		return true, result, changes
+	else
+		totalErrors = totalErrors + 1
+		return false, result, changes
+	end
+end
+
+-- ==========================================
+-- FULL SCAN v3
+-- ==========================================
+local function runFullScan()
+	if isScanning then
+		addLog("Scan already running!", "warning")
+		return
+	end
+
+	isScanning = true
+	totalScanned = 0
+	totalVulnerable = 0
+	totalErrors = 0
+	totalItems = 0
+	totalResponses = 0
+	scanResults = {}
+	vulnerableRemotes = {}
+	responseLog = {}
+
+	addLog("══════════ STARTING FULL SCAN v3.0 ══════════", "info")
+
+	-- Fingerprint game first
+	fingerprintGame()
+
+	-- Collect all remotes
+	collectAllRemotes()
+
+	-- Detect hidden remotes
+	if obfuscationDetection then
+		detectHiddenRemotes()
+	end
+
+	-- Scan module scripts
+	if moduleScanning then
+		scanModuleScripts()
+	end
+
+	-- Analyze and prioritize all remotes
+	local allRemotes = {}
+
+	for _, re in ipairs(remoteEvents) do
+		if isValidInstance(re) then
+			local info = analyzeRemote(re)
+			info.instance = re
+			info.isEvent = true
+			table.insert(allRemotes, info)
+		end
+	end
+
+	for _, rf in ipairs(remoteFunctions) do
+		if isValidInstance(rf) then
+			local info = analyzeRemote(rf)
+			info.instance = rf
+			info.isEvent = false
+			table.insert(allRemotes, info)
+		end
+	end
+
+	-- Sort by priority (highest first)
+	table.sort(allRemotes, function(a, b) return a.priority > b.priority end)
+
+	addLog(string.format("Scanning %d remotes (sorted by priority)...", #allRemotes), "info")
+	addLog(string.format("Game type: %s | Security: %s | Brute force level: %d",
+		gameFingerprint.gameType, gameFingerprint.securityLevel, bruteForceLevel), "info")
+
+	local scanStartTime = os.clock()
+
+	for idx, info in ipairs(allRemotes) do
+		if not isScanning then
+			addLog("Scan cancelled by user!", "warning")
+			break
+		end
+
+		if not isValidInstance(info.instance) then continue end
+
+		-- Priority label
+		local labels = {}
+		if info.isAdminRelated then table.insert(labels, "🔑ADMIN") end
+		if info.isGiveRelated then table.insert(labels, "🎁GIVE") end
+		if info.isItemRelated then table.insert(labels, "📦ITEM") end
+		if info.isBackpackRelated then table.insert(labels, "🎒BP") end
+		if info.isObfuscated then table.insert(labels, "🔒OBF:" .. (info.obfuscationType or "?")) end
+		if info.isDangerous then table.insert(labels, "⚠️DANGER") end
+
+		local labelStr = #labels > 0 and (" " .. table.concat(labels, " ")) or ""
+		addLog(string.format("[%d/%d] %s: %s%s (priority: %d)",
+			idx, #allRemotes, info.className, info.path, labelStr, info.priority), "info")
+
+		-- Generate args based on context
+		local testArgs = generateSmartArgs(info.name, info, bruteForceLevel)
+
+		-- Limit args for low-priority remotes
+		local maxArgs
+		if info.priority >= 5 then
+			maxArgs = #testArgs -- test all for high priority
+		elseif info.priority >= 2 then
+			maxArgs = math.min(maxArgCombinations * 2, #testArgs) -- medium
+		else
+			maxArgs = math.min(maxArgCombinations, #testArgs) -- low
+		end
+
+		local foundVuln = false
+		for argIdx = 1, maxArgs do
+			if not isScanning then break end
+			if foundVuln and not info.isAdminRelated then break end -- skip rest if already found vuln (unless admin)
+
+			local args = testArgs[argIdx]
+
+			local ok, result, changes = pcall(function()
+				return fireRemoteWithRetry(info.instance, args, info, info.isEvent)
+			end)
+
+			if ok and changes and changes.hasChanges then
+				foundVuln = true
+			end
+
+			task.wait(fireDelay)
+		end
+
+		info.scanned = true
+		table.insert(scanResults, info)
+
+		task.wait(scanDelay)
+
+		-- Progress update every 10 remotes
+		if idx % 10 == 0 then
+			addLog(string.format("Progress: %d/%d | Vulnerable: %d | Items: %d | Time: %.1fs",
+				idx, #allRemotes, totalVulnerable, totalItems, os.clock() - scanStartTime), "info")
+		end
+	end
+
+	local elapsed = os.clock() - scanStartTime
+
+	addLog("══════════ SCAN COMPLETE ══════════", "success")
+	addLog(string.format("Time: %.1fs | Scanned: %d | Vulnerable: %d | Errors: %d | Items: %d | Responses: %d",
+		elapsed, totalScanned, totalVulnerable, totalErrors, totalItems, totalResponses), "success")
+
+	if #vulnerableRemotes > 0 then
+		addLog("══════════ VULNERABLE REMOTES ══════════", "vuln")
+		for i, v in ipairs(vulnerableRemotes) do
+			local itemNames = {}
+			for _, item in ipairs(v.items or {}) do table.insert(itemNames, item.name) end
+			for _, item in ipairs(v.charItems or {}) do table.insert(itemNames, item.name .. "(char)") end
+			local statNames = {}
+			for _, s in ipairs(v.statChanges or {}) do table.insert(statNames, s.name .. ":" .. tostring(s.diff)) end
+
+			addLog(string.format("[%d] %s (%s) -> Items: %s | Stats: %s",
+				i, v.name, v.path,
+				#itemNames > 0 and table.concat(itemNames, ", ") or "none",
+				#statNames > 0 and table.concat(statNames, ", ") or "none"
+			), "vuln")
+		end
+	end
+
+	isScanning = false
+end
+
+-- ==========================================
+-- TARGETED SCANS v3
+-- ==========================================
+local function scanGiveRemotes()
+	if isScanning then return end
+	isScanning = true
+	addLog("══════════ SCANNING GIVE/ITEM REMOTES ══════════", "info")
+	collectAllRemotes()
+
+	local targets = {}
+	local allTargetRemotes = {}
+
+	-- Collect remoteEvents
+	for _, re in ipairs(remoteEvents) do
+		if isValidInstance(re) then table.insert(allTargetRemotes, {remote = re, isEvent = true}) end
+	end
+	for _, rf in ipairs(remoteFunctions) do
+		if isValidInstance(rf) then table.insert(allTargetRemotes, {remote = rf, isEvent = false}) end
+	end
+
+	-- Filter for give/item related
+	for _, entry in ipairs(allTargetRemotes) do
+		local name = entry.remote.Name
+		local path = getRemotePath(entry.remote):lower()
+		local isG = containsAnyKeyword(name, giveKeywords)
+		local isI = containsAnyKeyword(name, itemKeywords)
+		local isB = containsAnyKeyword(name, backpackKeywords)
+		local pathG = containsAnyKeyword(path, giveKeywords)
+		local pathI = containsAnyKeyword(path, itemKeywords)
+
+		if isG or isI or isB or pathG or pathI then
+			table.insert(targets, entry)
+		end
+	end
+
+	addLog(string.format("Found %d give/item related remotes", #targets), "info")
+
+	for idx, target in ipairs(targets) do
+		if not isScanning then break end
+		local info = analyzeRemote(target.remote)
+		local testArgs = generateSmartArgs(target.remote.Name, info, math.max(bruteForceLevel, 2))
+
+		addLog(string.format("[%d/%d] Testing: %s", idx, #targets, getRemotePath(target.remote)), "info")
+
+		for _, args in ipairs(testArgs) do
+			if not isScanning then break end
+			pcall(function()
+				fireRemoteWithRetry(target.remote, args, info, target.isEvent)
+			end)
+			task.wait(fireDelay)
+		end
+		task.wait(scanDelay)
+	end
+
+	addLog("Give/Item scan complete!", "success")
+	isScanning = false
+end
+
+local function scanAdminRemotes()
+	if isScanning then return end
+	isScanning = true
+	addLog("══════════ SCANNING ADMIN/BACKDOOR REMOTES ══════════", "info")
+	collectAllRemotes()
+
+	local targets = {}
+
+	-- Admin keyword matching
+	for _, re in ipairs(remoteEvents) do
+		if isValidInstance(re) then
+			if containsAnyKeyword(re.Name, adminKeywords) or
+			   containsAnyKeyword(getRemotePath(re), adminKeywords) then
+				table.insert(targets, {remote = re, isEvent = true, reason = "admin_keyword"})
+			end
+		end
+	end
+	for _, rf in ipairs(remoteFunctions) do
+		if isValidInstance(rf) then
+			if containsAnyKeyword(rf.Name, adminKeywords) or
+			   containsAnyKeyword(getRemotePath(rf), adminKeywords) then
+				table.insert(targets, {remote = rf, isEvent = false, reason = "admin_keyword"})
+			end
+		end
+	end
+
+	-- Obfuscated/suspicious names
+	for _, re in ipairs(remoteEvents) do
+		if isValidInstance(re) then
+			local isObf, obfType = isObfuscatedName(re.Name)
+			if isObf then
+				local found = false
+				for _, t in ipairs(targets) do if t.remote == re then found = true break end end
+				if not found then
+					table.insert(targets, {remote = re, isEvent = true, reason = "obfuscated:" .. obfType})
+				end
+			end
+		end
+	end
+	for _, rf in ipairs(remoteFunctions) do
+		if isValidInstance(rf) then
+			local isObf, obfType = isObfuscatedName(rf.Name)
+			if isObf then
+				local found = false
+				for _, t in ipairs(targets) do if t.remote == rf then found = true break end end
+				if not found then
+					table.insert(targets, {remote = rf, isEvent = false, reason = "obfuscated:" .. obfType})
+				end
+			end
+		end
+	end
+
+	-- Deeply nested remotes (suspicious)
+	for _, re in ipairs(remoteEvents) do
+		if isValidInstance(re) and getRemoteDepth(re) > 5 then
+			local found = false
+			for _, t in ipairs(targets) do if t.remote == re then found = true break end end
+			if not found then
+				table.insert(targets, {remote = re, isEvent = true, reason = "deep_nested"})
+			end
+		end
+	end
+
+	addLog(string.format("Found %d admin/suspicious remotes", #targets), "info")
+
+	for idx, target in ipairs(targets) do
+		if not isScanning then break end
+		local info = analyzeRemote(target.remote)
+		info.isDangerous = false -- override for admin scan
+
+		local testArgs = generateSmartArgs(target.remote.Name, info, 3) -- always heavy for admin
+
+		addLog(string.format("[%d/%d] Testing: %s [%s]",
+			idx, #targets, getRemotePath(target.remote), target.reason), "warning")
+
+		for _, args in ipairs(testArgs) do
+			if not isScanning then break end
+			pcall(function()
+				fireRemoteWithRetry(target.remote, args, info, target.isEvent)
+			end)
+			task.wait(fireDelay)
+		end
+		task.wait(scanDelay)
+	end
+
+	addLog("Admin/Backdoor scan complete!", "success")
+	isScanning = false
+end
+
+local function scanHiddenRemotes()
+	if isScanning then return end
+	isScanning = true
+	addLog("══════════ SCANNING HIDDEN/OBFUSCATED REMOTES ══════════", "info")
+
+	detectHiddenRemotes()
+
+	if #hiddenRemotes == 0 then
+		addLog("No hidden remotes found!", "info")
+		isScanning = false
+		return
+	end
+
+	for idx, hidden in ipairs(hiddenRemotes) do
+		if not isScanning then break end
+		if not isValidInstance(hidden.instance) then continue end
+
+		local info = analyzeRemote(hidden.instance)
+		info.isDangerous = false -- test everything for hidden remotes
+
+		local testArgs = generateSmartArgs(hidden.name, info, 3) -- heavy brute force
+
+		addLog(string.format("[%d/%d] Testing hidden: %s [%s] obf=%s",
+			idx, #hiddenRemotes, hidden.path, hidden.className, hidden.obfuscationType), "warning")
+
+		for _, args in ipairs(testArgs) do
+			if not isScanning then break end
+			pcall(function()
+				fireRemoteWithRetry(hidden.instance, args, info, hidden.className == "RemoteEvent")
+			end)
+			task.wait(fireDelay)
+		end
+		task.wait(scanDelay)
+	end
+
+	addLog("Hidden remote scan complete!", "success")
+	isScanning = false
+end
+
+local function fireAllRemotes()
+	if isScanning then return end
+	isScanning = true
+	isFiring = true
+	addLog("══════════ FIRE ALL REMOTES ══════════", "warning")
+	collectAllRemotes()
+
+	local count = 0
+	local allTargets = {}
+
+	for _, re in ipairs(remoteEvents) do
+		if isValidInstance(re) then table.insert(allTargets, {remote = re, isEvent = true}) end
+	end
+	for _, rf in ipairs(remoteFunctions) do
+		if isValidInstance(rf) then table.insert(allTargets, {remote = rf, isEvent = false}) end
+	end
+
+	for _, target in ipairs(allTargets) do
+		if not isScanning then break end
+
+		local info = analyzeRemote(target.remote)
+		if safeMode and info.isDangerous then
+			addLog("Skipped dangerous: " .. target.remote.Name, "warning")
+			continue
+		end
+
+		deepSnapshot()
+
+		-- Quick fire with basic args
+		local quickArgs = {
+			{},
+			{player},
+			{player.Name},
+			{player, "all"},
+			{true},
+			{1},
+			{999},
+			{"all"},
+			{"give"},
+			{player, true},
+			{player, 1},
+		}
+
+		for _, args in ipairs(quickArgs) do
+			pcall(function()
+				if target.isEvent then
+					target.remote:FireServer(unpack(args))
+				else
+					local result = target.remote:InvokeServer(unpack(args))
+					if result ~= nil then
+						addLog("RF Response " .. target.remote.Name .. ": " .. tostring(result):sub(1, 100), "info")
+					end
+				end
+			end)
+			task.wait(0.03)
+		end
+
+		local changes = deepCheckChanges(target.remote.Name)
+		if changes.hasChanges then
+			local changeMsg = ""
+			if #changes.newItems > 0 then
+				local names = {}
+				for _, i in ipairs(changes.newItems) do table.insert(names, i.name) end
+				changeMsg = "Items: " .. table.concat(names, ", ")
+			end
+			if #changes.statChanges > 0 then
+				local stats = {}
+				for _, s in ipairs(changes.statChanges) do
+					table.insert(stats, s.name .. ":" .. tostring(s.diff))
+				end
+				if changeMsg ~= "" then changeMsg = changeMsg .. " | " end
+				changeMsg = changeMsg .. "Stats: " .. table.concat(stats, ", ")
+			end
+
+			addLog("🔓 FOUND from " .. target.remote.Name .. ": " .. changeMsg, "vuln")
+			table.insert(vulnerableRemotes, {
+				remote = target.remote,
+				name = target.remote.Name,
+				path = getRemotePath(target.remote),
+				items = changes.newItems,
+				charItems = changes.newCharItems,
+				statChanges = changes.statChanges,
+			})
+			totalVulnerable = totalVulnerable + 1
+		end
+
+		count = count + 1
+		task.wait(fireDelay)
+	end
+
+	addLog(string.format("Fired %d remotes total", count), "success")
+	isScanning = false
+	isFiring = false
+end
+
+-- ==========================================
+-- ITEM GRABBER v3
+-- ==========================================
+local function tryGrabAllItems()
+	addLog("══════════ SMART ITEM GRABBER v3 ══════════", "info")
+	collectAllRemotes()
+
+	-- Extended patterns
+	local patterns = {
+		{keywords = {"give"}, args = {{player,"all"},{player.Name,"all"},{"all"},{player},{player,true},{player,"all",true},{player,1},{player,999}}},
+		{keywords = {"equip"}, args = {{player,"all"},{"all"},{1},{player,1},{player,"all"}}},
+		{keywords = {"buy","purchase"}, args = {{player,1},{1},{"all"},{player,"all"},{player,1,true},{player,1,999}}},
+		{keywords = {"tool","weapon","gun","sword","knife"}, args = {{player},{"all"},{player,"all"},{player,true}}},
+		{keywords = {"item"}, args = {{player},{"all"},{player,"all"},{"give"},{player,"give"}}},
+		{keywords = {"spawn","create"}, args = {{player},{player,"all"},{player,true}}},
+		{keywords = {"load","fill"}, args = {{player},{player,"all"},{"all"},{player,"fill"}}},
+		{keywords = {"inventory","backpack","inv"}, args = {{player,"fill"},{"fill"},{player,"all"},{player,"loadall"}}},
+		{keywords = {"unlock","open"}, args = {{player,"all"},{"all"},{player},{player,true}}},
+		{keywords = {"claim","collect","redeem"}, args = {{player},{"all"},{player,"all"},{player,true}}},
+		{keywords = {"chest","crate","box","pack"}, args = {{player},{player,1},{player,"all"},{1},{player,999}}},
+		{keywords = {"hatch","roll","gacha","summon"}, args = {{player},{player,1},{1},{player,true}}},
+		{keywords = {"reward","bonus","prize"}, args = {{player},{"claim"},{player,"claim"},{player,true}}},
+		{keywords = {"trade","exchange","swap"}, args = {{player,"all"},{player,player}}},
+		{keywords = {"craft","forge","build"}, args = {{player,"all"},{player,1},{1,"all"}}},
+		{keywords = {"upgrade","evolve","fuse"}, args = {{player,"all"},{player,1},{1}}},
+		{keywords = {"drop","loot"}, args = {{player},{"all"},{player,true}}},
+		{keywords = {"code"}, args = {{"freeall"},{"FREEALL"},{"release"},{"RELEASE"},{"reward"},{"items"}}},
+	}
+
+	deepSnapshot()
+
+	local totalFired = 0
+
+	for _, re in ipairs(remoteEvents) do
+		if not isValidInstance(re) then continue end
+		local nl = re.Name:lower()
+		local pl = getRemotePath(re):lower()
+
+		for _, pattern in ipairs(patterns) do
+			local matched = false
+			for _, kw in ipairs(pattern.keywords) do
+				if nl:find(kw) or pl:find(kw) then matched = true break end
+			end
+
+			if matched then
+				for _, args in ipairs(pattern.args) do
+					pcall(function() re:FireServer(unpack(args)) end)
+					totalFired = totalFired + 1
+					task.wait(0.03)
+				end
+			end
+		end
+	end
+
+	for _, rf in ipairs(remoteFunctions) do
+		if not isValidInstance(rf) then continue end
+		local nl = rf.Name:lower()
+		local pl = getRemotePath(rf):lower()
+
+		for _, pattern in ipairs(patterns) do
+			local matched = false
+			for _, kw in ipairs(pattern.keywords) do
+				if nl:find(kw) or pl:find(kw) then matched = true break end
+			end
+
+			if matched then
+				for _, args in ipairs(pattern.args) do
+					pcall(function() rf:InvokeServer(unpack(args)) end)
+					totalFired = totalFired + 1
+					task.wait(0.03)
+				end
+			end
+		end
+	end
+
+	task.wait(0.5)
+	local changes = deepCheckChanges("ItemGrabber")
+
+	if changes.hasChanges then
+		local msgs = {}
+		if #changes.newItems > 0 then
+			local names = {}
+			for _, i in ipairs(changes.newItems) do table.insert(names, i.name) end
+			table.insert(msgs, "Items: " .. table.concat(names, ", "))
+		end
+		if #changes.statChanges > 0 then
+			local stats = {}
+			for _, s in ipairs(changes.statChanges) do table.insert(stats, s.name .. ":" .. tostring(s.diff)) end
+			table.insert(msgs, "Stats: " .. table.concat(stats, ", "))
+		end
+		addLog("🎁 Grabbed: " .. table.concat(msgs, " | "), "vuln")
+	else
+		addLog(string.format("No new items obtained (fired %d args)", totalFired), "info")
+	end
+end
+
+-- ==========================================
+-- WORKSPACE TOOL GRABBER v3
+-- ==========================================
+local function grabWorkspaceTools()
+	addLog("Grabbing tools from all accessible locations...", "info")
+	local char = player.Character
+	local count = 0
+	local seen = {}
+
+	local function tryGrab(source, sourceName)
+		pcall(function()
+			for _, desc in ipairs(source:GetDescendants()) do
+				pcall(function()
+					if desc:IsA("Tool") and not seen[desc.Name] then
+						-- Try direct parent
+						pcall(function()
+							desc.Parent = backpack
+							count = count + 1
+							seen[desc.Name] = true
+							addLog("Grabbed: " .. desc.Name .. " from " .. sourceName, "success")
+						end)
+
+						-- Try clone if direct fails
+						if not seen[desc.Name] then
+							pcall(function()
+								local clone = desc:Clone()
+								clone.Parent = backpack
+								count = count + 1
+								seen[desc.Name] = true
+								addLog("Cloned: " .. desc.Name .. " from " .. sourceName, "success")
+							end)
+						end
+					end
+
+					-- Try click detectors
+					if desc:IsA("ClickDetector") then
+						pcall(function()
+							if fireclickdetector then
+								fireclickdetector(desc)
+							end
+						end)
+					end
+
+					-- Try proximity prompts
+					if desc:IsA("ProximityPrompt") then
+						pcall(function()
+							if fireproximityprompt then
+								fireproximityprompt(desc)
+							end
+						end)
+					end
+
+					-- Try touch interests (simulate touching)
+					if desc:IsA("TouchTransmitter") and char and char:FindFirstChild("HumanoidRootPart") then
+						pcall(function()
+							if firetouchinterest then
+								firetouchinterest(char.HumanoidRootPart, desc.Parent, 0)
+								task.wait(0.1)
+								firetouchinterest(char.HumanoidRootPart, desc.Parent, 1)
+							end
+						end)
+					end
+				end)
+			end
+		end)
+	end
+
+	tryGrab(Workspace, "Workspace")
+	tryGrab(ReplicatedStorage, "ReplicatedStorage")
+	pcall(function() tryGrab(ReplicatedFirst, "ReplicatedFirst") end)
+	tryGrab(Lighting, "Lighting")
+	tryGrab(StarterPack, "StarterPack")
+	pcall(function() tryGrab(StarterGui, "StarterGui") end)
+	pcall(function() tryGrab(StarterPlayer, "StarterPlayer") end)
+	pcall(function() tryGrab(SoundService, "SoundService") end)
+
+	-- Try nil instances
+	pcall(function()
+		if getnilinstances then
+			for _, inst in ipairs(getnilinstances()) do
+				if inst:IsA("Tool") and not seen[inst.Name] then
+					pcall(function()
+						local clone = inst:Clone()
+						clone.Parent = backpack
+						count = count + 1
+						seen[inst.Name] = true
+						addLog("Grabbed nil: " .. inst.Name, "success")
+					end)
+				end
+			end
+		end
+	end)
+
+	addLog(string.format("Grabbed %d tools from all sources", count), count > 0 and "success" or "info")
+end
+
+-- ==========================================
+-- ENHANCED REMOTE SPY v3
+-- ==========================================
+local remoteSpyEnabled = false
+local spyConnection = nil
+local spyHookInstalled = false
+
+local function startRemoteSpy()
+	if spyHookInstalled then
+		remoteSpyEnabled = true
+		addLog("Remote Spy re-enabled!", "info")
+		return
+	end
+
+	remoteSpyEnabled = true
+	addLog("Remote Spy starting...", "info")
+
+	-- Method 1: Metatable hook
+	pcall(function()
+		local mt = getrawmetatable(game)
+		if not mt then return end
+		local oldNC = mt.__namecall
+		local oldIdx = mt.__index
+		setreadonly(mt, false)
+
+		mt.__namecall = newcclosure(function(self, ...)
+			local method = getnamecallmethod()
+			if remoteSpyEnabled then
+				if (method == "FireServer" or method == "InvokeServer") and
+				   (self:IsA("RemoteEvent") or self:IsA("RemoteFunction")) then
+					local args = {...}
+					local argParts = {}
+					for i, arg in ipairs(args) do
+						local argStr = typeof(arg) .. ":"
+						if typeof(arg) == "Instance" then
+							argStr = argStr .. arg.ClassName .. ":" .. arg.Name
+						elseif typeof(arg) == "table" then
+							local tParts = {}
+							pcall(function()
+								for k, v in pairs(arg) do
+									table.insert(tParts, tostring(k) .. "=" .. tostring(v):sub(1, 30))
+									if #tParts > 5 then break end
+								end
+							end)
+							argStr = argStr .. "{" .. table.concat(tParts, ",") .. "}"
+						else
+							argStr = argStr .. tostring(arg):sub(1, 50)
+						end
+						table.insert(argParts, argStr)
+					end
+
+					local entry = {
+						time = os.clock(),
+						remote = self.Name,
+						path = getRemotePath(self),
+						method = method,
+						args = table.concat(argParts, " | "),
+						argCount = #args,
+						rawArgs = args,
+						className = self.ClassName,
+					}
+					table.insert(spyLog, entry)
+					if #spyLog > 500 then table.remove(spyLog, 1) end
+
+					addLog(string.format("[SPY] %s -> %s(%s)",
+						method, self.Name,
+						table.concat(argParts, ", "):sub(1, 150)
+					), "info")
+				end
+			end
+			return oldNC(self, ...)
+		end)
+
+		setreadonly(mt, true)
+		spyHookInstalled = true
+		addLog("Remote Spy hook installed!", "success")
+	end)
+
+	-- Method 2: Connection-based monitoring (fallback)
+	if not spyHookInstalled then
+		addLog("Metatable hook failed, using connection-based spy...", "warning")
+
+		-- Monitor known remotes
+		collectAllRemotes()
+		-- Note: Connection-based spy is limited compared to metatable hook
+		addLog("Connection-based spy active (limited functionality)", "warning")
+	end
+end
+
+local function stopRemoteSpy()
+	remoteSpyEnabled = false
+	addLog("Remote Spy paused. Logged " .. #spyLog .. " calls", "info")
+end
+
+-- ==========================================
+-- REPLAY SYSTEM v3
+-- ==========================================
+local function replaySpyEntry(entry)
+	if not entry then return end
+
+	pcall(function()
+		-- Find the remote
+		local parts = string.split(entry.path, ".")
+		local current = game
+		for _, part in ipairs(parts) do
+			current = current:FindFirstChild(part) or current[part]
+		end
+
+		if current and entry.rawArgs then
+			deepSnapshot()
+			if entry.method == "FireServer" and current:IsA("RemoteEvent") then
+				current:FireServer(unpack(entry.rawArgs))
+			elseif entry.method == "InvokeServer" and current:IsA("RemoteFunction") then
+				local result = current:InvokeServer(unpack(entry.rawArgs))
+				addLog("Replay response: " .. tostring(result):sub(1, 200), "info")
+			end
+			task.wait(0.2)
+			local changes = deepCheckChanges("Replay:" .. entry.remote)
+			if changes.hasChanges then
+				addLog("Replay caused changes!", "vuln")
+			end
+		end
+	end)
+end
+
+-- ==========================================
+-- RE-FIRE VULNERABLE v3
+-- ==========================================
+local function refireVulnerable()
+	if #vulnerableRemotes == 0 then
+		addLog("No vulnerable remotes found yet!", "warning")
+		return
+	end
+
+	addLog("Re-firing " .. #vulnerableRemotes .. " vulnerable remotes...", "info")
+
+	for _, v in ipairs(vulnerableRemotes) do
+		if isValidInstance(v.remote) then
+			deepSnapshot()
+			pcall(function()
+				if v.remote:IsA("RemoteEvent") then
+					if v.args and #v.args > 0 then
+						v.remote:FireServer(unpack(v.args))
+					else
+						v.remote:FireServer()
+						task.wait(0.05)
+						v.remote:FireServer(player)
+						task.wait(0.05)
+						v.remote:FireServer(player, "all")
+					end
+				elseif v.remote:IsA("RemoteFunction") then
+					if v.args and #v.args > 0 then
+						v.remote:InvokeServer(unpack(v.args))
+					else
+						v.remote:InvokeServer()
+						task.wait(0.05)
+						v.remote:InvokeServer(player)
+					end
+				end
+			end)
+			task.wait(0.15)
+			local changes = deepCheckChanges("ReFire:" .. v.name)
+			if changes.hasChanges then
+				addLog("Re-fire success on " .. v.name, "vuln")
+			end
+		end
+	end
+end
+
+local function autoFarmVulnerable()
+	addLog("Starting auto-farm on vulnerable remotes...", "info")
+	while isScanning and #vulnerableRemotes > 0 do
+		for _, v in ipairs(vulnerableRemotes) do
+			if not isScanning then break end
+			if isValidInstance(v.remote) then
+				pcall(function()
+					if v.remote:IsA("RemoteEvent") then
+						if v.args and #v.args > 0 then
+							v.remote:FireServer(unpack(v.args))
+						else
+							v.remote:FireServer(player)
+						end
+					elseif v.remote:IsA("RemoteFunction") then
+						if v.args and #v.args > 0 then
+							v.remote:InvokeServer(unpack(v.args))
+						else
+							v.remote:InvokeServer(player)
+						end
+					end
+				end)
+			end
+			task.wait(fireDelay)
+		end
+		task.wait(1)
+	end
+	addLog("Auto-farm stopped", "info")
+end
+
+-- ==========================================
+-- REPORT GENERATOR v3
+-- ==========================================
+local function generateReport()
+	local report = "╔══════════════════════════════════════════╗\n"
+	report = report .. "║    BACKDOOR SCANNER v3.0 - FULL REPORT   ║\n"
+	report = report .. "╚══════════════════════════════════════════╝\n\n"
+
+	pcall(function()
+		report = report .. "Game: " .. gameFingerprint.gameName .. " (ID: " .. game.PlaceId .. ")\n"
+		report = report .. "Type: " .. gameFingerprint.gameType .. "\n"
+		report = report .. "Security: " .. gameFingerprint.securityLevel .. "\n"
+		report = report .. "Remote Naming: " .. gameFingerprint.remoteNaming .. "\n"
+		report = report .. "Anti-Cheat: " .. tostring(gameFingerprint.hasAntiCheat) .. "\n"
+	end)
+	report = report .. "Time: " .. os.date() .. "\n\n"
+
+	report = report .. "═══ REMOTES FOUND ═══\n"
+	report = report .. "RemoteEvents: " .. #remoteEvents .. "\n"
+	report = report .. "RemoteFunctions: " .. #remoteFunctions .. "\n"
+	report = report .. "BindableEvents: " .. #bindableEvents .. "\n"
+	report = report .. "BindableFunctions: " .. #bindableFunctions .. "\n"
+	report = report .. "Hidden/Obfuscated: " .. #hiddenRemotes .. "\n"
+	report = report .. "ModuleScripts: " .. #moduleScripts .. "\n\n"
+
+	report = report .. "═══ SCAN RESULTS ═══\n"
+	report = report .. "Total Scanned: " .. totalScanned .. "\n"
+	report = report .. "Vulnerable: " .. totalVulnerable .. "\n"
+	report = report .. "Errors: " .. totalErrors .. "\n"
+	report = report .. "Items Obtained: " .. totalItems .. "\n"
+	report = report .. "Responses Analyzed: " .. totalResponses .. "\n\n"
+
+	if #vulnerableRemotes > 0 then
+		report = report .. "═══ VULNERABLE REMOTES ═══\n"
+		for i, v in ipairs(vulnerableRemotes) do
+			report = report .. string.format("%d. %s\n   Path: %s\n   Class: %s\n",
+				i, v.name, v.path, v.className or "?")
+
+			if v.items and #v.items > 0 then
+				local names = {}
+				for _, item in ipairs(v.items) do table.insert(names, item.name) end
+				report = report .. "   Items: " .. table.concat(names, ", ") .. "\n"
+			end
+			if v.charItems and #v.charItems > 0 then
+				local names = {}
+				for _, item in ipairs(v.charItems) do table.insert(names, item.name) end
+				report = report .. "   Char Items: " .. table.concat(names, ", ") .. "\n"
+			end
+			if v.statChanges and #v.statChanges > 0 then
+				local stats = {}
+				for _, s in ipairs(v.statChanges) do
+					table.insert(stats, s.name .. ": " .. tostring(s.oldValue) .. " -> " .. tostring(s.newValue))
+				end
+				report = report .. "   Stat Changes: " .. table.concat(stats, ", ") .. "\n"
+			end
+			if v.argTypes then
+				report = report .. "   Arg Types: " .. table.concat(v.argTypes, ", ") .. "\n"
+			end
+			report = report .. "\n"
+		end
+	end
+
+	if #itemsObtained > 0 then
+		report = report .. "═══ ITEMS OBTAINED ═══\n"
+		for i, item in ipairs(itemsObtained) do
+			report = report .. string.format("%d. %s [%s] from %s (source: %s)\n",
+				i, item.name, item.className, item.remote, item.source or "?")
+		end
+		report = report .. "\n"
+	end
+
+	if #hiddenRemotes > 0 then
+		report = report .. "═══ HIDDEN/OBFUSCATED REMOTES ═══\n"
+		for i, h in ipairs(hiddenRemotes) do
+			report = report .. string.format("%d. %s [%s] type=%s depth=%d\n",
+				i, h.path, h.className, h.obfuscationType, h.depth)
+		end
+		report = report .. "\n"
+	end
+
+	-- Interesting module scripts
+	local interestingModules = {}
+	for _, m in ipairs(moduleLog) do
+		if m.interesting then table.insert(interestingModules, m) end
+	end
+	if #interestingModules > 0 then
+		report = report .. "═══ INTERESTING MODULES ═══\n"
+		for i, m in ipairs(interestingModules) do
+			report = report .. string.format("%d. %s (%s)\n", i, m.name, m.path)
+			if #m.functions > 0 then
+				report = report .. "   Functions: " .. table.concat(m.functions, ", "):sub(1, 200) .. "\n"
+			end
+			if #m.remoteRefs > 0 then
+				for _, ref in ipairs(m.remoteRefs) do
+					report = report .. string.format("   Remote Ref: %s -> %s\n", ref.key, ref.remotePath)
+				end
+			end
+		end
+		report = report .. "\n"
+	end
+
+	-- Interesting responses
+	local interestingResponses = {}
+	for _, r in ipairs(responseLog) do
+		if r.interesting then table.insert(interestingResponses, r) end
+	end
+	if #interestingResponses > 0 then
+		report = report .. "═══ INTERESTING RESPONSES ═══\n"
+		for i, r in ipairs(interestingResponses) do
+			if i > 30 then break end
+			report = report .. string.format("%s: %s\n", r.remote, r.response:sub(1, 200))
+		end
+		report = report .. "\n"
+	end
+
+	-- All remote events list
+	report = report .. "═══ ALL REMOTE EVENTS ═══\n"
+	for i, re in ipairs(remoteEvents) do
+		if isValidInstance(re) then
+			local info = analyzeRemote(re)
+			local tags = {}
+			if info.isGiveRelated then table.insert(tags, "GIVE") end
+			if info.isItemRelated then table.insert(tags, "ITEM") end
+			if info.isAdminRelated then table.insert(tags, "ADMIN") end
+			if info.isDangerous then table.insert(tags, "DANGER") end
+			if info.isObfuscated then table.insert(tags, "OBF") end
+			report = report .. string.format("%d. %s [%s] p=%d\n",
+				i, getRemotePath(re), table.concat(tags, ","), info.priority)
+		end
+	end
+
+	report = report .. "\n═══ ALL REMOTE FUNCTIONS ═══\n"
+	for i, rf in ipairs(remoteFunctions) do
+		if isValidInstance(rf) then
+			local info = analyzeRemote(rf)
+			local tags = {}
+			if info.isGiveRelated then table.insert(tags, "GIVE") end
+			if info.isItemRelated then table.insert(tags, "ITEM") end
+			if info.isAdminRelated then table.insert(tags, "ADMIN") end
+			if info.isObfuscated then table.insert(tags, "OBF") end
+			report = report .. string.format("%d. %s [%s] p=%d\n",
+				i, getRemotePath(rf), table.concat(tags, ","), info.priority)
+		end
+	end
+
+	-- Spy log summary
+	if #spyLog > 0 then
+		report = report .. "\n═══ SPY LOG SUMMARY ═══\n"
+		local remoteCounts = {}
+		for _, entry in ipairs(spyLog) do
+			remoteCounts[entry.remote] = (remoteCounts[entry.remote] or 0) + 1
+		end
+		local sorted = {}
+		for name, count in pairs(remoteCounts) do
+			table.insert(sorted, {name = name, count = count})
+		end
+		table.sort(sorted, function(a, b) return a.count > b.count end)
+		for i, s in ipairs(sorted) do
+			if i > 30 then break end
+			report = report .. string.format("%d. %s: %d calls\n", i, s.name, s.count)
+		end
+	end
+
+	return report
+end
+
+-- ==========================================
+-- UI WINDOW v3
+-- ==========================================
+local Window = Rayfield:CreateWindow({
+	Name = "🔍 Backdoor Scanner v3.0 - Enhanced",
+	LoadingTitle = "Backdoor Scanner v3.0",
+	LoadingSubtitle = "Advanced Remote Vulnerability Scanner",
+	ConfigurationSaving = {Enabled = true, FolderName = "BackdoorScanner", FileName = "ConfigV3"},
+	KeySystem = true,
+	KeySettings = {
+		Title = "Backdoor Scanner v3.0 - Key",
+		Subtitle = "Enter key to access",
+		Note = "Contact NubyCode for key",
+		FileName = "ScannerKeyV3",
+		SaveKey = true,
+		GrabKeyFromSite = false,
+		Key = {"NubyHack"}
+	}
+})
+
+-- ==========================================
+-- TAB 1: Scanner
+-- ==========================================
+local ScannerTab = Window:CreateTab("🔍 Scanner", 4483362458)
+
+ScannerTab:CreateSection("⚡ Main Scans")
+ScannerTab:CreateButton({
+	Name = "⚡ Full Deep Scan (All Remotes)",
+	Callback = function()
+		Rayfield:Notify({Title="Scanner", Content="Starting full deep scan v3...", Duration=3})
+		task.spawn(runFullScan)
+	end
+})
+
+ScannerTab:CreateButton({
+	Name = "🎁 Scan Give/Item Remotes Only",
+	Callback = function()
+		Rayfield:Notify({Title="Scanner", Content="Scanning give/item remotes...", Duration=3})
+		task.spawn(scanGiveRemotes)
+	end
+})
+
+ScannerTab:CreateButton({
+	Name = "🔑 Scan Admin/Backdoor Remotes",
+	Callback = function()
+		Rayfield:Notify({Title="Scanner", Content="Scanning admin/backdoor remotes...", Duration=3})
+		task.spawn(scanAdminRemotes)
+	end
+})
+
+ScannerTab:CreateButton({
+	Name = "🔒 Scan Hidden/Obfuscated Remotes",
+	Callback = function()
+		Rayfield:Notify({Title="Scanner", Content="Scanning hidden remotes...", Duration=3})
+		task.spawn(scanHiddenRemotes)
+	end
+})
+
+ScannerTab:CreateButton({
+	Name = "🔥 Fire ALL Remotes (Quick Blast)",
+	Callback = function()
+		Rayfield:Notify({Title="Scanner", Content="Firing all remotes...", Duration=3})
+		task.spawn(fireAllRemotes)
+	end
+})
+
+ScannerTab:CreateButton({
+	Name = "🛑 Stop Scan",
+	Callback = function()
+		isScanning = false
+		Rayfield:Notify({Title="Scanner", Content="Scan stopped!", Duration=3})
+	end
+})
+
+ScannerTab:CreateSection("⚙️ Scan Settings")
+ScannerTab:CreateDropdown({
+	Name = "Brute Force Level",
+	Options = {"Light (Fast)", "Medium (Balanced)", "Heavy (Thorough)"},
+	CurrentOption = {"Medium (Balanced)"},
+	MultipleOptions = false,
+	Flag = "BruteLevel",
+	Callback = function(Options)
+		local selected = Options[1] or Options
+		if selected == "Light (Fast)" then bruteForceLevel = 1
+		elseif selected == "Medium (Balanced)" then bruteForceLevel = 2
+		else bruteForceLevel = 3 end
+		addLog("Brute force level set to " .. bruteForceLevel, "info")
+	end
+})
+
+ScannerTab:CreateSlider({
+	Name = "Fire Delay (ms)",
+	Range = {10, 500},
+	Increment = 10,
+	Suffix = "ms",
+	CurrentValue = 50,
+	Flag = "FireDelay",
+	Callback = function(V) fireDelay = V / 1000 end
+})
+
+ScannerTab:CreateSlider({
+	Name = "Scan Delay (ms)",
+	Range = {10, 500},
+	Increment = 10,
+	Suffix = "ms",
+	CurrentValue = 30,
+	Flag = "ScanDelay",
+	Callback = function(V) scanDelay = V / 1000 end
+})
+
+ScannerTab:CreateSlider({
+	Name = "Max Arg Combos (Low Priority)",
+	Range = {3, 50},
+	Increment = 1,
+	Suffix = "",
+	CurrentValue = 10,
+	Flag = "MaxArgs",
+	Callback = function(V) maxArgCombinations = V end
+})
+
+ScannerTab:CreateSlider({
+	Name = "Retry Count",
+	Range = {1, 5},
+	Increment = 1,
+	Suffix = "x",
+	CurrentValue = 3,
+	Flag = "RetryCount",
+	Callback = function(V) retryCount = V end
+})
+
+ScannerTab:CreateToggle({
+	Name = "Safe Mode (Skip Dangerous)",
+	CurrentValue = true,
+	Flag = "SafeMode",
+	Callback = function(V) safeMode = V end
+})
+
+ScannerTab:CreateToggle({
+	Name = "Deep Scan (All Services)",
+	CurrentValue = true,
+	Flag = "DeepScan",
+	Callback = function(V) deepScanEnabled = V end
+})
+
+ScannerTab:CreateToggle({
+	Name = "Ultra Deep (getinstances/getnilinstances)",
+	CurrentValue = false,
+	Flag = "UltraDeep",
+	Callback = function(V) ultraDeepScan = V end
+})
+
+ScannerTab:CreateToggle({
+	Name = "Auto Retry on Failure",
+	CurrentValue = true,
+	Flag = "AutoRetry",
+	Callback = function(V) autoRetry = V end
+})
+
+ScannerTab:CreateToggle({
+	Name = "Module Script Scanning",
+	CurrentValue = true,
+	Flag = "ModuleScan",
+	Callback = function(V) moduleScanning = V end
+})
+
+ScannerTab:CreateToggle({
+	Name = "Obfuscation Detection",
+	CurrentValue = true,
+	Flag = "ObfDetect",
+	Callback = function(V) obfuscationDetection = V end
+})
+
+ScannerTab:CreateToggle({
+	Name = "Response Analysis",
+	CurrentValue = true,
+	Flag = "RespAnalysis",
+	Callback = function(V) responseAnalysis = V end
+})
+
+-- ==========================================
+-- TAB 2: Item Grabber
+-- ==========================================
+local GrabberTab = Window:CreateTab("🎒 Grabber", 4483362458)
+
+GrabberTab:CreateSection("🎁 Smart Item Grabber")
+GrabberTab:CreateButton({
+	Name = "🎁 Smart Grab All Items",
+	Callback = function()
+		Rayfield:Notify({Title="Grabber", Content="Running smart item grabber...", Duration=3})
+		task.spawn(tryGrabAllItems)
+	end
+})
+
+GrabberTab:CreateButton({
+	Name = "🔧 Grab Workspace/Storage Tools",
+	Callback = function()
+		Rayfield:Notify({Title="Grabber", Content="Grabbing tools from all locations...", Duration=3})
+		task.spawn(grabWorkspaceTools)
+	end
+})
+
+GrabberTab:CreateButton({
+	Name = "🔄 Re-Fire Vulnerable Remotes",
+	Callback = function()
+		task.spawn(refireVulnerable)
+	end
+})
+
+GrabberTab:CreateButton({
+	Name = "♻️ Auto-Farm Vulnerable (Loop)",
+	Callback = function()
+		if isScanning then
+			isScanning = false
+			Rayfield:Notify({Title="Farm", Content="Auto-farm stopped!", Duration=3})
+		else
+			isScanning = true
+			Rayfield:Notify({Title="Farm", Content="Auto-farm started! Click again to stop.", Duration=3})
+			task.spawn(autoFarmVulnerable)
+		end
+	end
+})
+
+GrabberTab:CreateSection("📋 Clone Tools")
+GrabberTab:CreateButton({
+	Name = "📋 Clone ALL Accessible Tools",
+	Callback = function()
+		local count = 0
+		local seen = {}
+
+		local function cloneFrom(source, name)
+			pcall(function()
+				for _, desc in ipairs(source:GetDescendants()) do
+					if desc:IsA("Tool") and not seen[desc.Name] then
+						pcall(function()
+							local clone = desc:Clone()
+							clone.Parent = backpack
+							count = count + 1
+							seen[desc.Name] = true
+						end)
+					end
+				end
+			end)
+		end
+
+		cloneFrom(StarterPack, "StarterPack")
+		cloneFrom(ReplicatedStorage, "ReplicatedStorage")
+		pcall(function() cloneFrom(ReplicatedFirst, "ReplicatedFirst") end)
+		cloneFrom(Lighting, "Lighting")
+		pcall(function() cloneFrom(StarterPlayer, "StarterPlayer") end)
+		cloneFrom(Workspace, "Workspace")
+		pcall(function() cloneFrom(SoundService, "SoundService") end)
+
+		-- Try nil instances
+		pcall(function()
+			if getnilinstances then
+				for _, inst in ipairs(getnilinstances()) do
+					if inst:IsA("Tool") and not seen[inst.Name] then
+						pcall(function()
+							local clone = inst:Clone()
+							clone.Parent = backpack
+							count = count + 1
+							seen[inst.Name] = true
+						end)
+					end
+				end
+			end
+		end)
+
+		Rayfield:Notify({Title="Clone", Content="Cloned "..count.." unique tools!", Duration=3})
+		addLog("Cloned " .. count .. " unique tools", count > 0 and "success" or "info")
+	end
+})
+
+GrabberTab:CreateButton({
+	Name = "🔁 Duplicate Current Backpack Items",
+	Callback = function()
+		local count = 0
+		local items = backpack:GetChildren()
+		for _, item in ipairs(items) do
+			pcall(function()
+				if item:IsA("Tool") then
+					local clone = item:Clone()
+					clone.Parent = backpack
+					count = count + 1
+				end
+			end)
+		end
+		Rayfield:Notify({Title="Duplicate", Content="Duplicated "..count.." items!", Duration=3})
+	end
+})
+
+GrabberTab:CreateSection("🎯 Targeted Grab")
+local targetItemName = ""
+GrabberTab:CreateInput({
+	Name = "Item Name to Find & Grab",
+	PlaceholderText = "Enter item name...",
+	RemoveTextAfterFocusLost = false,
+	Flag = "TargetItem",
+	Callback = function(text) targetItemName = text end
+})
+
+GrabberTab:CreateButton({
+	Name = "🎯 Find & Grab Specific Item",
+	Callback = function()
+		if targetItemName == "" then
+			Rayfield:Notify({Title="Error", Content="Enter item name!", Duration=3})
+			return
+		end
+
+		local found = 0
+		local nl = targetItemName:lower()
+
+		-- Search everywhere
+		for _, service in ipairs(game:GetChildren()) do
+			pcall(function()
+				for _, desc in ipairs(service:GetDescendants()) do
+					pcall(function()
+						if desc:IsA("Tool") and desc.Name:lower():find(nl) then
+							pcall(function()
+								local clone = desc:Clone()
+								clone.Parent = backpack
+								found = found + 1
+								addLog("Found & grabbed: " .. desc.Name .. " from " .. getRemotePath(desc), "success")
+							end)
+						end
+					end)
+				end
+			end)
+		end
+
+		-- Also try firing remotes with item name
+		collectAllRemotes()
+		for _, re in ipairs(remoteEvents) do
+			if isValidInstance(re) then
+				local info = analyzeRemote(re)
+				if info.isGiveRelated or info.isItemRelated then
+					deepSnapshot()
+					pcall(function() re:FireServer(targetItemName) end)
+					task.wait(0.05)
+					pcall(function() re:FireServer(player, targetItemName) end)
+					task.wait(0.05)
+					pcall(function() re:FireServer("give", targetItemName) end)
+					task.wait(0.05)
+					pcall(function() re:FireServer({item = targetItemName}) end)
+					task.wait(0.1)
+					local changes = deepCheckChanges(re.Name)
+					if changes.hasChanges then
+						addLog("Got " .. targetItemName .. " from remote " .. re.Name, "vuln")
+						found = found + 1
+					end
+				end
+			end
+		end
+
+		Rayfield:Notify({Title="Search", Content="Found "..found.." instances of '"..targetItemName.."'", Duration=5})
+	end
+})
+
+-- ==========================================
+-- TAB 3: Spy & Monitor
+-- ==========================================
+local SpyTab = Window:CreateTab("🕵️ Spy", 4483362458)
+
+SpyTab:CreateSection("🕵️ Remote Spy")
+SpyTab:CreateToggle({
+	Name = "Enable Remote Spy",
+	CurrentValue = false,
+	Flag = "RemoteSpy",
+	Callback = function(V)
+		if V then
+			startRemoteSpy()
+			Rayfield:Notify({Title="Spy", Content="Remote Spy enabled!", Duration=3})
+		else
+			stopRemoteSpy()
+		end
+	end
+})
+
+SpyTab:CreateButton({
+	Name = "📊 Show Spy Summary",
+	Callback = function()
+		local remoteCounts = {}
+		for _, entry in ipairs(spyLog) do
+			local key = entry.remote
+			if not remoteCounts[key] then
+				remoteCounts[key] = {count = 0, methods = {}, lastArgs = entry.args}
+			end
+			remoteCounts[key].count = remoteCounts[key].count + 1
+			remoteCounts[key].methods[entry.method] = true
+		end
+
+		local sorted = {}
+		for name, data in pairs(remoteCounts) do
+			local methods = {}
+			for m, _ in pairs(data.methods) do table.insert(methods, m) end
+			table.insert(sorted, {name = name, count = data.count, methods = methods, lastArgs = data.lastArgs})
+		end
+		table.sort(sorted, function(a, b) return a.count > b.count end)
+
+		print("═══ REMOTE SPY SUMMARY (" .. #spyLog .. " total calls) ═══")
+		for i, s in ipairs(sorted) do
+			if i > 30 then break end
+			print(string.format("%d. %s: %d calls [%s] last: %s",
+				i, s.name, s.count, table.concat(s.methods, ","),
+				(s.lastArgs or ""):sub(1, 100)))
+		end
+		Rayfield:Notify({Title="Spy", Content=#spyLog.." calls logged. Check console.", Duration=5})
+	end
+})
+
+SpyTab:CreateButton({
+	Name = "🔄 Replay Last Spy Entry",
+	Callback = function()
+		if #spyLog == 0 then
+			Rayfield:Notify({Title="Spy", Content="No spy entries!", Duration=3})
+			return
+		end
+		replaySpyEntry(spyLog[#spyLog])
+		Rayfield:Notify({Title="Spy", Content="Replayed last entry!", Duration=3})
+	end
+})
+
+SpyTab:CreateButton({
+	Name = "🗑️ Clear Spy Log",
+	Callback = function()
+		spyLog = {}
+		Rayfield:Notify({Title="Spy", Content="Spy log cleared!", Duration=2})
+	end
+})
+
+SpyTab:CreateSection("📡 Remote Browser")
+SpyTab:CreateButton({
+	Name = "📋 List All RemoteEvents",
+	Callback = function()
+		collectAllRemotes()
+		print("═══ ALL REMOTE EVENTS ═══")
+		for i, re in ipairs(remoteEvents) do
+			if isValidInstance(re) then
+				local info = analyzeRemote(re)
+				local tags = {}
+				if info.isGiveRelated then table.insert(tags, "🎁GIVE") end
+				if info.isItemRelated then table.insert(tags, "📦ITEM") end
+				if info.isAdminRelated then table.insert(tags, "🔑ADMIN") end
+				if info.isDangerous then table.insert(tags, "⚠️DANGER") end
+				if info.isObfuscated then table.insert(tags, "🔒OBF") end
+				print(string.format("[%d] %s %s (p=%d)",
+					i, getRemotePath(re),
+					#tags > 0 and table.concat(tags, " ") or "",
+					info.priority))
+			end
+		end
+		Rayfield:Notify({Title="Browser", Content=#remoteEvents.." REs. Check console.", Duration=3})
+	end
+})
+
+SpyTab:CreateButton({
+	Name = "📋 List All RemoteFunctions",
+	Callback = function()
+		collectAllRemotes()
+		print("═══ ALL REMOTE FUNCTIONS ═══")
+		for i, rf in ipairs(remoteFunctions) do
+			if isValidInstance(rf) then
+				local info = analyzeRemote(rf)
+				local tags = {}
+				if info.isGiveRelated then table.insert(tags, "🎁GIVE") end
+				if info.isItemRelated then table.insert(tags, "📦ITEM") end
+				if info.isAdminRelated then table.insert(tags, "🔑ADMIN") end
+				if info.isObfuscated then table.insert(tags, "🔒OBF") end
+				print(string.format("[%d] %s %s (p=%d)",
+					i, getRemotePath(rf),
+					#tags > 0 and table.concat(tags, " ") or "",
+					info.priority))
+			end
+		end
+		Rayfield:Notify({Title="Browser", Content=#remoteFunctions.." RFs. Check console.", Duration=3})
+	end
+})
+
+SpyTab:CreateButton({
+	Name = "📋 List Hidden/Obfuscated Remotes",
+	Callback = function()
+		detectHiddenRemotes()
+		print("═══ HIDDEN/OBFUSCATED REMOTES ═══")
+		for i, h in ipairs(hiddenRemotes) do
+			print(string.format("[%d] %s [%s] obf=%s depth=%d",
+				i, h.path, h.className, h.obfuscationType, h.depth))
+		end
+		Rayfield:Notify({Title="Browser", Content=#hiddenRemotes.." hidden remotes. Check console.", Duration=3})
+	end
+})
+
+SpyTab:CreateButton({
+	Name = "📋 List Module Scripts (Interesting)",
+	Callback = function()
+		scanModuleScripts()
+		print("═══ INTERESTING MODULE SCRIPTS ═══")
+		for _, m in ipairs(moduleLog) do
+			if m.interesting then
+				print(m.name .. " (" .. m.path .. ")")
+				for _, f in ipairs(m.functions) do
+					print("  func: " .. f)
+				end
+				for _, r in ipairs(m.remoteRefs) do
+					print("  remote: " .. r.key .. " -> " .. r.remotePath)
+				end
+			end
+		end
+		Rayfield:Notify({Title="Modules", Content="Check console for module info.", Duration=3})
+	end
+})
+
+SpyTab:CreateSection("📦 Backpack Monitor")
+local monitorConnection = nil
+local monitorEnabled = false
+
+SpyTab:CreateToggle({
+	Name = "📦 Live Backpack Monitor",
+	CurrentValue = false,
+	Flag = "BPMonitor",
+	Callback = function(V)
+		monitorEnabled = V
+		if V then
+			if not monitorConnection then
+				monitorConnection = backpack.ChildAdded:Connect(function(child)
+					if monitorEnabled then
+						addLog("📦 NEW: " .. child.Name .. " [" .. child.ClassName .. "]", "success")
+						Rayfield:Notify({Title="New Item!", Content=child.Name, Duration=3})
+					end
+				end)
+			end
+
+			-- Monitor stat changes
+			pcall(function()
+				local ls = player:FindFirstChild("leaderstats")
+				if ls then
+					for _, stat in ipairs(ls:GetChildren()) do
+						pcall(function()
+							stat.Changed:Connect(function(newVal)
+								if monitorEnabled then
+									addLog(string.format("📊 %s: %s", stat.Name, tostring(newVal)), "info")
+								end
+							end)
+						end)
+					end
+				end
+			end)
+
+			Rayfield:Notify({Title="Monitor", Content="Monitoring started!", Duration=3})
+		else
+			if monitorConnection then
+				monitorConnection:Disconnect()
+				monitorConnection = nil
+			end
+		end
+	end
+})
+
+SpyTab:CreateButton({
+	Name = "📦 Show Current Backpack & Stats",
+	Callback = function()
+		print("═══ CURRENT BACKPACK ═══")
+		local items = {}
+		for _, item in ipairs(backpack:GetChildren()) do
+			table.insert(items, item.Name .. " [" .. item.ClassName .. "]")
+			print("  " .. item.Name .. " [" .. item.ClassName .. "]")
+		end
+		local char = player.Character
+		if char then
+			for _, item in ipairs(char:GetChildren()) do
+				if item:IsA("Tool") then
+					print("  " .. item.Name .. " [Equipped]")
+				end
+			end
+		end
+
+		print("═══ PLAYER STATS ═══")
+		local ls = player:FindFirstChild("leaderstats")
+		if ls then
+			for _, stat in ipairs(ls:GetChildren()) do
+				pcall(function()
+					print("  " .. stat.Name .. ": " .. tostring(stat.Value))
+				end)
+			end
+		end
+
+		for _, child in ipairs(player:GetChildren()) do
+			pcall(function()
+				if child:IsA("Folder") or child:IsA("Configuration") then
+					for _, val in ipairs(child:GetChildren()) do
+						if val:IsA("ValueBase") then
+							print("  " .. child.Name .. "." .. val.Name .. ": " .. tostring(val.Value))
+						end
+					end
+				end
+			end)
+		end
+
+		Rayfield:Notify({Title="Backpack", Content=#items.." items. Check console.", Duration=3})
+	end
+})
+
+-- ==========================================
+-- TAB 4: Report & Analysis
+-- ==========================================
+local ReportTab = Window:CreateTab("📊 Report", 4483362458)
+
+ReportTab:CreateSection("📊 Analysis")
+ReportTab:CreateButton({
+	Name = "🔍 Fingerprint Game",
+	Callback = function()
+		fingerprintGame()
+		Rayfield:Notify({
+			Title = "Game Fingerprint",
+			Content = string.format(
+				"Game: %s\nType: %s\nSecurity: %s\nNaming: %s\nAnti-Cheat: %s",
+				gameFingerprint.gameName,
+				gameFingerprint.gameType,
+				gameFingerprint.securityLevel,
+				gameFingerprint.remoteNaming,
+				tostring(gameFingerprint.hasAntiCheat)
+			),
+			Duration = 8
+		})
+	end
+})
+
+ReportTab:CreateButton({
+	Name = "📊 Show Scan Stats",
+	Callback = function()
+		collectAllRemotes()
+		Rayfield:Notify({
+			Title = "Scan Statistics",
+			Content = string.format(
+				"REs: %d | RFs: %d | Hidden: %d\nScanned: %d | Vulnerable: %d\nItems: %d | Errors: %d\nResponses: %d",
+				#remoteEvents, #remoteFunctions, #hiddenRemotes,
+				totalScanned, totalVulnerable,
+				totalItems, totalErrors,
+				totalResponses
+			),
+			Duration = 8
+		})
+	end
+})
+
+ReportTab:CreateButton({
+	Name = "📊 Show Full Report (Console)",
+	Callback = function()
+		local report = generateReport()
+		print(report)
+		Rayfield:Notify({Title="Report", Content="Full report printed to console!", Duration=3})
+	end
+})
+
+ReportTab:CreateSection("🔓 Vulnerability Results")
+ReportTab:CreateButton({
+	Name = "🔓 Show Vulnerable Remotes",
+	Callback = function()
+		if #vulnerableRemotes == 0 then
+			Rayfield:Notify({Title="Vulnerable", Content="None found yet! Run a scan first.", Duration=3})
+			return
+		end
+		print("═══ VULNERABLE REMOTES ═══")
+		for i, v in ipairs(vulnerableRemotes) do
+			local itemNames = {}
+			for _, item in ipairs(v.items or {}) do table.insert(itemNames, item.name) end
+			local statNames = {}
+			for _, s in ipairs(v.statChanges or {}) do table.insert(statNames, s.name .. ":" .. tostring(s.diff)) end
+			print(string.format("[%d] %s (%s)\n    Items: %s\n    Stats: %s\n    ArgTypes: %s",
+				i, v.name, v.path,
+				#itemNames > 0 and table.concat(itemNames, ", ") or "none",
+				#statNames > 0 and table.concat(statNames, ", ") or "none",
+				v.argTypes and table.concat(v.argTypes, ", ") or "?"
+			))
+		end
+		Rayfield:Notify({Title="Vulnerable", Content=#vulnerableRemotes.." found. Check console.", Duration=5})
+	end
+})
+
+ReportTab:CreateButton({
+	Name = "🎁 Show Items Obtained",
+	Callback = function()
+		if #itemsObtained == 0 then
+			Rayfield:Notify({Title="Items", Content="No items obtained yet!", Duration=3})
+			return
+		end
+		print("═══ ITEMS OBTAINED ═══")
+		for i, item in ipairs(itemsObtained) do
+			print(string.format("%d. %s [%s] from %s (source: %s)",
+				i, item.name, item.className, item.remote, item.source or "?"))
+		end
+		Rayfield:Notify({Title="Items", Content=#itemsObtained.." items. Check console.", Duration=5})
+	end
+})
+
+ReportTab:CreateButton({
+	Name = "📡 Show Interesting Responses",
+	Callback = function()
+		local interesting = {}
+		for _, r in ipairs(responseLog) do
+			if r.interesting then table.insert(interesting, r) end
+		end
+		if #interesting == 0 then
+			Rayfield:Notify({Title="Responses", Content="No interesting responses yet!", Duration=3})
+			return
+		end
+		print("═══ INTERESTING RESPONSES ═══")
+		for i, r in ipairs(interesting) do
+			print(string.format("%d. %s (%s)\n   %s", i, r.remote, r.path, r.response:sub(1, 300)))
+		end
+		Rayfield:Notify({Title="Responses", Content=#interesting.." interesting. Check console.", Duration=5})
+	end
+})
+
+ReportTab:CreateSection("📋 Export")
+ReportTab:CreateButton({
+	Name = "📋 Copy Full Report to Clipboard",
+	Callback = function()
+		local report = generateReport()
+		pcall(function()
+			if setclipboard then setclipboard(report)
+			elseif toclipboard then toclipboard(report) end
+		end)
+		Rayfield:Notify({Title="Export", Content="Report copied to clipboard!", Duration=3})
+	end
+})
+
+ReportTab:CreateButton({
+	Name = "📋 Copy Vulnerable Remote Paths",
+	Callback = function()
+		local paths = "═══ VULNERABLE REMOTES ═══\n"
+		for i, v in ipairs(vulnerableRemotes) do
+			local itemNames = {}
+			for _, item in ipairs(v.items or {}) do table.insert(itemNames, item.name) end
+			paths = paths .. string.format("%d. %s -> %s\n", i, v.path,
+				#itemNames > 0 and table.concat(itemNames, ", ") or "stat changes")
+		end
+		pcall(function()
+			if setclipboard then setclipboard(paths)
+			elseif toclipboard then toclipboard(paths) end
+		end)
+		Rayfield:Notify({Title="Export", Content="Vulnerable paths copied!", Duration=3})
+	end
+})
+
+ReportTab:CreateButton({
+	Name = "📋 Copy All Remote Paths",
+	Callback = function()
+		collectAllRemotes()
+		local paths = "═══ ALL REMOTES ═══\n"
+		for _, re in ipairs(remoteEvents) do
+			if isValidInstance(re) then
+				local info = analyzeRemote(re)
+				local tags = {}
+				if info.isGiveRelated then table.insert(tags, "GIVE") end
+				if info.isAdminRelated then table.insert(tags, "ADMIN") end
+				if info.isObfuscated then table.insert(tags, "OBF") end
+				paths = paths .. "[RE] " .. getRemotePath(re) .. " " .. table.concat(tags, ",") .. "\n"
+			end
+		end
+		for _, rf in ipairs(remoteFunctions) do
+			if isValidInstance(rf) then
+				local info = analyzeRemote(rf)
+				local tags = {}
+				if info.isGiveRelated then table.insert(tags, "GIVE") end
+				if info.isAdminRelated then table.insert(tags, "ADMIN") end
+				if info.isObfuscated then table.insert(tags, "OBF") end
+				paths = paths .. "[RF] " .. getRemotePath(rf) .. " " .. table.concat(tags, ",") .. "\n"
+			end
+		end
+		pcall(function()
+			if setclipboard then setclipboard(paths)
+			elseif toclipboard then toclipboard(paths) end
+		end)
+		Rayfield:Notify({Title="Export", Content="All remote paths copied!", Duration=3})
+	end
+})
+
+-- ==========================================
+-- TAB 5: Custom Fire
+-- ==========================================
+local CustomTab = Window:CreateTab("🔧 Custom", 4483362458)
+
+local selectedRemotePath = ""
+local customArgs = ""
+
+CustomTab:CreateSection("🎯 Custom Remote Fire")
+CustomTab:CreateInput({
+	Name = "Remote Path",
+	PlaceholderText = "ReplicatedStorage.Remotes.GiveItem",
+	RemoveTextAfterFocusLost = false,
+	Flag = "CustomPath",
+	Callback = function(text) selectedRemotePath = text end
+})
+
+CustomTab:CreateInput({
+	Name = "Arguments (comma separated)",
+	PlaceholderText = "player, all, 999, true",
+	RemoveTextAfterFocusLost = false,
+	Flag = "CustomArgs",
+	Callback = function(text) customArgs = text end
+})
+
+local function parseCustomArgs()
+	local args = {}
+	if customArgs == "" then return args end
+
+	for _, arg in ipairs(string.split(customArgs, ",")) do
+		local trimmed = arg:match("^%s*(.-)%s*$")
+		if trimmed == "player" then table.insert(args, player)
+		elseif trimmed == "player.Name" then table.insert(args, player.Name)
+		elseif trimmed == "player.UserId" then table.insert(args, player.UserId)
+		elseif trimmed == "backpack" then table.insert(args, backpack)
+		elseif trimmed == "character" then table.insert(args, player.Character)
+		elseif trimmed == "true" then table.insert(args, true)
+		elseif trimmed == "false" then table.insert(args, false)
+		elseif trimmed == "nil" then table.insert(args, nil)
+		elseif trimmed == "inf" or trimmed == "math.huge" then table.insert(args, math.huge)
+		elseif trimmed == "-inf" then table.insert(args, -math.huge)
+		elseif trimmed == "nan" then table.insert(args, 0/0)
+		elseif tonumber(trimmed) then table.insert(args, tonumber(trimmed))
+		elseif trimmed:sub(1,1) == "{" and trimmed:sub(-1) == "}" then
+			-- Simple table parsing
+			pcall(function()
+				local inner = trimmed:sub(2, -2)
+				local t = {}
+				for _, pair in ipairs(string.split(inner, ";")) do
+					local k, v = pair:match("(%w+)%s*=%s*(.+)")
+					if k and v then
+						if tonumber(v) then t[k] = tonumber(v)
+						elseif v == "true" then t[k] = true
+						elseif v == "false" then t[k] = false
+						elseif v == "player" then t[k] = player
+						else t[k] = v end
+					end
+				end
+				table.insert(args, t)
+			end)
+		else
+			table.insert(args, trimmed)
+		end
+	end
+	return args
+end
+
+local function findRemoteByPath(path)
+	local parts = string.split(path, ".")
+	local current = game
+	for _, part in ipairs(parts) do
+		local next = nil
+		pcall(function() next = current:FindFirstChild(part) end)
+		if not next then pcall(function() next = current[part] end) end
+		if not next then return nil end
+		current = next
+	end
+	return current
+end
+
+CustomTab:CreateButton({
+	Name = "🔥 Fire as RemoteEvent",
+	Callback = function()
+		if selectedRemotePath == "" then
+			Rayfield:Notify({Title="Error", Content="Enter remote path!", Duration=3})
+			return
+		end
+
+		local remote = findRemoteByPath(selectedRemotePath)
+		if not remote or not remote:IsA("RemoteEvent") then
+			Rayfield:Notify({Title="Error", Content="Not found or not RemoteEvent!", Duration=3})
+			return
+		end
+
+		local args = parseCustomArgs()
+		deepSnapshot()
+		local s, e = pcall(function() remote:FireServer(unpack(args)) end)
+		task.wait(0.3)
+		local changes = deepCheckChanges(remote.Name)
+
+		local msg = s and "Fired successfully!" or ("Error: " .. tostring(e))
+		if changes.hasChanges then
+			if #changes.newItems > 0 then
+				local names = {}
+				for _, i in ipairs(changes.newItems) do table.insert(names, i.name) end
+				msg = msg .. "\n🎁 Items: " .. table.concat(names, ", ")
+			end
+			if #changes.statChanges > 0 then
+				local stats = {}
+				for _, st in ipairs(changes.statChanges) do table.insert(stats, st.name .. ":" .. tostring(st.diff)) end
+				msg = msg .. "\n📊 Stats: " .. table.concat(stats, ", ")
+			end
+		end
+		Rayfield:Notify({Title="Custom Fire", Content=msg, Duration=6})
+	end
+})
+
+CustomTab:CreateButton({
+	Name = "🔥 Invoke as RemoteFunction",
+	Callback = function()
+		if selectedRemotePath == "" then
+			Rayfield:Notify({Title="Error", Content="Enter remote path!", Duration=3})
+			return
+		end
+
+		local remote = findRemoteByPath(selectedRemotePath)
+		if not remote or not remote:IsA("RemoteFunction") then
+			Rayfield:Notify({Title="Error", Content="Not found or not RemoteFunction!", Duration=3})
+			return
+		end
+
+		local args = parseCustomArgs()
+		deepSnapshot()
+		local s, result = pcall(function() return remote:InvokeServer(unpack(args)) end)
+		task.wait(0.3)
+		local changes = deepCheckChanges(remote.Name)
+
+		local msg
+		if s then
+			msg = "Response: " .. tostring(result):sub(1, 150)
+			print("[Custom RF Result]", result)
+		else
+			msg = "Error: " .. tostring(result)
+		end
+
+		if changes.hasChanges then
+			if #changes.newItems > 0 then
+				local names = {}
+				for _, i in ipairs(changes.newItems) do table.insert(names, i.name) end
+				msg = msg .. "\n🎁 Items: " .. table.concat(names, ", ")
+			end
+			if #changes.statChanges > 0 then
+				local stats = {}
+				for _, st in ipairs(changes.statChanges) do table.insert(stats, st.name .. ":" .. tostring(st.diff)) end
+				msg = msg .. "\n📊 Stats: " .. table.concat(stats, ", ")
+			end
+		end
+		Rayfield:Notify({Title="Custom Invoke", Content=msg, Duration=6})
+	end
+})
+
+CustomTab:CreateButton({
+	Name = "🔥 Brute Force This Remote",
+	Callback = function()
+		if selectedRemotePath == "" then
+			Rayfield:Notify({Title="Error", Content="Enter remote path!", Duration=3})
+			return
+		end
+
+		local remote = findRemoteByPath(selectedRemotePath)
+		if not remote then
+			Rayfield:Notify({Title="Error", Content="Remote not found!", Duration=3})
+			return
+		end
+
+		Rayfield:Notify({Title="Brute Force", Content="Starting brute force on "..remote.Name.."...", Duration=3})
+
+		task.spawn(function()
+			local info = analyzeRemote(remote)
+			info.isDangerous = false -- override
+			local testArgs = generateSmartArgs(remote.Name, info, 3) -- max level
+
+			addLog("Brute forcing: " .. selectedRemotePath .. " with " .. #testArgs .. " arg combos", "warning")
+
+			for i, args in ipairs(testArgs) do
+				pcall(function()
+					fireRemoteWithRetry(remote, args, info, remote:IsA("RemoteEvent"))
+				end)
+				task.wait(fireDelay)
+			end
+
+			addLog("Brute force complete on " .. remote.Name, "success")
+			Rayfield:Notify({Title="Brute Force", Content="Complete! Check results.", Duration=3})
+		end)
+	end
+})
+
+CustomTab:CreateSection("🔍 Search")
+CustomTab:CreateButton({
+	Name = "🔍 Search Remote by Keyword",
+	Callback = function()
+		if customArgs == "" then
+			Rayfield:Notify({Title="Search", Content="Enter keyword in args field!", Duration=3})
+			return
+		end
+		collectAllRemotes()
+		local keyword = customArgs:lower()
+		local found = 0
+		print("═══ SEARCH: '" .. customArgs .. "' ═══")
+		for _, re in ipairs(remoteEvents) do
+			if isValidInstance(re) then
+				local path = getRemotePath(re):lower()
+				if re.Name:lower():find(keyword) or path:find(keyword) then
+					local info = analyzeRemote(re)
+					print("[RE] " .. getRemotePath(re) .. " (p=" .. info.priority .. ")")
+					found = found + 1
+				end
+			end
+		end
+		for _, rf in ipairs(remoteFunctions) do
+			if isValidInstance(rf) then
+				local path = getRemotePath(rf):lower()
+				if rf.Name:lower():find(keyword) or path:find(keyword) then
+					local info = analyzeRemote(rf)
+					print("[RF] " .. getRemotePath(rf) .. " (p=" .. info.priority .. ")")
+					found = found + 1
+				end
+			end
+		end
+		Rayfield:Notify({Title="Search", Content=found.." remotes found. Check console.", Duration=5})
+	end
+})
+
+-- ==========================================
+-- TAB 6: Advanced
+-- ==========================================
+local AdvancedTab = Window:CreateTab("⚙️ Advanced", 4483362458)
+
+AdvancedTab:CreateSection("🔬 Advanced Tools")
+AdvancedTab:CreateButton({
+	Name = "🔬 Scan ModuleScripts for Remote Refs",
+	Callback = function()
+		Rayfield:Notify({Title="Modules", Content="Scanning modules...", Duration=3})
+		task.spawn(function()
+			scanModuleScripts()
+			local interesting = 0
+			for _, m in ipairs(moduleLog) do if m.interesting then interesting = interesting + 1 end end
+			Rayfield:Notify({Title="Modules", Content=string.format("Scanned %d modules, %d interesting. Check console.", #moduleScripts, interesting), Duration=5})
+		end)
+	end
+})
+
+AdvancedTab:CreateButton({
+	Name = "🔒 Detect Obfuscated Remotes",
+	Callback = function()
+		task.spawn(function()
+			detectHiddenRemotes()
+			Rayfield:Notify({Title="Detection", Content=#hiddenRemotes.." hidden remotes found. Check console.", Duration=5})
+		end)
+	end
+})
+
+AdvancedTab:CreateButton({
+	Name = "🎯 Fire Only Interesting Responses",
+	Callback = function()
+		Rayfield:Notify({Title="Smart Fire", Content="Firing remotes and analyzing responses...", Duration=3})
+		task.spawn(function()
+			collectAllRemotes()
+			local interesting = 0
+
+			for _, rf in ipairs(remoteFunctions) do
+				if isValidInstance(rf) then
+					local info = analyzeRemote(rf)
+					if safeMode and info.isDangerous then continue end
+
+					local quickArgs = {{}, {player}, {player.Name}, {1}, {"all"}, {true}}
+					for _, args in ipairs(quickArgs) do
+						local s, result = pcall(function() return rf:InvokeServer(unpack(args)) end)
+						if s and result ~= nil then
+							local analysis = analyzeResponse(result, rf.Name, args)
+							if analysis and analysis.interesting then
+								interesting = interesting + 1
+								addLog(string.format("🎯 Interesting RF: %s -> %s",
+									rf.Name, tostring(result):sub(1, 200)), "discovery")
+							end
+						end
+						task.wait(0.05)
+					end
+				end
+			end
+
+			Rayfield:Notify({Title="Smart Fire", Content=interesting.." interesting responses. Check console.", Duration=5})
+		end)
+	end
+})
+
+AdvancedTab:CreateButton({
+	Name = "🌐 Network Structure Map",
+	Callback = function()
+		collectAllRemotes()
+		print("═══ NETWORK STRUCTURE MAP ═══")
+
+		-- Group by parent folder
+		local groups = {}
+		for _, re in ipairs(remoteEvents) do
+			if isValidInstance(re) then
+				local parent = re.Parent and re.Parent.Name or "root"
+				if not groups[parent] then groups[parent] = {events = {}, functions = {}} end
+				table.insert(groups[parent].events, re)
+			end
+		end
+		for _, rf in ipairs(remoteFunctions) do
+			if isValidInstance(rf) then
+				local parent = rf.Parent and rf.Parent.Name or "root"
+				if not groups[parent] then groups[parent] = {events = {}, functions = {}} end
+				table.insert(groups[parent].functions, rf)
+			end
+		end
+
+		for group, data in pairs(groups) do
+			print(string.format("\n📁 %s (%d RE, %d RF):",
+				group, #data.events, #data.functions))
+			for _, re in ipairs(data.events) do
+				local info = analyzeRemote(re)
+				local tag = info.priority > 2 and " ⭐" or ""
+				print(string.format("  🔵 [RE] %s (p=%d)%s", re.Name, info.priority, tag))
+			end
+			for _, rf in ipairs(data.functions) do
+				local info = analyzeRemote(rf)
+				local tag = info.priority > 2 and " ⭐" or ""
+				print(string.format("  🟢 [RF] %s (p=%d)%s", rf.Name, info.priority, tag))
+			end
+		end
+
+		Rayfield:Notify({Title="Network Map", Content="Structure map printed to console!", Duration=3})
+	end
+})
+
+AdvancedTab:CreateSection("🔄 Automation")
+AdvancedTab:CreateButton({
+	Name = "🔄 Full Auto Scan + Grab + Farm",
+	Callback = function()
+		Rayfield:Notify({Title="Auto Mode", Content="Starting full automation...", Duration=3})
+		task.spawn(function()
+			-- Step 1: Fingerprint
+			addLog("═══ AUTO MODE: Step 1 - Fingerprint ═══", "info")
+			fingerprintGame()
+
+			-- Step 2: Full scan
+			addLog("═══ AUTO MODE: Step 2 - Full Scan ═══", "info")
+			runFullScan()
+
+			-- Wait for scan to complete
+			while isScanning do task.wait(1) end
+
+			-- Step 3: Grab workspace tools
+			addLog("═══ AUTO MODE: Step 3 - Grab Tools ═══", "info")
+			grabWorkspaceTools()
+
+			-- Step 4: Smart item grab
+			addLog("═══ AUTO MODE: Step 4 - Smart Grab ═══", "info")
+			tryGrabAllItems()
+
+			-- Step 5: Re-fire vulnerable
+			if #vulnerableRemotes > 0 then
+				addLog("═══ AUTO MODE: Step 5 - Re-fire Vulnerable ═══", "info")
+				refireVulnerable()
+			end
+
+			addLog("═══ AUTO MODE COMPLETE ═══", "success")
+			addLog(string.format("Results: %d vulnerable, %d items obtained",
+				totalVulnerable, totalItems), "success")
+
+			Rayfield:Notify({
+				Title = "Auto Mode Complete!",
+				Content = string.format("Vulnerable: %d\nItems: %d\nCheck console for details.",
+					totalVulnerable, totalItems),
+				Duration = 10
+			})
+		end)
+	end
+})
+
+AdvancedTab:CreateButton({
+	Name = "🗑️ Reset All Data",
+	Callback = function()
+		totalScanned = 0
+		totalVulnerable = 0
+		totalErrors = 0
+		totalItems = 0
+		totalResponses = 0
+		scanResults = {}
+		vulnerableRemotes = {}
+		itemsObtained = {}
+		responseLog = {}
+		spyLog = {}
+		moduleLog = {}
+		hiddenRemotes = {}
+		scanLog = {}
+		Rayfield:Notify({Title="Reset", Content="All data cleared!", Duration=3})
+	end
+})
+
+-- ==========================================
+-- STARTUP v3
+-- ==========================================
+Rayfield:Notify({
+	Title = "🔍 Backdoor Scanner v3.0",
+	Content = "Loaded successfully!\n\n⚡ Enhanced scanning engine\n🔒 Obfuscation detection\n📦 Deep item tracking\n🔬 Module script analysis\n📊 Response analysis\n\nCheck console for detailed logs.",
+	Duration = 8
+})
+
+addLog("═══════════════════════════════════════", "success")
+addLog("  Backdoor Scanner v3.0 - Enhanced", "success")
+addLog("═══════════════════════════════════════", "success")
+addLog("Game PlaceId: " .. game.PlaceId, "info")
+
+-- Auto init
+task.spawn(function()
+	task.wait(1)
+	fingerprintGame()
+	collectAllRemotes()
+	addLog(string.format("Ready! %d RE, %d RF, Security: %s",
+		#remoteEvents, #remoteFunctions, gameFingerprint.securityLevel), "success")
+end)
+
+end
