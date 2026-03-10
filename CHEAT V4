@@ -1,2191 +1,2193 @@
 if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Loaded") then
-	local data = Instance.new("NumberValue")
-	data.Name = "Loaded"
-	data.Parent = game:GetService("Players").LocalPlayer.PlayerScripts
+local data = Instance.new("NumberValue")
+data.Name = "Loaded"
+data.Parent = game:GetService("Players").LocalPlayer.PlayerScripts
 
-	local Rayfield = nil
-	for i = 1, 5 do
-		local s, r = pcall(function()
-			return loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-		end)
-		if s and r then Rayfield = r break end
-		task.wait(2)
+local Rayfield = nil
+for i = 1, 5 do
+	local s, r = pcall(function()
+		return loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+	end)
+	if s and r then Rayfield = r break end
+	task.wait(2)
+end
+
+if not Rayfield then
+	local s, r = pcall(function()
+		return loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source"))()
+	end)
+	if s and r then Rayfield = r end
+end
+
+if not Rayfield then
+	warn("[RyuExploit] Cannot load UI library")
+	local m = game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Loaded")
+	if m then m:Destroy() end
+	return
+end
+
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local player = Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local mouse = player:GetMouse()
+
+local lastESPUpdate = 0
+local lastHitboxUpdate = 0
+local lastNoRecoilUpdate = 0
+local lastSilentAimUpdate = 0
+local ESP_UPDATE_RATE = 0.03
+local HITBOX_UPDATE_RATE = 0.1
+local NO_RECOIL_UPDATE_RATE = 0.05
+local SILENT_AIM_UPDATE_RATE = 0.01
+
+-- Movement
+local speed = 16
+local jumpPower = 50
+local speedMethod = "Default"
+local jumpMethod = "Default"
+local noclip = false
+local noclipMethod = "Default"
+local noFallDamage = false
+local noFallMethod = "Default"
+local isJumping = false
+local canJump = true
+local lastHealth = 100
+local isFalling = false
+local wasInAir = false
+
+-- Anti Kick
+local antiKickEnabled = false
+local antiKickHooked = false
+
+-- ESP
+local espEnabled = false
+local espBox = false
+local espLine = false
+local espHighlight = false
+local espHealth = false
+local espName = false
+local espDistance = false
+local espTeamCheck = false
+local espColor = Color3.fromRGB(255, 0, 0)
+local espTeamColor = Color3.fromRGB(0, 255, 0)
+local espEnemyColor = Color3.fromRGB(255, 0, 0)
+local espObjects = {}
+local espLineSmoothing = 0.3
+
+-- Hitbox
+local hitboxEnabled = false
+local hitboxSize = 10
+local hitboxTransparency = 0.7
+local hitboxESPEnabled = false
+local hitboxESPColor = Color3.fromRGB(255, 255, 0)
+local hitboxData = {}
+local hitboxCollisionGroupCreated = false
+
+-- Anti Hitbox
+local antiHitboxEnabled = false
+local antiHitboxSize = 1
+local antiHitboxParts = {}
+
+-- Aimlock
+local aimlockEnabled = false
+local aimlockTarget = nil
+local aimlockPart = "Head"
+local aimlockDistance = 200
+local aimlockSmooth = 0.5
+local aimlockFOV = 100
+local showFOVCircle = false
+local fovCircle = nil
+local aimlockKey = Enum.UserInputType.MouseButton2
+local autoSwitchTarget = true
+local aimlockTeamCheck = false
+
+-- Silent Aim
+local silentAimEnabled = false
+local silentAimPart = "Head"
+local silentAimFOV = 200
+local silentAimDistance = 500
+local silentAimTeamCheck = false
+local silentAimAutoHeadshot = true
+local silentAimHeadshotChance = 100
+local silentAimVisibleCheck = false
+local silentAimPrediction = true
+local silentAimPredictionAmount = 0.12
+local silentAimHooked = false
+local silentAimShowFOV = false
+local silentAimFOVCircle = nil
+local silentAimHitChance = 100
+local silentAimCurrentTarget = nil
+local silentAimVisualLine = false
+local silentAimVisualLineObj = nil
+local bulletRedirectEnabled = false
+local bulletRedirectHooked = false
+
+-- Aim Assist
+local aimAssistEnabled = false
+local aimAssistStrength = 0.5
+local aimAssistFOV = 150
+local aimAssistDistance = 200
+local aimAssistHeadshotRate = 70
+local aimAssistTargetPart = "Dynamic"
+local aimAssistTeamCheck = false
+local aimAssistSmoothing = true
+local aimAssistStickyAim = true
+local aimAssistStickyTarget = nil
+local lastStickyTime = 0
+local showAimAssistFOV = false
+local aimAssistFOVCircle = nil
+local aimAssistPrediction = false
+local aimAssistPredictionAmount = 0.1
+local aimAssistOnlyWhileAiming = true
+local aimAssistCurrentTarget = nil
+local aimAssistLastPartSwitch = 0
+local aimAssistPartSwitchRate = 0.5
+local aimAssistLastChosenPart = nil
+local aimAssistMagnetism = 0.6
+local aimAssistInnerDeadzone = 5
+local aimAssistSlowdownZone = 80
+local aimAssistReattachDelay = 0.15
+local aimAssistLastTargetSwitch = 0
+local aimAssistSnapStrength = 0.8
+local aimAssistFirstLock = false
+local aimAssistTrackingSmooth = 0.12
+
+-- No Recoil
+local noRecoilEnabled = false
+local noSpreadEnabled = false
+local noRecoilStrength = 100
+local noSpreadStrength = 100
+local noRecoilCameraLock = true
+local noRecoilValueOverride = true
+local noRecoilRemoteIntercept = false
+local noRecoilHooked = false
+local noRecoilLockedCFrame = nil
+local noRecoilIsShooting = false
+local noRecoilCurrentTool = nil
+local noRecoilToolConnection = nil
+local noRecoilOverriddenObjects = {}
+
+local recoilKeywords = {"recoil","kickback","kick","bloom","sway","shake","camshake","camerashake","deviation","recovery","camjump","rise","climb","rebound","wobble","jitter","bounce","cameraoffset","impulse","pushback","knockback","gunraise","muzzlerise","vertical_recoil","horizontal_recoil","recoilup","recoilside"}
+local spreadKeywords = {"spread","accuracy","inaccuracy","cone","spreadcone","dispersion","scatter","randomspread","hipfire","hipspread","aimspread","movingspread","bulletspread","maxspread","minspread","basespread","bulletdeviation","firedeviation"}
+
+-- ==========================================
+-- UTILITY
+-- ==========================================
+local function containsKeyword(name, keywords)
+	local nl = name:lower()
+	for _, kw in ipairs(keywords) do
+		if nl:find(kw:lower()) then return true end
 	end
+	return false
+end
 
-	if not Rayfield then
-		local s, r = pcall(function()
-			return loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source"))()
-		end)
-		if s and r then Rayfield = r end
+local function isValidInstance(obj)
+	local ok, r = pcall(function() return obj and obj.Parent ~= nil end)
+	return ok and r
+end
+
+local function isTeammate(p)
+	if not p then return false end
+	return p.Team and player.Team and p.Team == player.Team
+end
+
+local function getEquippedTool()
+	local c = player.Character
+	if not c then return nil end
+	for _, i in ipairs(c:GetChildren()) do
+		if i:IsA("Tool") then return i end
 	end
+	return nil
+end
 
-	if not Rayfield then
-		warn("[RyuExploit] Cannot load UI library")
-		local m = game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Loaded")
-		if m then m:Destroy() end
-		return
-	end
+-- ==========================================
+-- HITBOX COLLISION GROUP SETUP
+-- ==========================================
+local function setupHitboxCollisionGroup()
+	if hitboxCollisionGroupCreated then return end
+	pcall(function()
+		local PhysicsService = game:GetService("PhysicsService")
+		pcall(function() PhysicsService:RegisterCollisionGroup("RyuHitboxGhost") end)
+		pcall(function() PhysicsService:CollisionGroupSetCollidable("RyuHitboxGhost", "Default", false) end)
+		pcall(function() PhysicsService:CollisionGroupSetCollidable("RyuHitboxGhost", "RyuHitboxGhost", false) end)
+		hitboxCollisionGroupCreated = true
+	end)
+end
 
-	local RunService = game:GetService("RunService")
-	local UserInputService = game:GetService("UserInputService")
-	local Players = game:GetService("Players")
-	local ReplicatedStorage = game:GetService("ReplicatedStorage")
-	local player = Players.LocalPlayer
-	local camera = workspace.CurrentCamera
-	local mouse = player:GetMouse()
+-- ==========================================
+-- NO RECOIL
+-- ==========================================
+local function overrideSingleValue(obj, isSpread)
+	if not isValidInstance(obj) or not obj:IsA("ValueBase") then return end
+	local key = tostring(obj)
+	if noRecoilOverriddenObjects[key] then return end
+	local ok, val = pcall(function() return obj.Value end)
+	if not ok or typeof(val) ~= "number" then return end
+	local red = isSpread and (noSpreadStrength / 100) or (noRecoilStrength / 100)
+	noRecoilOverriddenObjects[key] = {obj = obj, originalValue = val, type = "value"}
+	pcall(function() obj.Value = val * (1 - red) end)
+end
 
-	local lastESPUpdate = 0
-	local lastHitboxUpdate = 0
-	local lastNoRecoilUpdate = 0
-	local lastSilentAimUpdate = 0
-	local ESP_UPDATE_RATE = 0.03
-	local HITBOX_UPDATE_RATE = 0.1
-	local NO_RECOIL_UPDATE_RATE = 0.05
-	local SILENT_AIM_UPDATE_RATE = 0.01
+local function overrideSingleAttribute(obj, attrName, isSpread)
+	if not isValidInstance(obj) then return end
+	local key = tostring(obj) .. "attr" .. attrName
+	if noRecoilOverriddenObjects[key] then return end
+	local ok, val = pcall(function() return obj:GetAttribute(attrName) end)
+	if not ok or typeof(val) ~= "number" then return end
+	local red = isSpread and (noSpreadStrength / 100) or (noRecoilStrength / 100)
+	noRecoilOverriddenObjects[key] = {obj = obj, attrName = attrName, originalValue = val, type = "attribute"}
+	pcall(function() obj:SetAttribute(attrName, val * (1 - red)) end)
+end
 
-	-- Movement
-	local speed = 16
-	local jumpPower = 50
-	local speedMethod = "Default"
-	local jumpMethod = "Default"
-	local noclip = false
-	local noclipMethod = "Default"
-	local noFallDamage = false
-	local noFallMethod = "Default"
-	local isJumping = false
-	local canJump = true
-	local lastHealth = 100
-	local isFalling = false
-	local wasInAir = false
-
-	-- Anti Kick
-	local antiKickEnabled = false
-	local antiKickHooked = false
-
-	-- ESP
-	local espEnabled = false
-	local espBox = false
-	local espLine = false
-	local espHighlight = false
-	local espHealth = false
-	local espName = false
-	local espDistance = false
-	local espTeamCheck = false
-	local espColor = Color3.fromRGB(255, 0, 0)
-	local espTeamColor = Color3.fromRGB(0, 255, 0)
-	local espEnemyColor = Color3.fromRGB(255, 0, 0)
-	local espObjects = {}
-	local espLineSmoothing = 0.3
-
-	-- Hitbox
-	local hitboxEnabled = false
-	local hitboxSize = 10
-	local hitboxTransparency = 0.7
-	local hitboxESPEnabled = false
-	local hitboxESPColor = Color3.fromRGB(255, 255, 0)
-	local hitboxData = {}
-
-	-- Anti Hitbox
-	local antiHitboxEnabled = false
-	local antiHitboxSize = 1
-	local antiHitboxParts = {}
-
-	-- Aimlock
-	local aimlockEnabled = false
-	local aimlockTarget = nil
-	local aimlockPart = "Head"
-	local aimlockDistance = 200
-	local aimlockSmooth = 0.5
-	local aimlockFOV = 100
-	local showFOVCircle = false
-	local fovCircle = nil
-	local aimlockKey = Enum.UserInputType.MouseButton2
-	local autoSwitchTarget = true
-	local aimlockTeamCheck = false
-
-	-- Silent Aim
-	local silentAimEnabled = false
-	local silentAimPart = "Head"
-	local silentAimFOV = 200
-	local silentAimDistance = 500
-	local silentAimTeamCheck = false
-	local silentAimAutoHeadshot = true
-	local silentAimHeadshotChance = 100
-	local silentAimVisibleCheck = false
-	local silentAimPrediction = true
-	local silentAimPredictionAmount = 0.12
-	local silentAimHooked = false
-	local silentAimShowFOV = false
-	local silentAimFOVCircle = nil
-	local silentAimHitChance = 100
-	local silentAimCurrentTarget = nil
-	local silentAimVisualLine = false
-	local silentAimVisualLineObj = nil
-	local bulletRedirectEnabled = false
-	local bulletRedirectHooked = false
-
-	-- Aim Assist
-	local aimAssistEnabled = false
-	local aimAssistStrength = 0.5
-	local aimAssistFOV = 150
-	local aimAssistDistance = 200
-	local aimAssistHeadshotRate = 70
-	local aimAssistTargetPart = "Dynamic"
-	local aimAssistTeamCheck = false
-	local aimAssistSmoothing = true
-	local aimAssistStickyAim = true
-	local aimAssistStickyTarget = nil
-	local lastStickyTime = 0
-	local showAimAssistFOV = false
-	local aimAssistFOVCircle = nil
-	local aimAssistPrediction = false
-	local aimAssistPredictionAmount = 0.1
-	local aimAssistOnlyWhileAiming = true
-	local aimAssistCurrentTarget = nil
-	local aimAssistLastPartSwitch = 0
-	local aimAssistPartSwitchRate = 0.5
-	local aimAssistLastChosenPart = nil
-	local aimAssistMagnetism = 0.6
-	local aimAssistInnerDeadzone = 5
-	local aimAssistSlowdownZone = 80
-	local aimAssistReattachDelay = 0.15
-	local aimAssistLastTargetSwitch = 0
-	local aimAssistSnapStrength = 0.8
-	local aimAssistFirstLock = false
-	local aimAssistTrackingSmooth = 0.12
-
-	-- No Recoil
-	local noRecoilEnabled = false
-	local noSpreadEnabled = false
-	local noRecoilStrength = 100
-	local noSpreadStrength = 100
-	local noRecoilCameraLock = true
-	local noRecoilValueOverride = true
-	local noRecoilRemoteIntercept = false
-	local noRecoilHooked = false
-	local noRecoilLockedCFrame = nil
-	local noRecoilIsShooting = false
-	local noRecoilCurrentTool = nil
-	local noRecoilToolConnection = nil
-	local noRecoilOverriddenObjects = {}
-
-	local recoilKeywords = {"recoil","kickback","kick","bloom","sway","shake","camshake","camerashake","deviation","recovery","camjump","rise","climb","rebound","wobble","jitter","bounce","cameraoffset","impulse","pushback","knockback","gunraise","muzzlerise","vertical_recoil","horizontal_recoil","recoilup","recoilside"}
-	local spreadKeywords = {"spread","accuracy","inaccuracy","cone","spreadcone","dispersion","scatter","randomspread","hipfire","hipspread","aimspread","movingspread","bulletspread","maxspread","minspread","basespread","bulletdeviation","firedeviation"}
-
-	-- ==========================================
-	-- UTILITY
-	-- ==========================================
-	local function containsKeyword(name, keywords)
-		local nl = name:lower()
-		for _, kw in ipairs(keywords) do
-			if nl:find(kw:lower()) then return true end
-		end
-		return false
-	end
-
-	local function isValidInstance(obj)
-		local ok, r = pcall(function() return obj and obj.Parent ~= nil end)
-		return ok and r
-	end
-
-	local function isTeammate(p)
-		if not p then return false end
-		return p.Team and player.Team and p.Team == player.Team
-	end
-
-	local function getEquippedTool()
-		local c = player.Character
-		if not c then return nil end
-		for _, i in ipairs(c:GetChildren()) do
-			if i:IsA("Tool") then return i end
-		end
-		return nil
-	end
-
-	-- ==========================================
-	-- NO RECOIL
-	-- ==========================================
-	local function overrideSingleValue(obj, isSpread)
-		if not isValidInstance(obj) or not obj:IsA("ValueBase") then return end
-		local key = tostring(obj)
-		if noRecoilOverriddenObjects[key] then return end
-		local ok, val = pcall(function() return obj.Value end)
-		if not ok or typeof(val) ~= "number" then return end
-		local red = isSpread and (noSpreadStrength / 100) or (noRecoilStrength / 100)
-		noRecoilOverriddenObjects[key] = {obj = obj, originalValue = val, type = "value"}
-		pcall(function() obj.Value = val * (1 - red) end)
-	end
-
-	local function overrideSingleAttribute(obj, attrName, isSpread)
-		if not isValidInstance(obj) then return end
-		local key = tostring(obj) .. "attr" .. attrName
-		if noRecoilOverriddenObjects[key] then return end
-		local ok, val = pcall(function() return obj:GetAttribute(attrName) end)
-		if not ok or typeof(val) ~= "number" then return end
-		local red = isSpread and (noSpreadStrength / 100) or (noRecoilStrength / 100)
-		noRecoilOverriddenObjects[key] = {obj = obj, attrName = attrName, originalValue = val, type = "attribute"}
-		pcall(function() obj:SetAttribute(attrName, val * (1 - red)) end)
-	end
-
-	local function overrideTableRecoil(tbl, depth)
-		depth = depth or 0
-		if depth > 4 or typeof(tbl) ~= "table" then return end
-		for key, val in pairs(tbl) do
-			if typeof(key) == "string" then
-				if noRecoilEnabled and typeof(val) == "number" then
-					for _, kw in ipairs(recoilKeywords) do
-						if key:lower():find(kw) then
-							tbl[key] = val * (1 - noRecoilStrength / 100)
-							break
-						end
-					end
-				end
-				if noSpreadEnabled and typeof(val) == "number" then
-					for _, kw in ipairs(spreadKeywords) do
-						if key:lower():find(kw) then
-							tbl[key] = val * (1 - noSpreadStrength / 100)
-							break
-						end
-					end
-				end
-				if typeof(val) == "table" then overrideTableRecoil(val, depth + 1) end
-			end
-		end
-	end
-
-	local function scanEquippedTool(tool)
-		if not tool or not isValidInstance(tool) or not tool:IsA("Tool") then return end
-		local char = player.Character
-		if not char or tool.Parent ~= char then return end
-		noRecoilCurrentTool = tool
-		for _, desc in ipairs(tool:GetDescendants()) do
-			if not isValidInstance(desc) then continue end
-			if desc:IsA("ValueBase") then
-				if noRecoilEnabled and containsKeyword(desc.Name, recoilKeywords) then overrideSingleValue(desc, false) end
-				if noSpreadEnabled and containsKeyword(desc.Name, spreadKeywords) then overrideSingleValue(desc, true) end
-			end
-			if desc:IsA("Configuration") or desc:IsA("Folder") then
-				for _, child in ipairs(desc:GetChildren()) do
-					if child:IsA("ValueBase") then
-						if noRecoilEnabled and containsKeyword(child.Name, recoilKeywords) then overrideSingleValue(child, false) end
-						if noSpreadEnabled and containsKeyword(child.Name, spreadKeywords) then overrideSingleValue(child, true) end
+local function overrideTableRecoil(tbl, depth)
+	depth = depth or 0
+	if depth > 4 or typeof(tbl) ~= "table" then return end
+	for key, val in pairs(tbl) do
+		if typeof(key) == "string" then
+			if noRecoilEnabled and typeof(val) == "number" then
+				for _, kw in ipairs(recoilKeywords) do
+					if key:lower():find(kw) then
+						tbl[key] = val * (1 - noRecoilStrength / 100)
+						break
 					end
 				end
 			end
-			pcall(function()
-				for an, av in pairs(desc:GetAttributes()) do
-					if typeof(av) == "number" then
-						if noRecoilEnabled and containsKeyword(an, recoilKeywords) then overrideSingleAttribute(desc, an, false) end
-						if noSpreadEnabled and containsKeyword(an, spreadKeywords) then overrideSingleAttribute(desc, an, true) end
+			if noSpreadEnabled and typeof(val) == "number" then
+				for _, kw in ipairs(spreadKeywords) do
+					if key:lower():find(kw) then
+						tbl[key] = val * (1 - noSpreadStrength / 100)
+						break
 					end
 				end
-			end)
+			end
+			if typeof(val) == "table" then overrideTableRecoil(val, depth + 1) end
+		end
+	end
+end
+
+local function scanEquippedTool(tool)
+	if not tool or not isValidInstance(tool) or not tool:IsA("Tool") then return end
+	local char = player.Character
+	if not char or tool.Parent ~= char then return end
+	noRecoilCurrentTool = tool
+	for _, desc in ipairs(tool:GetDescendants()) do
+		if not isValidInstance(desc) then continue end
+		if desc:IsA("ValueBase") then
+			if noRecoilEnabled and containsKeyword(desc.Name, recoilKeywords) then overrideSingleValue(desc, false) end
+			if noSpreadEnabled and containsKeyword(desc.Name, spreadKeywords) then overrideSingleValue(desc, true) end
+		end
+		if desc:IsA("Configuration") or desc:IsA("Folder") then
+			for _, child in ipairs(desc:GetChildren()) do
+				if child:IsA("ValueBase") then
+					if noRecoilEnabled and containsKeyword(child.Name, recoilKeywords) then overrideSingleValue(child, false) end
+					if noSpreadEnabled and containsKeyword(child.Name, spreadKeywords) then overrideSingleValue(child, true) end
+				end
+			end
 		end
 		pcall(function()
-			for an, av in pairs(tool:GetAttributes()) do
+			for an, av in pairs(desc:GetAttributes()) do
 				if typeof(av) == "number" then
-					if noRecoilEnabled and containsKeyword(an, recoilKeywords) then overrideSingleAttribute(tool, an, false) end
-					if noSpreadEnabled and containsKeyword(an, spreadKeywords) then overrideSingleAttribute(tool, an, true) end
+					if noRecoilEnabled and containsKeyword(an, recoilKeywords) then overrideSingleAttribute(desc, an, false) end
+					if noSpreadEnabled and containsKeyword(an, spreadKeywords) then overrideSingleAttribute(desc, an, true) end
 				end
 			end
 		end)
-		for _, desc in ipairs(tool:GetDescendants()) do
-			if desc:IsA("ModuleScript") then
-				local n = desc.Name:lower()
-				if n:find("recoil") or n:find("spread") or n:find("config") or n:find("stat") or n:find("setting") or n:find("weapon") or n:find("gun") then
-					pcall(function()
-						local md = require(desc)
-						if typeof(md) == "table" then overrideTableRecoil(md) end
-					end)
-				end
+	end
+	pcall(function()
+		for an, av in pairs(tool:GetAttributes()) do
+			if typeof(av) == "number" then
+				if noRecoilEnabled and containsKeyword(an, recoilKeywords) then overrideSingleAttribute(tool, an, false) end
+				if noSpreadEnabled and containsKeyword(an, spreadKeywords) then overrideSingleAttribute(tool, an, true) end
+			end
+		end
+	end)
+	for _, desc in ipairs(tool:GetDescendants()) do
+		if desc:IsA("ModuleScript") then
+			local n = desc.Name:lower()
+			if n:find("recoil") or n:find("spread") or n:find("config") or n:find("stat") or n:find("setting") or n:find("weapon") or n:find("gun") then
+				pcall(function()
+					local md = require(desc)
+					if typeof(md) == "table" then overrideTableRecoil(md) end
+				end)
 			end
 		end
 	end
+end
 
-	local function restoreAllRecoilValues()
-		for _, d in pairs(noRecoilOverriddenObjects) do
-			pcall(function()
-				if d.type == "value" and isValidInstance(d.obj) then
-					d.obj.Value = d.originalValue
-				elseif d.type == "attribute" and isValidInstance(d.obj) then
-					d.obj:SetAttribute(d.attrName, d.originalValue)
-				end
-			end)
+local function restoreAllRecoilValues()
+	for _, d in pairs(noRecoilOverriddenObjects) do
+		pcall(function()
+			if d.type == "value" and isValidInstance(d.obj) then
+				d.obj.Value = d.originalValue
+			elseif d.type == "attribute" and isValidInstance(d.obj) then
+				d.obj:SetAttribute(d.attrName, d.originalValue)
+			end
+		end)
+	end
+	noRecoilOverriddenObjects = {}
+	noRecoilCurrentTool = nil
+	noRecoilIsShooting = false
+	noRecoilLockedCFrame = nil
+end
+
+local function refreshRecoilOverrides()
+	if not (noRecoilEnabled or noSpreadEnabled) or not noRecoilValueOverride then return end
+	for key, d in pairs(noRecoilOverriddenObjects) do
+		if not isValidInstance(d.obj) then
+			noRecoilOverriddenObjects[key] = nil
+			continue
 		end
-		noRecoilOverriddenObjects = {}
-		noRecoilCurrentTool = nil
+		pcall(function()
+			if d.type == "value" then
+				local cv = d.obj.Value
+				if typeof(cv) == "number" then
+					local isSp = containsKeyword(d.obj.Name, spreadKeywords)
+					local red = isSp and (noSpreadStrength / 100) or (noRecoilStrength / 100)
+					local tv = d.originalValue * (1 - red)
+					if math.abs(cv - tv) > 0.001 and math.abs(cv - d.originalValue) < 0.001 then
+						d.obj.Value = tv
+					end
+				end
+			elseif d.type == "attribute" then
+				local cv = d.obj:GetAttribute(d.attrName)
+				if typeof(cv) == "number" then
+					local isSp = containsKeyword(d.attrName, spreadKeywords)
+					local red = isSp and (noSpreadStrength / 100) or (noRecoilStrength / 100)
+					local tv = d.originalValue * (1 - red)
+					if math.abs(cv - tv) > 0.001 and math.abs(cv - d.originalValue) < 0.001 then
+						d.obj:SetAttribute(d.attrName, tv)
+					end
+				end
+			end
+		end)
+	end
+end
+
+local function applyNoRecoilCameraLock()
+	if not noRecoilCameraLock or not (noRecoilEnabled or noSpreadEnabled) then return end
+	local shooting = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
+	if shooting then
+		if not noRecoilIsShooting then
+			noRecoilIsShooting = true
+			noRecoilLockedCFrame = camera.CFrame
+		elseif noRecoilLockedCFrame then
+			local str = noRecoilStrength / 100
+			local cp = camera.CFrame.Position
+			local ll = noRecoilLockedCFrame.LookVector
+			camera.CFrame = camera.CFrame:Lerp(CFrame.new(cp, cp + ll), str * 0.8)
+		end
+	elseif noRecoilIsShooting then
 		noRecoilIsShooting = false
 		noRecoilLockedCFrame = nil
 	end
+end
 
-	local function refreshRecoilOverrides()
-		if not (noRecoilEnabled or noSpreadEnabled) or not noRecoilValueOverride then return end
-		for key, d in pairs(noRecoilOverriddenObjects) do
-			if not isValidInstance(d.obj) then
-				noRecoilOverriddenObjects[key] = nil
-				continue
-			end
-			pcall(function()
-				if d.type == "value" then
-					local cv = d.obj.Value
-					if typeof(cv) == "number" then
-						local isSp = containsKeyword(d.obj.Name, spreadKeywords)
-						local red = isSp and (noSpreadStrength / 100) or (noRecoilStrength / 100)
-						local tv = d.originalValue * (1 - red)
-						if math.abs(cv - tv) > 0.001 and math.abs(cv - d.originalValue) < 0.001 then
-							d.obj.Value = tv
-						end
-					end
-				elseif d.type == "attribute" then
-					local cv = d.obj:GetAttribute(d.attrName)
-					if typeof(cv) == "number" then
-						local isSp = containsKeyword(d.attrName, spreadKeywords)
-						local red = isSp and (noSpreadStrength / 100) or (noRecoilStrength / 100)
-						local tv = d.originalValue * (1 - red)
-						if math.abs(cv - tv) > 0.001 and math.abs(cv - d.originalValue) < 0.001 then
-							d.obj:SetAttribute(d.attrName, tv)
-						end
-					end
-				end
-			end)
-		end
-	end
-
-	local function applyNoRecoilCameraLock()
-		if not noRecoilCameraLock or not (noRecoilEnabled or noSpreadEnabled) then return end
-		local shooting = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
-		if shooting then
-			if not noRecoilIsShooting then
-				noRecoilIsShooting = true
-				noRecoilLockedCFrame = camera.CFrame
-			elseif noRecoilLockedCFrame then
-				local str = noRecoilStrength / 100
-				local cp = camera.CFrame.Position
-				local ll = noRecoilLockedCFrame.LookVector
-				camera.CFrame = camera.CFrame:Lerp(CFrame.new(cp, cp + ll), str * 0.8)
-			end
-		elseif noRecoilIsShooting then
-			noRecoilIsShooting = false
-			noRecoilLockedCFrame = nil
-		end
-	end
-
-	local function overrideRecoilPhysics()
-		if not noRecoilEnabled then return end
-		local char = player.Character
-		if not char then return end
-		for _, desc in ipairs(char:GetDescendants()) do
-			if desc:IsA("BodyAngularVelocity") or desc:IsA("BodyGyro") then
-				local n = desc.Name:lower()
-				if n:find("recoil") or n:find("kick") or n:find("shake") then
-					pcall(function() desc:Destroy() end)
-				end
+local function overrideRecoilPhysics()
+	if not noRecoilEnabled then return end
+	local char = player.Character
+	if not char then return end
+	for _, desc in ipairs(char:GetDescendants()) do
+		if desc:IsA("BodyAngularVelocity") or desc:IsA("BodyGyro") then
+			local n = desc.Name:lower()
+			if n:find("recoil") or n:find("kick") or n:find("shake") then
+				pcall(function() desc:Destroy() end)
 			end
 		end
 	end
+end
 
-	local function setupToolListener(char)
-		if not char then return end
-		if noRecoilToolConnection then
-			pcall(function() noRecoilToolConnection:Disconnect() end)
-		end
-		noRecoilToolConnection = char.ChildAdded:Connect(function(child)
-			if child:IsA("Tool") and (noRecoilEnabled or noSpreadEnabled) then
-				task.wait(0.3)
-				if isValidInstance(child) and child.Parent == char then
-					scanEquippedTool(child)
-				end
-			end
-		end)
-		task.wait(0.5)
-		if not isValidInstance(char) then return end
-		for _, child in ipairs(char:GetChildren()) do
-			if child:IsA("Tool") and (noRecoilEnabled or noSpreadEnabled) then
+local function setupToolListener(char)
+	if not char then return end
+	if noRecoilToolConnection then
+		pcall(function() noRecoilToolConnection:Disconnect() end)
+	end
+	noRecoilToolConnection = char.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") and (noRecoilEnabled or noSpreadEnabled) then
+			task.wait(0.3)
+			if isValidInstance(child) and child.Parent == char then
 				scanEquippedTool(child)
 			end
 		end
-	end
-
-	local function deepScanModules()
-		if not (noRecoilEnabled or noSpreadEnabled) then return 0 end
-		local places = {ReplicatedStorage}
-		pcall(function() table.insert(places, player.PlayerScripts) end)
-		local count = 0
-		for _, place in ipairs(places) do
-			pcall(function()
-				for _, desc in ipairs(place:GetDescendants()) do
-					if desc:IsA("ModuleScript") then
-						local n = desc.Name:lower()
-						if n:find("recoil") or n:find("spread") or n:find("weapon") or n:find("gun") or n:find("config") then
-							pcall(function()
-								local md = require(desc)
-								if typeof(md) == "table" then
-									overrideTableRecoil(md)
-									count = count + 1
-								end
-							end)
-						end
-					end
-				end
-			end)
+	end)
+	task.wait(0.5)
+	if not isValidInstance(char) then return end
+	for _, child in ipairs(char:GetChildren()) do
+		if child:IsA("Tool") and (noRecoilEnabled or noSpreadEnabled) then
+			scanEquippedTool(child)
 		end
-		return count
 	end
+end
 
-	local function hookNoRecoilRemotes()
-		if noRecoilHooked then return end
-		noRecoilHooked = true
+local function deepScanModules()
+	if not (noRecoilEnabled or noSpreadEnabled) then return 0 end
+	local places = {ReplicatedStorage}
+	pcall(function() table.insert(places, player.PlayerScripts) end)
+	local count = 0
+	for _, place in ipairs(places) do
 		pcall(function()
-			local hf = hookfunction or replaceclosure
-			if not hf then return end
-			local oldFS
-			oldFS = hf(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
-				if not (noRecoilEnabled or noSpreadEnabled) then return oldFS(self, ...) end
-				local ok, name = pcall(function() return self.Name:lower() end)
-				if not ok then return oldFS(self, ...) end
-				local args = {...}
-				if noRecoilEnabled and noRecoilRemoteIntercept then
-					if name:find("recoil") or name:find("kick") or name:find("camerashake") or name:find("shake") then
-						if noRecoilStrength >= 100 then return nil end
-					end
-				end
-				if noSpreadEnabled and (name:find("fire") or name:find("shoot") or name:find("attack") or name:find("bullet")) then
-					for i, arg in ipairs(args) do
-						if typeof(arg) == "Vector3" then
-							local ld = camera.CFrame.LookVector
-							if arg.Unit:Dot(ld) > 0.8 then
-								args[i] = ld:Lerp(arg.Unit, 1 - noSpreadStrength / 100) * arg.Magnitude
+			for _, desc in ipairs(place:GetDescendants()) do
+				if desc:IsA("ModuleScript") then
+					local n = desc.Name:lower()
+					if n:find("recoil") or n:find("spread") or n:find("weapon") or n:find("gun") or n:find("config") then
+						pcall(function()
+							local md = require(desc)
+							if typeof(md) == "table" then
+								overrideTableRecoil(md)
+								count = count + 1
 							end
-						elseif typeof(arg) == "table" then
-							for k, v in pairs(arg) do
-								if typeof(k) == "string" and typeof(v) == "number" then
-									if containsKeyword(k, spreadKeywords) then arg[k] = v * (1 - noSpreadStrength / 100) end
-									if containsKeyword(k, recoilKeywords) then arg[k] = v * (1 - noRecoilStrength / 100) end
-								end
-							end
-						end
-					end
-					return oldFS(self, unpack(args))
-				end
-				return oldFS(self, ...)
-			end))
-		end)
-	end
-
-	-- ==========================================
-	-- SILENT AIM
-	-- ==========================================
-	local function canSeeTarget(fromPos, targetPart)
-		if not silentAimVisibleCheck then return true end
-		local params = RaycastParams.new()
-		params.FilterDescendantsInstances = {player.Character}
-		params.FilterType = Enum.RaycastFilterType.Exclude
-		local dir = (targetPart.Position - fromPos)
-		local result = workspace:Raycast(fromPos, dir, params)
-		if result then
-			local hm = result.Instance:FindFirstAncestorOfClass("Model")
-			local tm = targetPart:FindFirstAncestorOfClass("Model")
-			if hm and tm and hm == tm then return true end
-			if result.Instance:IsDescendantOf(targetPart.Parent) then return true end
-		end
-		return result == nil
-	end
-
-	local function getSilentAimTargetPart(char)
-		if silentAimAutoHeadshot and math.random(1, 100) <= silentAimHeadshotChance then
-			local head = char:FindFirstChild("Head")
-			if head then return head end
-		end
-		if silentAimPart == "Head" then
-			return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-		elseif silentAimPart == "Body" then
-			return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-		elseif silentAimPart == "Random" then
-			local valid = {}
-			for _, pn in ipairs({"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso"}) do
-				local p = char:FindFirstChild(pn)
-				if p then table.insert(valid, p) end
-			end
-			if #valid > 0 then return valid[math.random(1, #valid)] end
-		elseif silentAimPart == "Nearest to Cursor" then
-			local cs = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-			local cp, cd = nil, math.huge
-			for _, pn in ipairs({"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso"}) do
-				local p = char:FindFirstChild(pn)
-				if p then
-					local sp, onS = camera:WorldToViewportPoint(p.Position)
-					if onS then
-						local sd = (Vector2.new(sp.X, sp.Y) - cs).Magnitude
-						if sd < cd then cd = sd; cp = p end
+						end)
 					end
 				end
 			end
-			return cp or char:FindFirstChild("HumanoidRootPart")
-		elseif silentAimPart == "Aim Assist Sync" then
-			if aimAssistCurrentTarget and aimAssistCurrentTarget.Character == char and aimAssistLastChosenPart then
-				local p = char:FindFirstChild(aimAssistLastChosenPart)
-				if p then return p end
-			end
-			return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
-		end
-		return char:FindFirstChild("HumanoidRootPart")
+		end)
 	end
+	return count
+end
 
-	local function getPredictedPosition(targetPart, char)
-		if not silentAimPrediction then return targetPart.Position end
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		if not hrp then return targetPart.Position end
-		local vel = hrp.AssemblyLinearVelocity
-		return targetPart.Position + Vector3.new(vel.X, 0, vel.Z) * silentAimPredictionAmount
-	end
-
-	local function getSilentAimTarget()
-		local myChar = player.Character
-		local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
-		if not myHrp then return nil, nil end
-		local cs = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-		local closest, closestDist = nil, math.huge
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p ~= player and p.Character then
-				local hum = p.Character:FindFirstChildOfClass("Humanoid")
-				local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-				if hum and hrp and hum.Health > 0 then
-					if silentAimTeamCheck and isTeammate(p) then continue end
-					if (myHrp.Position - hrp.Position).Magnitude > silentAimDistance then continue end
-					local sp, onScreen = camera:WorldToViewportPoint(hrp.Position)
-					if onScreen then
-						local sd = (Vector2.new(sp.X, sp.Y) - cs).Magnitude
-						if sd <= silentAimFOV and sd < closestDist and canSeeTarget(myHrp.Position, hrp) then
-							closestDist = sd
-							closest = p
-						end
-					end
+local function hookNoRecoilRemotes()
+	if noRecoilHooked then return end
+	noRecoilHooked = true
+	pcall(function()
+		local hf = hookfunction or replaceclosure
+		if not hf then return end
+		local oldFS
+		oldFS = hf(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
+			if not (noRecoilEnabled or noSpreadEnabled) then return oldFS(self, ...) end
+			local ok, name = pcall(function() return self.Name:lower() end)
+			if not ok then return oldFS(self, ...) end
+			local args = {...}
+			if noRecoilEnabled and noRecoilRemoteIntercept then
+				if name:find("recoil") or name:find("kick") or name:find("camerashake") or name:find("shake") then
+					if noRecoilStrength >= 100 then return nil end
 				end
 			end
-		end
-		if closest and closest.Character then
-			return closest, getSilentAimTargetPart(closest.Character)
-		end
-		return nil, nil
-	end
-
-	local function hookSilentAim()
-		if silentAimHooked then return end
-		silentAimHooked = true
-
-		pcall(function()
-			local mt = getrawmetatable(game)
-			if not mt then return end
-			local oldIdx = mt.__index
-			setreadonly(mt, false)
-			mt.__index = newcclosure(function(self, key)
-				if silentAimEnabled and self == mouse then
-					if key == "Hit" or key == "hit" then
-						local t, tp = getSilentAimTarget()
-						if t and tp then
-							silentAimCurrentTarget = t
-							return CFrame.new(getPredictedPosition(tp, t.Character))
-						end
-					elseif key == "Target" or key == "target" then
-						local t, tp = getSilentAimTarget()
-						if t and tp then return tp end
-					elseif key == "UnitRay" or key == "unitray" then
-						local t, tp = getSilentAimTarget()
-						if t and tp then
-							local pos = getPredictedPosition(tp, t.Character)
-							return Ray.new(camera.CFrame.Position, (pos - camera.CFrame.Position).Unit)
-						end
-					end
-				end
-				if key == "Size" and typeof(self) == "Instance" and self:IsA("BasePart") and self.Name == "HitboxOverlay" then
-					return Vector3.new(2, 2, 1)
-				end
-				return oldIdx(self, key)
-			end)
-			setreadonly(mt, true)
-		end)
-
-		pcall(function()
-			local hf = hookfunction or replaceclosure
-			if not hf then return end
-			local oldRC = workspace.Raycast
-			hf(workspace.Raycast, newcclosure(function(self, origin, direction, rayParams, ...)
-				if not silentAimEnabled then return oldRC(self, origin, direction, rayParams, ...) end
-				local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-				if myHrp and (origin - myHrp.Position).Magnitude < 15 then
-					local t, tp = getSilentAimTarget()
-					if t and tp and math.random(1, 100) <= silentAimHitChance then
-						local tPos = getPredictedPosition(tp, t.Character)
-						return oldRC(self, origin, (tPos - origin).Unit * direction.Magnitude, rayParams, ...)
-					end
-				end
-				return oldRC(self, origin, direction, rayParams, ...)
-			end))
-		end)
-
-		pcall(function()
-			local hf = hookfunction or replaceclosure
-			if not hf then return end
-			local oldFPR = workspace.FindPartOnRay
-			hf(workspace.FindPartOnRay, newcclosure(function(self, ray, ignoreList, ...)
-				if not silentAimEnabled then return oldFPR(self, ray, ignoreList, ...) end
-				local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-				if myHrp and (ray.Origin - myHrp.Position).Magnitude < 15 then
-					local t, tp = getSilentAimTarget()
-					if t and tp and math.random(1, 100) <= silentAimHitChance then
-						local tPos = getPredictedPosition(tp, t.Character)
-						return oldFPR(self, Ray.new(ray.Origin, (tPos - ray.Origin).Unit * ray.Direction.Magnitude), ignoreList, ...)
-					end
-				end
-				return oldFPR(self, ray, ignoreList, ...)
-			end))
-		end)
-
-		pcall(function()
-			local hf = hookfunction or replaceclosure
-			if not hf then return end
-			local oldFPR2 = workspace.FindPartOnRayWithIgnoreList
-			if not oldFPR2 then return end
-			hf(workspace.FindPartOnRayWithIgnoreList, newcclosure(function(self, ray, ignoreList, ...)
-				if not silentAimEnabled then return oldFPR2(self, ray, ignoreList, ...) end
-				local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-				if myHrp and (ray.Origin - myHrp.Position).Magnitude < 15 then
-					local t, tp = getSilentAimTarget()
-					if t and tp and math.random(1, 100) <= silentAimHitChance then
-						local tPos = getPredictedPosition(tp, t.Character)
-						return oldFPR2(self, Ray.new(ray.Origin, (tPos - ray.Origin).Unit * ray.Direction.Magnitude), ignoreList, ...)
-					end
-				end
-				return oldFPR2(self, ray, ignoreList, ...)
-			end))
-		end)
-	end
-
-	local function hookBulletRedirect()
-		if bulletRedirectHooked then return end
-		bulletRedirectHooked = true
-		pcall(function()
-			local hf = hookfunction or replaceclosure
-			if not hf then return end
-			local oldFS
-			oldFS = hf(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
-				if not (silentAimEnabled or bulletRedirectEnabled) then return oldFS(self, ...) end
-				local ok, name = pcall(function() return self.Name:lower() end)
-				if not ok then return oldFS(self, ...) end
-				local isShoot = name:find("fire") or name:find("shoot") or name:find("attack") or name:find("bullet") or name:find("weapon") or name:find("gun") or name:find("hit") or name:find("damage") or name:find("ray") or name:find("cast") or name:find("projectile")
-				if not isShoot then return oldFS(self, ...) end
-				local t, tp = getSilentAimTarget()
-				if not t or not tp or math.random(1, 100) > silentAimHitChance then return oldFS(self, ...) end
-				local tPos = getPredictedPosition(tp, t.Character)
-				local args = {...}
+			if noSpreadEnabled and (name:find("fire") or name:find("shoot") or name:find("attack") or name:find("bullet")) then
 				for i, arg in ipairs(args) do
 					if typeof(arg) == "Vector3" then
-						local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-						if myHrp then
-							if arg.Unit:Dot(camera.CFrame.LookVector) > 0.5 then
-								args[i] = (tPos - camera.CFrame.Position).Unit * arg.Magnitude
-							elseif (arg - myHrp.Position).Magnitude > 5 then
-								args[i] = tPos
-							end
+						local ld = camera.CFrame.LookVector
+						if arg.Unit:Dot(ld) > 0.8 then
+							args[i] = ld:Lerp(arg.Unit, 1 - noSpreadStrength / 100) * arg.Magnitude
 						end
-					elseif typeof(arg) == "CFrame" then
-						args[i] = CFrame.new(arg.Position, tPos)
-					elseif typeof(arg) == "Ray" then
-						args[i] = Ray.new(arg.Origin, (tPos - arg.Origin).Unit * arg.Direction.Magnitude)
-					elseif typeof(arg) == "Instance" and arg:IsA("BasePart") then
-						args[i] = tp
 					elseif typeof(arg) == "table" then
 						for k, v in pairs(arg) do
-							if typeof(v) == "Vector3" and typeof(k) == "string" then
-								local kl = k:lower()
-								if kl:find("pos") or kl:find("hit") or kl:find("target") or kl:find("point") then
-									arg[k] = tPos
-								elseif kl:find("dir") or kl:find("look") or kl:find("aim") then
-									arg[k] = (tPos - camera.CFrame.Position).Unit
-								end
-							elseif typeof(v) == "CFrame" and typeof(k) == "string" then
-								if k:lower():find("aim") or k:lower():find("look") then
-									arg[k] = CFrame.new(v.Position, tPos)
-								end
-							elseif typeof(v) == "Instance" and v:IsA("BasePart") and typeof(k) == "string" then
-								if k:lower():find("hit") or k:lower():find("target") then
-									arg[k] = tp
-								end
+							if typeof(k) == "string" and typeof(v) == "number" then
+								if containsKeyword(k, spreadKeywords) then arg[k] = v * (1 - noSpreadStrength / 100) end
+								if containsKeyword(k, recoilKeywords) then arg[k] = v * (1 - noRecoilStrength / 100) end
 							end
 						end
 					end
 				end
 				return oldFS(self, unpack(args))
-			end))
-		end)
-		pcall(function()
-			local hf = hookfunction or replaceclosure
-			if not hf then return end
-			local oldIS
-			oldIS = hf(Instance.new("RemoteFunction").InvokeServer, newcclosure(function(self, ...)
-				if not (silentAimEnabled or bulletRedirectEnabled) then return oldIS(self, ...) end
-				local ok, name = pcall(function() return self.Name:lower() end)
-				if not ok then return oldIS(self, ...) end
-				local isShoot = name:find("fire") or name:find("shoot") or name:find("attack") or name:find("bullet") or name:find("hit") or name:find("damage")
-				if not isShoot then return oldIS(self, ...) end
-				local t, tp = getSilentAimTarget()
-				if not t or not tp or math.random(1, 100) > silentAimHitChance then return oldIS(self, ...) end
-				local tPos = getPredictedPosition(tp, t.Character)
-				local args = {...}
-				for i, arg in ipairs(args) do
-					if typeof(arg) == "Vector3" and arg.Unit:Dot(camera.CFrame.LookVector) > 0.5 then
-						args[i] = (tPos - camera.CFrame.Position).Unit * arg.Magnitude
-					elseif typeof(arg) == "CFrame" then
-						args[i] = CFrame.new(arg.Position, tPos)
-					elseif typeof(arg) == "Instance" and arg:IsA("BasePart") then
-						args[i] = tp
+			end
+			return oldFS(self, ...)
+		end))
+	end)
+end
+
+-- ==========================================
+-- SILENT AIM
+-- ==========================================
+local function canSeeTarget(fromPos, targetPart)
+	if not silentAimVisibleCheck then return true end
+	local params = RaycastParams.new()
+	params.FilterDescendantsInstances = {player.Character}
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	local dir = (targetPart.Position - fromPos)
+	local result = workspace:Raycast(fromPos, dir, params)
+	if result then
+		local hm = result.Instance:FindFirstAncestorOfClass("Model")
+		local tm = targetPart:FindFirstAncestorOfClass("Model")
+		if hm and tm and hm == tm then return true end
+		if result.Instance:IsDescendantOf(targetPart.Parent) then return true end
+	end
+	return result == nil
+end
+
+local function getSilentAimTargetPart(char)
+	if silentAimAutoHeadshot and math.random(1, 100) <= silentAimHeadshotChance then
+		local head = char:FindFirstChild("Head")
+		if head then return head end
+	end
+	if silentAimPart == "Head" then
+		return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+	elseif silentAimPart == "Body" then
+		return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
+	elseif silentAimPart == "Random" then
+		local valid = {}
+		for _, pn in ipairs({"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso"}) do
+			local p = char:FindFirstChild(pn)
+			if p then table.insert(valid, p) end
+		end
+		if #valid > 0 then return valid[math.random(1, #valid)] end
+	elseif silentAimPart == "Nearest to Cursor" then
+		local cs = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+		local cp, cd = nil, math.huge
+		for _, pn in ipairs({"Head", "HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso"}) do
+			local p = char:FindFirstChild(pn)
+			if p then
+				local sp, onS = camera:WorldToViewportPoint(p.Position)
+				if onS then
+					local sd = (Vector2.new(sp.X, sp.Y) - cs).Magnitude
+					if sd < cd then cd = sd; cp = p end
+				end
+			end
+		end
+		return cp or char:FindFirstChild("HumanoidRootPart")
+	elseif silentAimPart == "Aim Assist Sync" then
+		if aimAssistCurrentTarget and aimAssistCurrentTarget.Character == char and aimAssistLastChosenPart then
+			local p = char:FindFirstChild(aimAssistLastChosenPart)
+			if p then return p end
+		end
+		return char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
+	end
+	return char:FindFirstChild("HumanoidRootPart")
+end
+
+local function getPredictedPosition(targetPart, char)
+	if not silentAimPrediction then return targetPart.Position end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return targetPart.Position end
+	local vel = hrp.AssemblyLinearVelocity
+	return targetPart.Position + Vector3.new(vel.X, 0, vel.Z) * silentAimPredictionAmount
+end
+
+local function getSilentAimTarget()
+	local myChar = player.Character
+	local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+	if not myHrp then return nil, nil end
+	local cs = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+	local closest, closestDist = nil, math.huge
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			local hum = p.Character:FindFirstChildOfClass("Humanoid")
+			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+			if hum and hrp and hum.Health > 0 then
+				if silentAimTeamCheck and isTeammate(p) then continue end
+				if (myHrp.Position - hrp.Position).Magnitude > silentAimDistance then continue end
+				local sp, onScreen = camera:WorldToViewportPoint(hrp.Position)
+				if onScreen then
+					local sd = (Vector2.new(sp.X, sp.Y) - cs).Magnitude
+					if sd <= silentAimFOV and sd < closestDist and canSeeTarget(myHrp.Position, hrp) then
+						closestDist = sd
+						closest = p
 					end
 				end
-				return oldIS(self, unpack(args))
-			end))
-		end)
-	end
-
-	-- ==========================================
-	-- ANTI KICK
-	-- ==========================================
-	local function enableAntiKick()
-		if antiKickHooked then return end
-		antiKickHooked = true
-		pcall(function()
-			local mt = getrawmetatable(game)
-			if mt then
-				local oldNC = mt.__namecall
-				setreadonly(mt, false)
-				mt.__namecall = newcclosure(function(self, ...)
-					local m = getnamecallmethod()
-					if (m == "Kick" or m == "Destroy") and self == player then return nil end
-					return oldNC(self, ...)
-				end)
-				setreadonly(mt, true)
 			end
-		end)
-		pcall(function()
-			player.Kick = function(s, ...)
-				if s == player then return nil end
-			end
-		end)
-	end
-
-	-- ==========================================
-	-- NOCLIP
-	-- ==========================================
-	local function applyNoclip()
-		if not noclip then return end
-		local char = player.Character
-		if not char then return end
-		for _, v in ipairs(char:GetDescendants()) do
-			if v:IsA("BasePart") then v.CanCollide = false end
 		end
-		if noclipMethod == "CFrame Bypass" then
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			local hum = char:FindFirstChildOfClass("Humanoid")
-			if hrp and hum and hum.MoveDirection.Magnitude > 0 then
-				local params = RaycastParams.new()
-				params.FilterDescendantsInstances = {char}
-				params.FilterType = Enum.RaycastFilterType.Exclude
-				if workspace:Raycast(hrp.Position, hum.MoveDirection * 3, params) then
-					hrp.CFrame = hrp.CFrame + hum.MoveDirection * 1.5
+	end
+	if closest and closest.Character then
+		return closest, getSilentAimTargetPart(closest.Character)
+	end
+	return nil, nil
+end
+
+local function hookSilentAim()
+	if silentAimHooked then return end
+	silentAimHooked = true
+
+	pcall(function()
+		local mt = getrawmetatable(game)
+		if not mt then return end
+		local oldIdx = mt.__index
+		setreadonly(mt, false)
+		mt.__index = newcclosure(function(self, key)
+			if silentAimEnabled and self == mouse then
+				if key == "Hit" or key == "hit" then
+					local t, tp = getSilentAimTarget()
+					if t and tp then
+						silentAimCurrentTarget = t
+						return CFrame.new(getPredictedPosition(tp, t.Character))
+					end
+				elseif key == "Target" or key == "target" then
+					local t, tp = getSilentAimTarget()
+					if t and tp then return tp end
+				elseif key == "UnitRay" or key == "unitray" then
+					local t, tp = getSilentAimTarget()
+					if t and tp then
+						local pos = getPredictedPosition(tp, t.Character)
+						return Ray.new(camera.CFrame.Position, (pos - camera.CFrame.Position).Unit)
+					end
 				end
 			end
-			if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-				local hrp2 = char:FindFirstChild("HumanoidRootPart")
-				if hrp2 then hrp2.CFrame = hrp2.CFrame + Vector3.new(0, 1, 0) end
+			return oldIdx(self, key)
+		end)
+		setreadonly(mt, true)
+	end)
+
+	pcall(function()
+		local hf = hookfunction or replaceclosure
+		if not hf then return end
+		local oldRC = workspace.Raycast
+		hf(workspace.Raycast, newcclosure(function(self, origin, direction, rayParams, ...)
+			if not silentAimEnabled then return oldRC(self, origin, direction, rayParams, ...) end
+			local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if myHrp and (origin - myHrp.Position).Magnitude < 15 then
+				local t, tp = getSilentAimTarget()
+				if t and tp and math.random(1, 100) <= silentAimHitChance then
+					local tPos = getPredictedPosition(tp, t.Character)
+					return oldRC(self, origin, (tPos - origin).Unit * direction.Magnitude, rayParams, ...)
+				end
 			end
-		elseif noclipMethod == "Phase Bypass" then
-			pcall(function()
-				char:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Running)
+			return oldRC(self, origin, direction, rayParams, ...)
+		end))
+	end)
+
+	pcall(function()
+		local hf = hookfunction or replaceclosure
+		if not hf then return end
+		local oldFPR = workspace.FindPartOnRay
+		hf(workspace.FindPartOnRay, newcclosure(function(self, ray, ignoreList, ...)
+			if not silentAimEnabled then return oldFPR(self, ray, ignoreList, ...) end
+			local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if myHrp and (ray.Origin - myHrp.Position).Magnitude < 15 then
+				local t, tp = getSilentAimTarget()
+				if t and tp and math.random(1, 100) <= silentAimHitChance then
+					local tPos = getPredictedPosition(tp, t.Character)
+					return oldFPR(self, Ray.new(ray.Origin, (tPos - ray.Origin).Unit * ray.Direction.Magnitude), ignoreList, ...)
+				end
+			end
+			return oldFPR(self, ray, ignoreList, ...)
+		end))
+	end)
+
+	pcall(function()
+		local hf = hookfunction or replaceclosure
+		if not hf then return end
+		local oldFPR2 = workspace.FindPartOnRayWithIgnoreList
+		if not oldFPR2 then return end
+		hf(workspace.FindPartOnRayWithIgnoreList, newcclosure(function(self, ray, ignoreList, ...)
+			if not silentAimEnabled then return oldFPR2(self, ray, ignoreList, ...) end
+			local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+			if myHrp and (ray.Origin - myHrp.Position).Magnitude < 15 then
+				local t, tp = getSilentAimTarget()
+				if t and tp and math.random(1, 100) <= silentAimHitChance then
+					local tPos = getPredictedPosition(tp, t.Character)
+					return oldFPR2(self, Ray.new(ray.Origin, (tPos - ray.Origin).Unit * ray.Direction.Magnitude), ignoreList, ...)
+				end
+			end
+			return oldFPR2(self, ray, ignoreList, ...)
+		end))
+	end)
+end
+
+local function hookBulletRedirect()
+	if bulletRedirectHooked then return end
+	bulletRedirectHooked = true
+	pcall(function()
+		local hf = hookfunction or replaceclosure
+		if not hf then return end
+		local oldFS
+		oldFS = hf(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
+			if not (silentAimEnabled or bulletRedirectEnabled) then return oldFS(self, ...) end
+			local ok, name = pcall(function() return self.Name:lower() end)
+			if not ok then return oldFS(self, ...) end
+			local isShoot = name:find("fire") or name:find("shoot") or name:find("attack") or name:find("bullet") or name:find("weapon") or name:find("gun") or name:find("hit") or name:find("damage") or name:find("ray") or name:find("cast") or name:find("projectile")
+			if not isShoot then return oldFS(self, ...) end
+			local t, tp = getSilentAimTarget()
+			if not t or not tp or math.random(1, 100) > silentAimHitChance then return oldFS(self, ...) end
+			local tPos = getPredictedPosition(tp, t.Character)
+			local args = {...}
+			for i, arg in ipairs(args) do
+				if typeof(arg) == "Vector3" then
+					local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+					if myHrp then
+						if arg.Unit:Dot(camera.CFrame.LookVector) > 0.5 then
+							args[i] = (tPos - camera.CFrame.Position).Unit * arg.Magnitude
+						elseif (arg - myHrp.Position).Magnitude > 5 then
+							args[i] = tPos
+						end
+					end
+				elseif typeof(arg) == "CFrame" then
+					args[i] = CFrame.new(arg.Position, tPos)
+				elseif typeof(arg) == "Ray" then
+					args[i] = Ray.new(arg.Origin, (tPos - arg.Origin).Unit * arg.Direction.Magnitude)
+				elseif typeof(arg) == "Instance" and arg:IsA("BasePart") then
+					args[i] = tp
+				elseif typeof(arg) == "table" then
+					for k, v in pairs(arg) do
+						if typeof(v) == "Vector3" and typeof(k) == "string" then
+							local kl = k:lower()
+							if kl:find("pos") or kl:find("hit") or kl:find("target") or kl:find("point") then
+								arg[k] = tPos
+							elseif kl:find("dir") or kl:find("look") or kl:find("aim") then
+								arg[k] = (tPos - camera.CFrame.Position).Unit
+							end
+						elseif typeof(v) == "CFrame" and typeof(k) == "string" then
+							if k:lower():find("aim") or k:lower():find("look") then
+								arg[k] = CFrame.new(v.Position, tPos)
+							end
+						elseif typeof(v) == "Instance" and v:IsA("BasePart") and typeof(k) == "string" then
+							if k:lower():find("hit") or k:lower():find("target") then
+								arg[k] = tp
+							end
+						end
+					end
+				end
+			end
+			return oldFS(self, unpack(args))
+		end))
+	end)
+	pcall(function()
+		local hf = hookfunction or replaceclosure
+		if not hf then return end
+		local oldIS
+		oldIS = hf(Instance.new("RemoteFunction").InvokeServer, newcclosure(function(self, ...)
+			if not (silentAimEnabled or bulletRedirectEnabled) then return oldIS(self, ...) end
+			local ok, name = pcall(function() return self.Name:lower() end)
+			if not ok then return oldIS(self, ...) end
+			local isShoot = name:find("fire") or name:find("shoot") or name:find("attack") or name:find("bullet") or name:find("hit") or name:find("damage")
+			if not isShoot then return oldIS(self, ...) end
+			local t, tp = getSilentAimTarget()
+			if not t or not tp or math.random(1, 100) > silentAimHitChance then return oldIS(self, ...) end
+			local tPos = getPredictedPosition(tp, t.Character)
+			local args = {...}
+			for i, arg in ipairs(args) do
+				if typeof(arg) == "Vector3" and arg.Unit:Dot(camera.CFrame.LookVector) > 0.5 then
+					args[i] = (tPos - camera.CFrame.Position).Unit * arg.Magnitude
+				elseif typeof(arg) == "CFrame" then
+					args[i] = CFrame.new(arg.Position, tPos)
+				elseif typeof(arg) == "Instance" and arg:IsA("BasePart") then
+					args[i] = tp
+				end
+			end
+			return oldIS(self, unpack(args))
+		end))
+	end)
+end
+
+-- ==========================================
+-- ANTI KICK
+-- ==========================================
+local function enableAntiKick()
+	if antiKickHooked then return end
+	antiKickHooked = true
+	pcall(function()
+		local mt = getrawmetatable(game)
+		if mt then
+			local oldNC = mt.__namecall
+			setreadonly(mt, false)
+			mt.__namecall = newcclosure(function(self, ...)
+				local m = getnamecallmethod()
+				if (m == "Kick" or m == "Destroy") and self == player then return nil end
+				return oldNC(self, ...)
 			end)
-		elseif noclipMethod == "Velocity Bypass" then
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp and hrp.AssemblyLinearVelocity.Magnitude > 60 then
-				hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity.Unit * 60
+			setreadonly(mt, true)
+		end
+	end)
+	pcall(function()
+		player.Kick = function(s, ...)
+			if s == player then return nil end
+		end
+	end)
+end
+
+-- ==========================================
+-- NOCLIP
+-- ==========================================
+local function applyNoclip()
+	if not noclip then return end
+	local char = player.Character
+	if not char then return end
+	for _, v in ipairs(char:GetDescendants()) do
+		if v:IsA("BasePart") then v.CanCollide = false end
+	end
+	if noclipMethod == "CFrame Bypass" then
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		if hrp and hum and hum.MoveDirection.Magnitude > 0 then
+			local params = RaycastParams.new()
+			params.FilterDescendantsInstances = {char}
+			params.FilterType = Enum.RaycastFilterType.Exclude
+			if workspace:Raycast(hrp.Position, hum.MoveDirection * 3, params) then
+				hrp.CFrame = hrp.CFrame + hum.MoveDirection * 1.5
 			end
 		end
+		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+			local hrp2 = char:FindFirstChild("HumanoidRootPart")
+			if hrp2 then hrp2.CFrame = hrp2.CFrame + Vector3.new(0, 1, 0) end
+		end
+	elseif noclipMethod == "Phase Bypass" then
+		pcall(function()
+			char:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Running)
+		end)
+	elseif noclipMethod == "Velocity Bypass" then
+		local hrp = char:FindFirstChild("HumanoidRootPart")
+		if hrp and hrp.AssemblyLinearVelocity.Magnitude > 60 then
+			hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity.Unit * 60
+		end
+	end
+end
+
+-- ==========================================
+-- HITBOX (FIXED - No more stuck/fling)
+-- ==========================================
+local function cleanHitboxForPlayer(p)
+	local dd = hitboxData[p]
+	if not dd then return end
+	
+	if dd.overlayPart and dd.overlayPart.Parent then
+		pcall(function() dd.overlayPart:Destroy() end)
+	end
+	if dd.espVisual and dd.espVisual.Parent then
+		pcall(function() dd.espVisual:Destroy() end)
+	end
+	if dd.deathConn then
+		pcall(function() dd.deathConn:Disconnect() end)
+	end
+	if dd.updateConn then
+		pcall(function() dd.updateConn:Disconnect() end)
+	end
+	if dd.charRemovingConn then
+		pcall(function() dd.charRemovingConn:Disconnect() end)
+	end
+	
+	-- Restore HRP to normal
+	if p and p.Parent and p.Character then
+		local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			pcall(function()
+				hrp.Size = Vector3.new(2, 2, 1)
+				hrp.Transparency = 1
+				hrp.CanCollide = false
+				hrp.CanQuery = true
+				hrp.Material = Enum.Material.SmoothPlastic
+			end)
+		end
+	end
+	
+	dd.overlayPart = nil
+	dd.espVisual = nil
+	dd.trackedChar = nil
+	dd.deathConn = nil
+	dd.updateConn = nil
+	dd.charRemovingConn = nil
+end
+
+local function createHitboxOverlay(p)
+	if not p or not p.Character then return end
+	local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+	local hum = p.Character:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum or hum.Health <= 0 then return end
+
+	if not hitboxData[p] then hitboxData[p] = {} end
+	local dd = hitboxData[p]
+
+	-- Clean old stuff
+	if dd.overlayPart and dd.overlayPart.Parent then
+		pcall(function() dd.overlayPart:Destroy() end)
+	end
+	if dd.espVisual and dd.espVisual.Parent then
+		pcall(function() dd.espVisual:Destroy() end)
+	end
+	if dd.deathConn then
+		pcall(function() dd.deathConn:Disconnect() end)
+	end
+	if dd.updateConn then
+		pcall(function() dd.updateConn:Disconnect() end)
+	end
+	if dd.charRemovingConn then
+		pcall(function() dd.charRemovingConn:Disconnect() end)
 	end
 
-	-- ==========================================
-	-- HITBOX
-	-- ==========================================
-local function cleanHitboxForPlayer(p)
-    local dd = hitboxData[p]
-    if not dd then return end
-    if dd.overlayPart and dd.overlayPart.Parent then
-        pcall(function() dd.overlayPart:Destroy() end)
-    end
-    if dd.espVisual and dd.espVisual.Parent then
-        pcall(function() dd.espVisual:Destroy() end)
-    end
-    if dd.deathConn then
-        pcall(function() dd.deathConn:Disconnect() end)
-    end
-    if dd.updateConn then
-        pcall(function() dd.updateConn:Disconnect() end)
-    end
-    if p and p.Parent and p.Character then
-        local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            pcall(function() hrp.CanQuery = true end)
-        end
-    end
-    dd.overlayPart = nil
-    dd.espVisual = nil
-    dd.trackedChar = nil
-    dd.deathConn = nil
-    dd.updateConn = nil
-end
-local function createHitboxOverlay(p)
-    if not p or not p.Character then return end
-    local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-    local hum = p.Character:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum or hum.Health <= 0 then return end
+	-- Setup collision group
+	setupHitboxCollisionGroup()
 
-    if not hitboxData[p] then hitboxData[p] = {} end
-    local dd = hitboxData[p]
+	-- FIX: Expand HRP directly (this is what actually makes hits register)
+	pcall(function()
+		hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+		hrp.Transparency = hitboxTransparency
+		hrp.Material = Enum.Material.ForceField
+		hrp.Color = hitboxESPColor
+		hrp.CanCollide = false  -- IMPORTANT: prevent fling
+		hrp.CanTouch = false    -- IMPORTANT: prevent touch events causing fling
+	end)
 
-    -- Clean old overlay
-    if dd.overlayPart and dd.overlayPart.Parent then
-        pcall(function() dd.overlayPart:Destroy() end)
-    end
-    if dd.espVisual and dd.espVisual.Parent then
-        pcall(function() dd.espVisual:Destroy() end)
-    end
-    if dd.deathConn then
-        pcall(function() dd.deathConn:Disconnect() end)
-    end
-    if dd.updateConn then
-        pcall(function() dd.updateConn:Disconnect() end)
-    end
+	-- FIX: Create visual-only overlay (no physics interaction at all)
+	local ov = Instance.new("Part")
+	ov.Name = "HitboxVisual"
+	ov.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+	ov.Transparency = hitboxTransparency
+	ov.CanCollide = false       -- No collision
+	ov.CanTouch = false         -- No touch events
+	ov.CanQuery = false         -- No raycast hit (HRP handles that)
+	ov.Anchored = false         -- FIX: NOT anchored = no stuck
+	ov.Massless = true          -- No weight added
+	ov.Material = Enum.Material.ForceField
+	ov.Color = hitboxESPColor
+	ov.Shape = Enum.PartType.Ball
+	ov.CFrame = hrp.CFrame
+	
+	-- Apply collision group to prevent any physics interaction
+	pcall(function()
+		ov.CollisionGroup = "RyuHitboxGhost"
+	end)
+	
+	-- Parent to character so it moves with them via weld
+	ov.Parent = p.Character
 
-    -- =============================================
-    -- FIX 1: Langsung expand HRP saja, TANPA overlay part
-    -- Ini menghindari masalah anchored & collision
-    -- =============================================
-    
-    -- Metode: Expand HRP langsung + buat visual overlay yang TIDAK punya physics
-    local ov = Instance.new("Part")
-    ov.Name = "HitboxOverlay"
-    ov.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-    ov.Transparency = hitboxTransparency
-    ov.CanCollide = false       -- Tidak bisa ditabrak
-    ov.CanTouch = false         -- FIX: Tidak trigger .Touched events
-    ov.CanQuery = false         -- FIX: Tidak terdeteksi raycast (biar HRP asli yang kena)
-    ov.Anchored = false         -- FIX: TIDAK anchored, ikut physics character
-    ov.Massless = true          -- Tidak tambah berat
-    ov.Material = Enum.Material.ForceField
-    ov.Color = hitboxESPColor
-    ov.Shape = Enum.PartType.Ball
-    ov.CFrame = hrp.CFrame
-    
-    -- FIX 2: Collision group supaya tidak interact sama sekali
-    pcall(function()
-        local PhysicsService = game:GetService("PhysicsService")
-        -- Coba buat collision group khusus
-        pcall(function() PhysicsService:RegisterCollisionGroup("HitboxNoCollide") end)
-        pcall(function() PhysicsService:CollisionGroupSetCollidable("HitboxNoCollide", "Default", false) end)
-        ov.CollisionGroup = "HitboxNoCollide"
-    end)
-    
-    ov.Parent = workspace
+	-- FIX: Use WeldConstraint instead of Anchored
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = hrp
+	weld.Part1 = ov
+	weld.Parent = ov
+	ov.CFrame = hrp.CFrame  -- Align exactly
 
-    -- FIX 3: Pakai WeldConstraint BUKAN Anchored
-    -- Ini bikin overlay ikut karakter TANPA bikin macet
-    local weld = Instance.new("WeldConstraint")
-    weld.Part0 = hrp
-    weld.Part1 = ov
-    weld.Parent = ov
-    -- Posisikan tepat di tengah HRP
-    ov.CFrame = hrp.CFrame
+	-- Update connection for size/color changes
+	dd.updateConn = RunService.Heartbeat:Connect(function()
+		-- Check if overlay still exists
+		if not ov or not ov.Parent then
+			if dd.updateConn then
+				pcall(function() dd.updateConn:Disconnect() end)
+				dd.updateConn = nil
+			end
+			return
+		end
+		
+		-- Check if player/character still valid
+		if not p or not p.Parent or not p.Character then
+			pcall(function() ov:Destroy() end)
+			if dd.updateConn then
+				pcall(function() dd.updateConn:Disconnect() end)
+				dd.updateConn = nil
+			end
+			return
+		end
+		
+		local targetHRP = p.Character:FindFirstChild("HumanoidRootPart")
+		if not targetHRP then
+			pcall(function() ov:Destroy() end)
+			if dd.updateConn then
+				pcall(function() dd.updateConn:Disconnect() end)
+				dd.updateConn = nil
+			end
+			return
+		end
+		
+		-- Update overlay visual
+		pcall(function()
+			local newSize = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+			if ov.Size ~= newSize then ov.Size = newSize end
+			ov.Transparency = hitboxTransparency
+			ov.Color = hitboxESPColor
+		end)
+		
+		-- FIX: Keep HRP expanded + prevent collision every frame
+		pcall(function()
+			local newSize = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+			if targetHRP.Size ~= newSize then
+				targetHRP.Size = newSize
+			end
+			targetHRP.Transparency = hitboxTransparency
+			targetHRP.Color = hitboxESPColor
+			targetHRP.Material = Enum.Material.ForceField
+			targetHRP.CanCollide = false  -- Force no collision every frame
+			targetHRP.CanTouch = false    -- Force no touch every frame
+		end)
+	end)
 
-    -- FIX 4: Expand HRP asli (ini yang bikin hitbox besar untuk raycast)
-    pcall(function()
-        hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-        hrp.Transparency = 1  -- HRP tetap invisible
-        hrp.CanCollide = false  -- HRP tidak bisa ditabrak player lain
-    end)
+	dd.overlayPart = ov
+	dd.trackedChar = p.Character
 
-    -- FIX 5: Backup update posisi kalau weld gagal
-    -- Tapi TANPA set Anchored
-    dd.updateConn = RunService.Heartbeat:Connect(function()
-        if not ov or not ov.Parent then
-            if dd.updateConn then
-                pcall(function() dd.updateConn:Disconnect() end)
-            end
-            return
-        end
-        if not p or not p.Parent or not p.Character then
-            pcall(function() ov:Destroy() end)
-            if dd.updateConn then
-                pcall(function() dd.updateConn:Disconnect() end)
-            end
-            return
-        end
-        local targetHRP = p.Character:FindFirstChild("HumanoidRootPart")
-        if not targetHRP then
-            pcall(function() ov:Destroy() end)
-            if dd.updateConn then
-                pcall(function() dd.updateConn:Disconnect() end)
-            end
-            return
-        end
-        
-        -- Update size kalau berubah
-        if ov.Size ~= Vector3.new(hitboxSize, hitboxSize, hitboxSize) then
-            ov.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-        end
-        
-        -- FIX 6: Expand HRP juga setiap frame (game bisa reset)
-        pcall(function()
-            if targetHRP.Size ~= Vector3.new(hitboxSize, hitboxSize, hitboxSize) then
-                targetHRP.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-            end
-        end)
-    end)
-
-    dd.overlayPart = ov
-    dd.trackedChar = p.Character
-
-    -- Listen for death
-    dd.deathConn = hum.Died:Connect(function()
-        task.wait(0.5)
-        cleanHitboxForPlayer(p)
-    end)
+	-- Listen for death
+	dd.deathConn = hum.Died:Connect(function()
+		task.wait(0.5)
+		cleanHitboxForPlayer(p)
+	end)
+	
+	-- Listen for character removing
+	dd.charRemovingConn = p.CharacterRemoving:Connect(function()
+		cleanHitboxForPlayer(p)
+	end)
 end
 
 local function updateHitboxExpander()
-    if not hitboxEnabled then return end
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            local hum = p.Character:FindFirstChildOfClass("Humanoid")
-            if hrp and hum and hum.Health > 0 then
-                if not hitboxData[p] then hitboxData[p] = {} end
-                local dd = hitboxData[p]
+	if not hitboxEnabled then return end
+	
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+			local hum = p.Character:FindFirstChildOfClass("Humanoid")
+			if hrp and hum and hum.Health > 0 then
+				if not hitboxData[p] then hitboxData[p] = {} end
+				local dd = hitboxData[p]
 
-                if not dd.overlayPart or not dd.overlayPart.Parent or dd.trackedChar ~= p.Character then
-                    createHitboxOverlay(p)
-                else
-                    -- Update visual overlay
-                    pcall(function()
-                        dd.overlayPart.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-                        dd.overlayPart.Transparency = hitboxTransparency
-                        dd.overlayPart.Color = hitboxESPColor
-                    end)
-                    -- FIX: Update HRP size tapi JANGAN ubah CanCollide ke true
-                    pcall(function()
-                        hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-                        hrp.Transparency = 1  -- Tetap invisible
-                        hrp.CanCollide = false -- PENTING: tetap false
-                        -- HAPUS Material ForceField dari HRP (bikin lag)
-                    end)
-                end
+				if not dd.overlayPart or not dd.overlayPart.Parent or dd.trackedChar ~= p.Character then
+					createHitboxOverlay(p)
+				end
 
-                -- ESP visual
-                if hitboxESPEnabled and dd.overlayPart and dd.overlayPart.Parent then
-                    if not dd.espVisual or not dd.espVisual.Parent then
-                        local b = Instance.new("BoxHandleAdornment")
-                        b.Adornee = dd.overlayPart
-                        b.Size = dd.overlayPart.Size
-                        b.Color3 = hitboxESPColor
-                        b.Transparency = 0.5
-                        b.AlwaysOnTop = true
-                        b.ZIndex = 10
-                        b.Parent = dd.overlayPart
-                        dd.espVisual = b
-                    else
-                        dd.espVisual.Size = dd.overlayPart.Size
-                        dd.espVisual.Color3 = hitboxESPColor
-                    end
-                elseif dd.espVisual then
-                    pcall(function() dd.espVisual:Destroy() end)
-                    dd.espVisual = nil
-                end
-            elseif hitboxData[p] and hitboxData[p].overlayPart then
-                cleanHitboxForPlayer(p)
-            end
-        end
-    end
+				-- ESP visual (BoxHandleAdornment for always-on-top visibility)
+				if hitboxESPEnabled and dd.overlayPart and dd.overlayPart.Parent then
+					if not dd.espVisual or not dd.espVisual.Parent then
+						local b = Instance.new("BoxHandleAdornment")
+						b.Adornee = dd.overlayPart
+						b.Size = dd.overlayPart.Size
+						b.Color3 = hitboxESPColor
+						b.Transparency = 0.5
+						b.AlwaysOnTop = true
+						b.ZIndex = 10
+						b.Parent = dd.overlayPart
+						dd.espVisual = b
+					else
+						pcall(function()
+							dd.espVisual.Size = dd.overlayPart.Size
+							dd.espVisual.Color3 = hitboxESPColor
+						end)
+					end
+				elseif dd.espVisual then
+					pcall(function() dd.espVisual:Destroy() end)
+					dd.espVisual = nil
+				end
+			elseif hitboxData[p] and hitboxData[p].overlayPart then
+				cleanHitboxForPlayer(p)
+			end
+		end
+	end
 
-    for p, _ in pairs(hitboxData) do
-        if not p.Parent then
-            cleanHitboxForPlayer(p)
-            hitboxData[p] = nil
-        end
-    end
-end
-
-local function cleanHitboxForPlayer(p)
-    local dd = hitboxData[p]
-    if not dd then return end
-    if dd.overlayPart and dd.overlayPart.Parent then
-        pcall(function() dd.overlayPart:Destroy() end)
-    end
-    if dd.espVisual and dd.espVisual.Parent then
-        pcall(function() dd.espVisual:Destroy() end)
-    end
-    if dd.deathConn then
-        pcall(function() dd.deathConn:Disconnect() end)
-    end
-    if dd.updateConn then
-        pcall(function() dd.updateConn:Disconnect() end)
-    end
-    -- FIX: Restore HRP ke ukuran normal
-    if p and p.Parent and p.Character then
-        local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            pcall(function()
-                hrp.Size = Vector3.new(2, 2, 1)
-                hrp.Transparency = 1
-                hrp.CanCollide = false
-                hrp.CanQuery = true
-                hrp.Material = Enum.Material.SmoothPlastic
-            end)
-        end
-    end
-    dd.overlayPart = nil
-    dd.espVisual = nil
-    dd.trackedChar = nil
-    dd.deathConn = nil
-    dd.updateConn = nil
+	-- Clean up data for players who left
+	for p, _ in pairs(hitboxData) do
+		if not p.Parent then
+			cleanHitboxForPlayer(p)
+			hitboxData[p] = nil
+		end
+	end
 end
 
 local function disableHitboxExpander()
-    for p, _ in pairs(hitboxData) do
-        cleanHitboxForPlayer(p)
-    end
-    hitboxData = {}
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                pcall(function()
-                    hrp.Size = Vector3.new(2, 2, 1)
-                    hrp.Transparency = 1
-                    hrp.CanCollide = false
-                    hrp.CanQuery = true
-                    hrp.Material = Enum.Material.SmoothPlastic
-                end)
-            end
-        end
-    end
-end
-
-	local function updateAntiHitbox()
-		if not antiHitboxEnabled then return end
-		local mc = player.Character
-		if not mc or not mc:FindFirstChild("HumanoidRootPart") then return end
-		local partNames = {"Head", "Torso", "UpperTorso", "LowerTorso", "LeftArm", "RightArm", "LeftLeg", "RightLeg", "Left Arm", "Right Arm", "Left Leg", "Right Leg", "HumanoidRootPart"}
-		for _, pn in ipairs(partNames) do
-			local part = mc:FindFirstChild(pn)
-			if part and part:IsA("BasePart") then
-				if not antiHitboxParts[pn] then antiHitboxParts[pn] = {} end
-				local d = antiHitboxParts[pn]
-				if not d.fakePart or not d.fakePart.Parent then
-					local fp = Instance.new("Part")
-					fp.Name = "AH_" .. pn
-					fp.Size = Vector3.new(antiHitboxSize, antiHitboxSize, antiHitboxSize)
-					fp.Transparency = 1
-					fp.CanCollide = false
-					fp.CanQuery = true
-					fp.Anchored = false
-					fp.Massless = true
-					fp.Parent = mc
-					local w = Instance.new("WeldConstraint")
-					w.Part0 = part
-					w.Part1 = fp
-					w.Parent = fp
-					fp.CFrame = part.CFrame
-					d.fakePart = fp
-				else
-					d.fakePart.Size = Vector3.new(antiHitboxSize, antiHitboxSize, antiHitboxSize)
-				end
-				part.CanQuery = false
+	for p, _ in pairs(hitboxData) do
+		cleanHitboxForPlayer(p)
+	end
+	hitboxData = {}
+	-- Restore all HRPs
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				pcall(function()
+					hrp.Size = Vector3.new(2, 2, 1)
+					hrp.Transparency = 1
+					hrp.CanCollide = false
+					hrp.CanTouch = true
+					hrp.CanQuery = true
+					hrp.Material = Enum.Material.SmoothPlastic
+				end)
 			end
 		end
 	end
+end
 
-	-- ==========================================
-	-- AIM ASSIST
-	-- ==========================================
-	local function getAimAssistTargetPart(char)
-		local now = tick()
-		if aimAssistLastChosenPart and char:FindFirstChild(aimAssistLastChosenPart) and now - aimAssistLastPartSwitch < aimAssistPartSwitchRate then
-			return char:FindFirstChild(aimAssistLastChosenPart)
-		end
-		aimAssistLastPartSwitch = now
-		local pn = "HumanoidRootPart"
-		if aimAssistTargetPart == "Dynamic" then
-			if math.random(1, 100) <= aimAssistHeadshotRate then
-				pn = "Head"
+-- ==========================================
+-- ANTI HITBOX
+-- ==========================================
+local function updateAntiHitbox()
+	if not antiHitboxEnabled then return end
+	local mc = player.Character
+	if not mc or not mc:FindFirstChild("HumanoidRootPart") then return end
+	local partNames = {"Head", "Torso", "UpperTorso", "LowerTorso", "LeftArm", "RightArm", "LeftLeg", "RightLeg", "Left Arm", "Right Arm", "Left Leg", "Right Leg", "HumanoidRootPart"}
+	for _, pn in ipairs(partNames) do
+		local part = mc:FindFirstChild(pn)
+		if part and part:IsA("BasePart") then
+			if not antiHitboxParts[pn] then antiHitboxParts[pn] = {} end
+			local d = antiHitboxParts[pn]
+			if not d.fakePart or not d.fakePart.Parent then
+				local fp = Instance.new("Part")
+				fp.Name = "AH_" .. pn
+				fp.Size = Vector3.new(antiHitboxSize, antiHitboxSize, antiHitboxSize)
+				fp.Transparency = 1
+				fp.CanCollide = false
+				fp.CanTouch = false
+				fp.CanQuery = true
+				fp.Anchored = false
+				fp.Massless = true
+				fp.Parent = mc
+				local w = Instance.new("WeldConstraint")
+				w.Part0 = part
+				w.Part1 = fp
+				w.Parent = fp
+				fp.CFrame = part.CFrame
+				d.fakePart = fp
 			else
-				for _, n in ipairs({"HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso"}) do
-					if char:FindFirstChild(n) then pn = n; break end
-				end
+				d.fakePart.Size = Vector3.new(antiHitboxSize, antiHitboxSize, antiHitboxSize)
 			end
-		elseif aimAssistTargetPart == "Head" then
+			part.CanQuery = false
+		end
+	end
+end
+
+-- ==========================================
+-- AIM ASSIST
+-- ==========================================
+local function getAimAssistTargetPart(char)
+	local now = tick()
+	if aimAssistLastChosenPart and char:FindFirstChild(aimAssistLastChosenPart) and now - aimAssistLastPartSwitch < aimAssistPartSwitchRate then
+		return char:FindFirstChild(aimAssistLastChosenPart)
+	end
+	aimAssistLastPartSwitch = now
+	local pn = "HumanoidRootPart"
+	if aimAssistTargetPart == "Dynamic" then
+		if math.random(1, 100) <= aimAssistHeadshotRate then
 			pn = "Head"
-		elseif aimAssistTargetPart == "Body" then
-			for _, n in ipairs({"HumanoidRootPart", "UpperTorso", "Torso"}) do
+		else
+			for _, n in ipairs({"HumanoidRootPart", "UpperTorso", "LowerTorso", "Torso"}) do
 				if char:FindFirstChild(n) then pn = n; break end
 			end
 		end
-		aimAssistLastChosenPart = pn
-		return char:FindFirstChild(pn) or char:FindFirstChild("HumanoidRootPart")
+	elseif aimAssistTargetPart == "Head" then
+		pn = "Head"
+	elseif aimAssistTargetPart == "Body" then
+		for _, n in ipairs({"HumanoidRootPart", "UpperTorso", "Torso"}) do
+			if char:FindFirstChild(n) then pn = n; break end
+		end
 	end
+	aimAssistLastChosenPart = pn
+	return char:FindFirstChild(pn) or char:FindFirstChild("HumanoidRootPart")
+end
 
-	local function getAimAssistTarget()
-		local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-		if not myHrp then return nil, math.huge end
-		local cs = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-		local closest, cd = nil, math.huge
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p ~= player and p.Character then
-				local hum = p.Character:FindFirstChildOfClass("Humanoid")
-				local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-				if hum and hrp and hum.Health > 0 then
-					if aimAssistTeamCheck and isTeammate(p) then continue end
-					if (myHrp.Position - hrp.Position).Magnitude > aimAssistDistance then continue end
-					local sp, onS = camera:WorldToViewportPoint(hrp.Position)
-					if onS then
-						local sd = (Vector2.new(sp.X, sp.Y) - cs).Magnitude
-						if sd <= aimAssistFOV and sd < cd then
-							cd = sd
-							closest = p
-						end
+local function getAimAssistTarget()
+	local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not myHrp then return nil, math.huge end
+	local cs = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+	local closest, cd = nil, math.huge
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			local hum = p.Character:FindFirstChildOfClass("Humanoid")
+			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+			if hum and hrp and hum.Health > 0 then
+				if aimAssistTeamCheck and isTeammate(p) then continue end
+				if (myHrp.Position - hrp.Position).Magnitude > aimAssistDistance then continue end
+				local sp, onS = camera:WorldToViewportPoint(hrp.Position)
+				if onS then
+					local sd = (Vector2.new(sp.X, sp.Y) - cs).Magnitude
+					if sd <= aimAssistFOV and sd < cd then
+						cd = sd
+						closest = p
 					end
 				end
 			end
 		end
-		return closest, cd
 	end
+	return closest, cd
+end
 
-	local function isAimAssistTargetValid(p)
-		if not p or not p.Parent or not p.Character then return false end
-		local hum = p.Character:FindFirstChildOfClass("Humanoid")
-		local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-		if not hum or not hrp or hum.Health <= 0 then return false end
-		local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-		if not myHrp or (myHrp.Position - hrp.Position).Magnitude > aimAssistDistance then return false end
-		local _, onS = camera:WorldToViewportPoint(hrp.Position)
-		return onS
-	end
+local function isAimAssistTargetValid(p)
+	if not p or not p.Parent or not p.Character then return false end
+	local hum = p.Character:FindFirstChildOfClass("Humanoid")
+	local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+	if not hum or not hrp or hum.Health <= 0 then return false end
+	local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not myHrp or (myHrp.Position - hrp.Position).Magnitude > aimAssistDistance then return false end
+	local _, onS = camera:WorldToViewportPoint(hrp.Position)
+	return onS
+end
 
-	local function applyAimAssist(dt)
-		if not aimAssistEnabled then return end
-		local myChar = player.Character
-		if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
+local function applyAimAssist(dt)
+	if not aimAssistEnabled then return end
+	local myChar = player.Character
+	if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
 
-		if aimAssistOnlyWhileAiming then
-			local isAiming = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-			if not isAiming then
-				aimAssistStickyTarget = nil
-				aimAssistCurrentTarget = nil
-				aimAssistFirstLock = false
-				return
-			end
-		end
-
-		local now = tick()
-		local target = nil
-
-		if aimAssistStickyAim and aimAssistStickyTarget then
-			if isAimAssistTargetValid(aimAssistStickyTarget) then
-				local hrp = aimAssistStickyTarget.Character:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					local sp, onS = camera:WorldToViewportPoint(hrp.Position)
-					if onS and (Vector2.new(sp.X, sp.Y) - Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)).Magnitude <= aimAssistFOV * 1.8 then
-						target = aimAssistStickyTarget
-					end
-				end
-			end
-			if not target and now - lastStickyTime < aimAssistReattachDelay then return end
-		end
-
-		if not target then
-			target = getAimAssistTarget()
-			if target then
-				aimAssistFirstLock = true
-				aimAssistLastTargetSwitch = now
-			end
-		end
-
-		if not target or not target.Character then
-			aimAssistCurrentTarget = nil
+	if aimAssistOnlyWhileAiming then
+		local isAiming = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
+		if not isAiming then
 			aimAssistStickyTarget = nil
+			aimAssistCurrentTarget = nil
 			aimAssistFirstLock = false
 			return
 		end
+	end
 
-		local isNew = (aimAssistStickyTarget ~= target)
-		aimAssistStickyTarget = target
-		aimAssistCurrentTarget = target
-		lastStickyTime = now
+	local now = tick()
+	local target = nil
 
-		local tp = getAimAssistTargetPart(target.Character)
-		if not tp then return end
-
-		local tPos = tp.Position
-		if aimAssistPrediction then
-			local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+	if aimAssistStickyAim and aimAssistStickyTarget then
+		if isAimAssistTargetValid(aimAssistStickyTarget) then
+			local hrp = aimAssistStickyTarget.Character:FindFirstChild("HumanoidRootPart")
 			if hrp then
-				tPos = tPos + Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z) * aimAssistPredictionAmount
-			end
-		end
-
-		local tsp, onS = camera:WorldToViewportPoint(tPos)
-		if not onS then return end
-
-		local cs = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-		local offMag = (Vector2.new(tsp.X, tsp.Y) - cs).Magnitude
-
-		if offMag <= aimAssistInnerDeadzone then
-			camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, tPos), 0.95)
-			return
-		end
-
-		local ms
-		if offMag <= aimAssistSlowdownZone then
-			local zf = 1 - (offMag / aimAssistSlowdownZone)
-			ms = aimAssistStrength * (0.6 + zf * 0.4) + aimAssistMagnetism * zf * 0.5
-		else
-			local ff = 1 - math.clamp((offMag - aimAssistSlowdownZone) / (aimAssistFOV - aimAssistSlowdownZone), 0, 1)
-			ms = aimAssistStrength * (0.2 + ff * 0.4)
-		end
-
-		if aimAssistFirstLock and isNew then
-			ms = math.min(ms + aimAssistSnapStrength * 0.3, 1)
-			aimAssistFirstLock = false
-		end
-
-		local ts = aimAssistTrackingSmooth
-		if aimAssistSmoothing and offMag < 30 then
-			ts = ts * 0.5
-		end
-
-		ms = math.clamp(ms, 0.01, 0.95)
-		local fl = math.clamp(ms * (1 - ts) + ts, 0.02, 0.9)
-		camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, tPos), fl)
-	end
-
-	-- ==========================================
-	-- ESP
-	-- ==========================================
-	local function lerpV2(a, b, t)
-		return Vector2.new(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t)
-	end
-
-	local function updatePlayerESP()
-		if not espEnabled then return end
-		local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-
-		for _, tp in ipairs(Players:GetPlayers()) do
-			if tp == player then continue end
-
-			if espTeamCheck and isTeammate(tp) then
-				if espObjects[tp] then
-					local d = espObjects[tp]
-					if d.box then d.box.Visible = false end
-					if d.line then d.line.Visible = false end
-					if d.name then d.name.Visible = false end
-					if d.distText then d.distText.Visible = false end
-					if d.healthText then d.healthText.Visible = false end
-					if d.healthBar then d.healthBar.Visible = false end
-					if d.healthBg then d.healthBg.Visible = false end
-					if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
+				local sp, onS = camera:WorldToViewportPoint(hrp.Position)
+				if onS and (Vector2.new(sp.X, sp.Y) - Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)).Magnitude <= aimAssistFOV * 1.8 then
+					target = aimAssistStickyTarget
 				end
-				continue
 			end
+		end
+		if not target and now - lastStickyTime < aimAssistReattachDelay then return end
+	end
 
-			local char = tp.Character
-			if not espObjects[tp] then
-				espObjects[tp] = {
-					box = Drawing.new("Square"),
-					line = Drawing.new("Line"),
-					name = Drawing.new("Text"),
-					distText = Drawing.new("Text"),
-					healthText = Drawing.new("Text"),
-					healthBar = Drawing.new("Line"),
-					healthBg = Drawing.new("Line"),
-					smoothFrom = nil,
-					smoothTo = nil,
-				}
+	if not target then
+		target = getAimAssistTarget()
+		if target then
+			aimAssistFirstLock = true
+			aimAssistLastTargetSwitch = now
+		end
+	end
+
+	if not target or not target.Character then
+		aimAssistCurrentTarget = nil
+		aimAssistStickyTarget = nil
+		aimAssistFirstLock = false
+		return
+	end
+
+	local isNew = (aimAssistStickyTarget ~= target)
+	aimAssistStickyTarget = target
+	aimAssistCurrentTarget = target
+	lastStickyTime = now
+
+	local tp = getAimAssistTargetPart(target.Character)
+	if not tp then return end
+
+	local tPos = tp.Position
+	if aimAssistPrediction then
+		local hrp = target.Character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			tPos = tPos + Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z) * aimAssistPredictionAmount
+		end
+	end
+
+	local tsp, onS = camera:WorldToViewportPoint(tPos)
+	if not onS then return end
+
+	local cs = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+	local offMag = (Vector2.new(tsp.X, tsp.Y) - cs).Magnitude
+
+	if offMag <= aimAssistInnerDeadzone then
+		camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, tPos), 0.95)
+		return
+	end
+
+	local ms
+	if offMag <= aimAssistSlowdownZone then
+		local zf = 1 - (offMag / aimAssistSlowdownZone)
+		ms = aimAssistStrength * (0.6 + zf * 0.4) + aimAssistMagnetism * zf * 0.5
+	else
+		local ff = 1 - math.clamp((offMag - aimAssistSlowdownZone) / (aimAssistFOV - aimAssistSlowdownZone), 0, 1)
+		ms = aimAssistStrength * (0.2 + ff * 0.4)
+	end
+
+	if aimAssistFirstLock and isNew then
+		ms = math.min(ms + aimAssistSnapStrength * 0.3, 1)
+		aimAssistFirstLock = false
+	end
+
+	local ts = aimAssistTrackingSmooth
+	if aimAssistSmoothing and offMag < 30 then
+		ts = ts * 0.5
+	end
+
+	ms = math.clamp(ms, 0.01, 0.95)
+	local fl = math.clamp(ms * (1 - ts) + ts, 0.02, 0.9)
+	camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, tPos), fl)
+end
+
+-- ==========================================
+-- ESP
+-- ==========================================
+local function lerpV2(a, b, t)
+	return Vector2.new(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t)
+end
+
+local function updatePlayerESP()
+	if not espEnabled then return end
+	local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+
+	for _, tp in ipairs(Players:GetPlayers()) do
+		if tp == player then continue end
+
+		if espTeamCheck and isTeammate(tp) then
+			if espObjects[tp] then
 				local d = espObjects[tp]
-				d.box.Thickness = 1.5; d.box.Filled = false; d.box.Visible = false
-				d.line.Thickness = 1.5; d.line.Visible = false
-				d.name.Size = 14; d.name.Center = true; d.name.Outline = true; d.name.Font = 2; d.name.Visible = false
-				d.distText.Size = 12; d.distText.Center = true; d.distText.Outline = true; d.distText.Font = 2; d.distText.Visible = false
-				d.healthText.Size = 12; d.healthText.Center = true; d.healthText.Outline = true; d.healthText.Font = 2; d.healthText.Visible = false
-				d.healthBar.Thickness = 3; d.healthBar.Visible = false
-				d.healthBg.Thickness = 5; d.healthBg.Visible = false; d.healthBg.Color = Color3.fromRGB(40, 40, 40)
-			end
-
-			local d = espObjects[tp]
-			local color = espTeamCheck and (isTeammate(tp) and espTeamColor or espEnemyColor) or espColor
-
-			if not char or not char:FindFirstChild("HumanoidRootPart") then
-				d.box.Visible = false; d.line.Visible = false; d.name.Visible = false
-				d.distText.Visible = false; d.healthText.Visible = false
-				d.healthBar.Visible = false; d.healthBg.Visible = false
+				if d.box then d.box.Visible = false end
+				if d.line then d.line.Visible = false end
+				if d.name then d.name.Visible = false end
+				if d.distText then d.distText.Visible = false end
+				if d.healthText then d.healthText.Visible = false end
+				if d.healthBar then d.healthBar.Visible = false end
+				if d.healthBg then d.healthBg.Visible = false end
 				if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
-				continue
+			end
+			continue
+		end
+
+		local char = tp.Character
+		if not espObjects[tp] then
+			espObjects[tp] = {
+				box = Drawing.new("Square"),
+				line = Drawing.new("Line"),
+				name = Drawing.new("Text"),
+				distText = Drawing.new("Text"),
+				healthText = Drawing.new("Text"),
+				healthBar = Drawing.new("Line"),
+				healthBg = Drawing.new("Line"),
+				smoothFrom = nil,
+				smoothTo = nil,
+			}
+			local d = espObjects[tp]
+			d.box.Thickness = 1.5; d.box.Filled = false; d.box.Visible = false
+			d.line.Thickness = 1.5; d.line.Visible = false
+			d.name.Size = 14; d.name.Center = true; d.name.Outline = true; d.name.Font = 2; d.name.Visible = false
+			d.distText.Size = 12; d.distText.Center = true; d.distText.Outline = true; d.distText.Font = 2; d.distText.Visible = false
+			d.healthText.Size = 12; d.healthText.Center = true; d.healthText.Outline = true; d.healthText.Font = 2; d.healthText.Visible = false
+			d.healthBar.Thickness = 3; d.healthBar.Visible = false
+			d.healthBg.Thickness = 5; d.healthBg.Visible = false; d.healthBg.Color = Color3.fromRGB(40, 40, 40)
+		end
+
+		local d = espObjects[tp]
+		local color = espTeamCheck and (isTeammate(tp) and espTeamColor or espEnemyColor) or espColor
+
+		if not char or not char:FindFirstChild("HumanoidRootPart") then
+			d.box.Visible = false; d.line.Visible = false; d.name.Visible = false
+			d.distText.Visible = false; d.healthText.Visible = false
+			d.healthBar.Visible = false; d.healthBg.Visible = false
+			if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
+			continue
+		end
+
+		local hrp = char.HumanoidRootPart
+		local head = char:FindFirstChild("Head")
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		local pos, onS = camera:WorldToViewportPoint(hrp.Position)
+
+		if onS then
+			local tp2 = camera:WorldToViewportPoint((hrp.CFrame * CFrame.new(0, 3, 0)).Position)
+			local bp = camera:WorldToViewportPoint((hrp.CFrame * CFrame.new(0, -4.5, 0)).Position)
+			local h = math.abs(tp2.Y - bp.Y)
+			local w = h / 1.8
+
+			if espBox then
+				d.box.Size = Vector2.new(w, h)
+				d.box.Position = Vector2.new(pos.X - w / 2, pos.Y - h / 2)
+				d.box.Color = color
+				d.box.Visible = true
+			else
+				d.box.Visible = false
 			end
 
-			local hrp = char.HumanoidRootPart
-			local head = char:FindFirstChild("Head")
-			local hum = char:FindFirstChildOfClass("Humanoid")
-			local pos, onS = camera:WorldToViewportPoint(hrp.Position)
+			if espLine then
+				local tf = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
+				local tt = Vector2.new(pos.X, pos.Y)
+				if d.smoothFrom and d.smoothTo then
+					d.smoothFrom = lerpV2(d.smoothFrom, tf, espLineSmoothing)
+					d.smoothTo = lerpV2(d.smoothTo, tt, espLineSmoothing)
+				else
+					d.smoothFrom = tf
+					d.smoothTo = tt
+				end
+				d.line.From = d.smoothFrom
+				d.line.To = d.smoothTo
+				d.line.Color = color
+				d.line.Visible = true
+			else
+				d.line.Visible = false
+				d.smoothFrom = nil
+				d.smoothTo = nil
+			end
 
-			if onS then
-				local tp2 = camera:WorldToViewportPoint((hrp.CFrame * CFrame.new(0, 3, 0)).Position)
-				local bp = camera:WorldToViewportPoint((hrp.CFrame * CFrame.new(0, -4.5, 0)).Position)
-				local h = math.abs(tp2.Y - bp.Y)
-				local w = h / 1.8
+			if espName and head then
+				local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
+				d.name.Position = Vector2.new(np.X, np.Y)
+				d.name.Text = tp.DisplayName .. " (@" .. tp.Name .. ")"
+				d.name.Color = color
+				d.name.Visible = true
+			else
+				d.name.Visible = false
+			end
 
-				-- Box
+			if espDistance and myHrp and head then
+				local dist = math.floor((myHrp.Position - hrp.Position).Magnitude)
+				local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
+				d.distText.Position = Vector2.new(np.X, np.Y + (espName and 14 or 0))
+				d.distText.Text = "[" .. dist .. "m]"
+				d.distText.Color = Color3.fromRGB(200, 200, 200)
+				d.distText.Visible = true
+			else
+				d.distText.Visible = false
+			end
+
+			if espHealth and hum then
+				local hp = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
 				if espBox then
-					d.box.Size = Vector2.new(w, h)
-					d.box.Position = Vector2.new(pos.X - w / 2, pos.Y - h / 2)
-					d.box.Color = color
-					d.box.Visible = true
-				else
-					d.box.Visible = false
-				end
-
-				-- Line
-				if espLine then
-					local tf = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
-					local tt = Vector2.new(pos.X, pos.Y)
-					if d.smoothFrom and d.smoothTo then
-						d.smoothFrom = lerpV2(d.smoothFrom, tf, espLineSmoothing)
-						d.smoothTo = lerpV2(d.smoothTo, tt, espLineSmoothing)
-					else
-						d.smoothFrom = tf
-						d.smoothTo = tt
-					end
-					d.line.From = d.smoothFrom
-					d.line.To = d.smoothTo
-					d.line.Color = color
-					d.line.Visible = true
-				else
-					d.line.Visible = false
-					d.smoothFrom = nil
-					d.smoothTo = nil
-				end
-
-				-- Name
-				if espName and head then
-					local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
-					d.name.Position = Vector2.new(np.X, np.Y)
-					d.name.Text = tp.DisplayName .. " (@" .. tp.Name .. ")"
-					d.name.Color = color
-					d.name.Visible = true
-				else
-					d.name.Visible = false
-				end
-
-				-- Distance
-				if espDistance and myHrp and head then
-					local dist = math.floor((myHrp.Position - hrp.Position).Magnitude)
-					local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
-					d.distText.Position = Vector2.new(np.X, np.Y + (espName and 14 or 0))
-					d.distText.Text = "[" .. dist .. "m]"
-					d.distText.Color = Color3.fromRGB(200, 200, 200)
-					d.distText.Visible = true
-				else
-					d.distText.Visible = false
-				end
-
-				-- Health
-				if espHealth and hum then
-					local hp = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-					if espBox then
-						local bx = pos.X - w / 2 - 7
-						d.healthBg.From = Vector2.new(bx, pos.Y + h / 2)
-						d.healthBg.To = Vector2.new(bx, pos.Y - h / 2)
-						d.healthBg.Visible = true
-						d.healthBar.From = Vector2.new(bx, pos.Y + h / 2)
-						d.healthBar.To = Vector2.new(bx, pos.Y + h / 2 - h * hp)
-						d.healthBar.Color = Color3.fromRGB(255 * (1 - hp), 255 * hp, 0)
-						d.healthBar.Visible = true
-					else
-						d.healthBar.Visible = false
-						d.healthBg.Visible = false
-					end
-					if head then
-						local yOff = (espName and 14 or 0) + (espDistance and 14 or 0)
-						local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
-						d.healthText.Position = Vector2.new(np.X, np.Y + yOff)
-						d.healthText.Text = math.floor(hum.Health) .. "/" .. math.floor(hum.MaxHealth) .. " HP"
-						d.healthText.Color = Color3.fromRGB(255 * (1 - hp), 255 * hp, 0)
-						d.healthText.Visible = true
-					end
+					local bx = pos.X - w / 2 - 7
+					d.healthBg.From = Vector2.new(bx, pos.Y + h / 2)
+					d.healthBg.To = Vector2.new(bx, pos.Y - h / 2)
+					d.healthBg.Visible = true
+					d.healthBar.From = Vector2.new(bx, pos.Y + h / 2)
+					d.healthBar.To = Vector2.new(bx, pos.Y + h / 2 - h * hp)
+					d.healthBar.Color = Color3.fromRGB(255 * (1 - hp), 255 * hp, 0)
+					d.healthBar.Visible = true
 				else
 					d.healthBar.Visible = false
 					d.healthBg.Visible = false
-					d.healthText.Visible = false
 				end
-
-				-- Highlight
-				if espHighlight then
-					if not d.highlight or not d.highlight.Parent then
-						d.highlight = Instance.new("Highlight")
-						d.highlight.FillColor = color
-						d.highlight.OutlineColor = Color3.new(1, 1, 1)
-						d.highlight.FillTransparency = 0.7
-						d.highlight.OutlineTransparency = 0.3
-						d.highlight.Parent = char
-					else
-						d.highlight.FillColor = color
-					end
-				elseif d.highlight then
-					pcall(function() d.highlight:Destroy() end)
-					d.highlight = nil
+				if head then
+					local yOff = (espName and 14 or 0) + (espDistance and 14 or 0)
+					local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
+					d.healthText.Position = Vector2.new(np.X, np.Y + yOff)
+					d.healthText.Text = math.floor(hum.Health) .. "/" .. math.floor(hum.MaxHealth) .. " HP"
+					d.healthText.Color = Color3.fromRGB(255 * (1 - hp), 255 * hp, 0)
+					d.healthText.Visible = true
 				end
 			else
-				d.box.Visible = false; d.line.Visible = false; d.name.Visible = false
-				d.distText.Visible = false; d.healthText.Visible = false
-				d.healthBar.Visible = false; d.healthBg.Visible = false
-				d.smoothFrom = nil; d.smoothTo = nil
+				d.healthBar.Visible = false
+				d.healthBg.Visible = false
+				d.healthText.Visible = false
 			end
+
+			if espHighlight then
+				if not d.highlight or not d.highlight.Parent then
+					d.highlight = Instance.new("Highlight")
+					d.highlight.FillColor = color
+					d.highlight.OutlineColor = Color3.new(1, 1, 1)
+					d.highlight.FillTransparency = 0.7
+					d.highlight.OutlineTransparency = 0.3
+					d.highlight.Parent = char
+				else
+					d.highlight.FillColor = color
+				end
+			elseif d.highlight then
+				pcall(function() d.highlight:Destroy() end)
+				d.highlight = nil
+			end
+		else
+			d.box.Visible = false; d.line.Visible = false; d.name.Visible = false
+			d.distText.Visible = false; d.healthText.Visible = false
+			d.healthBar.Visible = false; d.healthBg.Visible = false
+			d.smoothFrom = nil; d.smoothTo = nil
 		end
 	end
+end
 
-	local function clearAllESP()
-		for _, d in pairs(espObjects) do
-			pcall(function() d.box:Remove() end)
-			pcall(function() d.line:Remove() end)
-			pcall(function() d.name:Remove() end)
-			pcall(function() d.distText:Remove() end)
-			pcall(function() d.healthText:Remove() end)
-			pcall(function() d.healthBar:Remove() end)
-			pcall(function() d.healthBg:Remove() end)
-			if d.highlight then pcall(function() d.highlight:Destroy() end) end
-		end
-		espObjects = {}
+local function clearAllESP()
+	for _, d in pairs(espObjects) do
+		pcall(function() d.box:Remove() end)
+		pcall(function() d.line:Remove() end)
+		pcall(function() d.name:Remove() end)
+		pcall(function() d.distText:Remove() end)
+		pcall(function() d.healthText:Remove() end)
+		pcall(function() d.healthBar:Remove() end)
+		pcall(function() d.healthBg:Remove() end)
+		if d.highlight then pcall(function() d.highlight:Destroy() end) end
 	end
+	espObjects = {}
+end
 
-	-- ==========================================
-	-- WINDOW
-	-- ==========================================
-	local Window = Rayfield:CreateWindow({
-		Name = "RyuExploit v3.6",
-		LoadingTitle = "RyuExploit Loading",
-		LoadingSubtitle = "By NubyCode",
-		ConfigurationSaving = {Enabled = true, FolderName = "RyuExploit", FileName = "Config"},
-		KeySystem = true,
-		KeySettings = {
-			Title = "RyuExploit - Key System",
-			Subtitle = "Enter key to access",
-			Note = "Contact NubyCode for key",
-			FileName = "RyuExploitKey",
-			SaveKey = true,
-			GrabKeyFromSite = false,
-			Key = {"NubyHack"}
-		}
-	})
+-- ==========================================
+-- WINDOW
+-- ==========================================
+local Window = Rayfield:CreateWindow({
+	Name = "RyuExploit v3.6",
+	LoadingTitle = "RyuExploit Loading",
+	LoadingSubtitle = "By NubyCode",
+	ConfigurationSaving = {Enabled = true, FolderName = "RyuExploit", FileName = "Config"},
+	KeySystem = true,
+	KeySettings = {
+		Title = "RyuExploit - Key System",
+		Subtitle = "Enter key to access",
+		Note = "Contact NubyCode for key",
+		FileName = "RyuExploitKey",
+		SaveKey = true,
+		GrabKeyFromSite = false,
+		Key = {"NubyHack"}
+	}
+})
 
-	-- ==========================================
-	-- TAB: Silent Aim
-	-- ==========================================
-	local SilentAimTab = Window:CreateTab("Silent Aim", 4483362458)
-	SilentAimTab:CreateSection("Silent Aim (Peluru Auto Kena)")
-	SilentAimTab:CreateToggle({Name = "Enable Silent Aim", CurrentValue = false, Flag = "SilentAim", Callback = function(V)
-		silentAimEnabled = V
-		if V then
-			hookSilentAim()
-			hookBulletRedirect()
-			Rayfield:Notify({Title = "Silent Aim", Content = "ON! Peluru auto kena!", Duration = 3})
-		else
-			silentAimCurrentTarget = nil
-		end
-	end})
+-- ==========================================
+-- TAB: Silent Aim
+-- ==========================================
+local SilentAimTab = Window:CreateTab("Silent Aim", 4483362458)
+SilentAimTab:CreateSection("Silent Aim (Peluru Auto Kena)")
+SilentAimTab:CreateToggle({Name = "Enable Silent Aim", CurrentValue = false, Flag = "SilentAim", Callback = function(V)
+	silentAimEnabled = V
+	if V then
+		hookSilentAim()
+		hookBulletRedirect()
+		Rayfield:Notify({Title = "Silent Aim", Content = "ON! Peluru auto kena!", Duration = 3})
+	else
+		silentAimCurrentTarget = nil
+	end
+end})
 
-	SilentAimTab:CreateSection("Target")
-	SilentAimTab:CreateDropdown({Name = "Target Part", Options = {"Head", "Body", "Random", "Nearest to Cursor", "Aim Assist Sync"}, CurrentOption = {"Head"}, MultipleOptions = false, Flag = "SAPart", Callback = function(O) silentAimPart = O[1] or O end})
-	SilentAimTab:CreateToggle({Name = "Auto Headshot", CurrentValue = true, Flag = "AutoHS", Callback = function(V) silentAimAutoHeadshot = V end})
-	SilentAimTab:CreateSlider({Name = "Headshot Chance", Range = {0, 100}, Increment = 5, Suffix = "%", CurrentValue = 100, Flag = "HSChance", Callback = function(V) silentAimHeadshotChance = V end})
-	SilentAimTab:CreateSlider({Name = "Hit Chance", Range = {1, 100}, Increment = 1, Suffix = "%", CurrentValue = 100, Flag = "HitChance", Callback = function(V) silentAimHitChance = V end})
+SilentAimTab:CreateSection("Target")
+SilentAimTab:CreateDropdown({Name = "Target Part", Options = {"Head", "Body", "Random", "Nearest to Cursor", "Aim Assist Sync"}, CurrentOption = {"Head"}, MultipleOptions = false, Flag = "SAPart", Callback = function(O) silentAimPart = O[1] or O end})
+SilentAimTab:CreateToggle({Name = "Auto Headshot", CurrentValue = true, Flag = "AutoHS", Callback = function(V) silentAimAutoHeadshot = V end})
+SilentAimTab:CreateSlider({Name = "Headshot Chance", Range = {0, 100}, Increment = 5, Suffix = "%", CurrentValue = 100, Flag = "HSChance", Callback = function(V) silentAimHeadshotChance = V end})
+SilentAimTab:CreateSlider({Name = "Hit Chance", Range = {1, 100}, Increment = 1, Suffix = "%", CurrentValue = 100, Flag = "HitChance", Callback = function(V) silentAimHitChance = V end})
 
-	SilentAimTab:CreateSection("Range")
-	SilentAimTab:CreateSlider({Name = "FOV Radius", Range = {50, 800}, Increment = 10, Suffix = " px", CurrentValue = 200, Flag = "SAFOV", Callback = function(V) silentAimFOV = V; if silentAimFOVCircle then silentAimFOVCircle.Radius = V end end})
-	SilentAimTab:CreateSlider({Name = "Max Distance", Range = {50, 2000}, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "SADist", Callback = function(V) silentAimDistance = V end})
+SilentAimTab:CreateSection("Range")
+SilentAimTab:CreateSlider({Name = "FOV Radius", Range = {50, 800}, Increment = 10, Suffix = " px", CurrentValue = 200, Flag = "SAFOV", Callback = function(V) silentAimFOV = V; if silentAimFOVCircle then silentAimFOVCircle.Radius = V end end})
+SilentAimTab:CreateSlider({Name = "Max Distance", Range = {50, 2000}, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "SADist", Callback = function(V) silentAimDistance = V end})
 
-	SilentAimTab:CreateSection("Prediction")
-	SilentAimTab:CreateToggle({Name = "Movement Prediction", CurrentValue = true, Flag = "SAPred", Callback = function(V) silentAimPrediction = V end})
-	SilentAimTab:CreateSlider({Name = "Prediction Amount", Range = {1, 50}, Increment = 1, Suffix = "%", CurrentValue = 12, Flag = "SAPredAmt", Callback = function(V) silentAimPredictionAmount = V / 100 end})
+SilentAimTab:CreateSection("Prediction")
+SilentAimTab:CreateToggle({Name = "Movement Prediction", CurrentValue = true, Flag = "SAPred", Callback = function(V) silentAimPrediction = V end})
+SilentAimTab:CreateSlider({Name = "Prediction Amount", Range = {1, 50}, Increment = 1, Suffix = "%", CurrentValue = 12, Flag = "SAPredAmt", Callback = function(V) silentAimPredictionAmount = V / 100 end})
 
-	SilentAimTab:CreateSection("Safety")
-	SilentAimTab:CreateToggle({Name = "Wall Check", CurrentValue = false, Flag = "SAWall", Callback = function(V) silentAimVisibleCheck = V end})
-	SilentAimTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "SATeam", Callback = function(V) silentAimTeamCheck = V end})
+SilentAimTab:CreateSection("Safety")
+SilentAimTab:CreateToggle({Name = "Wall Check", CurrentValue = false, Flag = "SAWall", Callback = function(V) silentAimVisibleCheck = V end})
+SilentAimTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "SATeam", Callback = function(V) silentAimTeamCheck = V end})
 
-	SilentAimTab:CreateSection("Visuals")
-	SilentAimTab:CreateToggle({Name = "Show FOV Circle", CurrentValue = false, Flag = "SAShowFOV", Callback = function(V) silentAimShowFOV = V; if silentAimFOVCircle then silentAimFOVCircle.Visible = V and silentAimEnabled end end})
-	SilentAimTab:CreateToggle({Name = "Show Target Line", CurrentValue = false, Flag = "SALine", Callback = function(V) silentAimVisualLine = V; if not V and silentAimVisualLineObj then silentAimVisualLineObj.Visible = false end end})
+SilentAimTab:CreateSection("Visuals")
+SilentAimTab:CreateToggle({Name = "Show FOV Circle", CurrentValue = false, Flag = "SAShowFOV", Callback = function(V) silentAimShowFOV = V; if silentAimFOVCircle then silentAimFOVCircle.Visible = V and silentAimEnabled end end})
+SilentAimTab:CreateToggle({Name = "Show Target Line", CurrentValue = false, Flag = "SALine", Callback = function(V) silentAimVisualLine = V; if not V and silentAimVisualLineObj then silentAimVisualLineObj.Visible = false end end})
 
-	SilentAimTab:CreateSection("Bullet Redirect")
-	SilentAimTab:CreateToggle({Name = "Remote Hook Redirect", CurrentValue = false, Flag = "BulletRedir", Callback = function(V) bulletRedirectEnabled = V; if V then hookBulletRedirect() end end})
+SilentAimTab:CreateSection("Bullet Redirect")
+SilentAimTab:CreateToggle({Name = "Remote Hook Redirect", CurrentValue = false, Flag = "BulletRedir", Callback = function(V) bulletRedirectEnabled = V; if V then hookBulletRedirect() end end})
 
-	silentAimFOVCircle = Drawing.new("Circle")
-	silentAimFOVCircle.Color = Color3.fromRGB(255, 0, 255)
-	silentAimFOVCircle.Thickness = 1.5
-	silentAimFOVCircle.Filled = false
-	silentAimFOVCircle.Radius = silentAimFOV
-	silentAimFOVCircle.Visible = false
-	silentAimFOVCircle.Transparency = 0.6
+silentAimFOVCircle = Drawing.new("Circle")
+silentAimFOVCircle.Color = Color3.fromRGB(255, 0, 255)
+silentAimFOVCircle.Thickness = 1.5
+silentAimFOVCircle.Filled = false
+silentAimFOVCircle.Radius = silentAimFOV
+silentAimFOVCircle.Visible = false
+silentAimFOVCircle.Transparency = 0.6
 
-	silentAimVisualLineObj = Drawing.new("Line")
-	silentAimVisualLineObj.Color = Color3.fromRGB(255, 0, 255)
-	silentAimVisualLineObj.Thickness = 1
-	silentAimVisualLineObj.Visible = false
-	silentAimVisualLineObj.Transparency = 0.5
+silentAimVisualLineObj = Drawing.new("Line")
+silentAimVisualLineObj.Color = Color3.fromRGB(255, 0, 255)
+silentAimVisualLineObj.Thickness = 1
+silentAimVisualLineObj.Visible = false
+silentAimVisualLineObj.Transparency = 0.5
 
-	-- ==========================================
-	-- TAB: No Recoil
-	-- ==========================================
-	local NoRecoilTab = Window:CreateTab("No Recoil", 4483362458)
-	NoRecoilTab:CreateSection("No Recoil")
-	NoRecoilTab:CreateToggle({Name = "Enable No Recoil", CurrentValue = false, Flag = "NoRecoil", Callback = function(V)
-		noRecoilEnabled = V
-		if V then
-			local c = player.Character
-			if c then setupToolListener(c) end
-			Rayfield:Notify({Title = "No Recoil", Content = "ON!", Duration = 3})
-		else
-			restoreAllRecoilValues()
-		end
-	end})
-	NoRecoilTab:CreateSlider({Name = "Recoil Reduction", Range = {10, 100}, Increment = 5, Suffix = "%", CurrentValue = 100, Flag = "RecoilStr", Callback = function(V)
-		noRecoilStrength = V
-		local t = getEquippedTool()
-		if t and noRecoilEnabled then
-			noRecoilOverriddenObjects = {}
-			scanEquippedTool(t)
-		end
-	end})
-
-	NoRecoilTab:CreateSection("No Spread")
-	NoRecoilTab:CreateToggle({Name = "Enable No Spread", CurrentValue = false, Flag = "NoSpread", Callback = function(V)
-		noSpreadEnabled = V
-		if V then
-			local c = player.Character
-			if c then setupToolListener(c) end
-			Rayfield:Notify({Title = "No Spread", Content = "ON!", Duration = 3})
-		else
-			restoreAllRecoilValues()
-		end
-	end})
-	NoRecoilTab:CreateSlider({Name = "Spread Reduction", Range = {10, 100}, Increment = 5, Suffix = "%", CurrentValue = 100, Flag = "SpreadStr", Callback = function(V)
-		noSpreadStrength = V
-		local t = getEquippedTool()
-		if t and noSpreadEnabled then
-			noRecoilOverriddenObjects = {}
-			scanEquippedTool(t)
-		end
-	end})
-
-	NoRecoilTab:CreateSection("Methods")
-	NoRecoilTab:CreateToggle({Name = "Camera Lock", CurrentValue = true, Flag = "CamLock", Callback = function(V) noRecoilCameraLock = V end})
-	NoRecoilTab:CreateToggle({Name = "Value Override", CurrentValue = true, Flag = "ValOver", Callback = function(V) noRecoilValueOverride = V; if V then local t = getEquippedTool(); if t then scanEquippedTool(t) end end end})
-	NoRecoilTab:CreateToggle({Name = "Remote Intercept", CurrentValue = false, Flag = "RemInt", Callback = function(V) noRecoilRemoteIntercept = V; if V then hookNoRecoilRemotes() end end})
-
-	NoRecoilTab:CreateSection("Actions")
-	NoRecoilTab:CreateButton({Name = "Force Scan Weapon", Callback = function()
-		local t = getEquippedTool()
-		if t then
-			noRecoilOverriddenObjects = {}
-			scanEquippedTool(t)
-			local c = 0
-			for _ in pairs(noRecoilOverriddenObjects) do c = c + 1 end
-			Rayfield:Notify({Title = "Done", Content = "Overrode " .. c .. " values on: " .. t.Name, Duration = 4})
-		else
-			Rayfield:Notify({Title = "Error", Content = "Equip senjata dulu!", Duration = 3})
-		end
-	end})
-	NoRecoilTab:CreateButton({Name = "Deep Scan Modules", Callback = function()
-		local c = deepScanModules()
-		Rayfield:Notify({Title = "Done", Content = "Overrode " .. c .. " modules", Duration = 4})
-	end})
-	NoRecoilTab:CreateButton({Name = "Restore Values", Callback = function()
+-- ==========================================
+-- TAB: No Recoil
+-- ==========================================
+local NoRecoilTab = Window:CreateTab("No Recoil", 4483362458)
+NoRecoilTab:CreateSection("No Recoil")
+NoRecoilTab:CreateToggle({Name = "Enable No Recoil", CurrentValue = false, Flag = "NoRecoil", Callback = function(V)
+	noRecoilEnabled = V
+	if V then
+		local c = player.Character
+		if c then setupToolListener(c) end
+		Rayfield:Notify({Title = "No Recoil", Content = "ON!", Duration = 3})
+	else
 		restoreAllRecoilValues()
-		Rayfield:Notify({Title = "Restored", Content = "Done", Duration = 3})
-	end})
+	end
+end})
+NoRecoilTab:CreateSlider({Name = "Recoil Reduction", Range = {10, 100}, Increment = 5, Suffix = "%", CurrentValue = 100, Flag = "RecoilStr", Callback = function(V)
+	noRecoilStrength = V
+	local t = getEquippedTool()
+	if t and noRecoilEnabled then
+		noRecoilOverriddenObjects = {}
+		scanEquippedTool(t)
+	end
+end})
 
-	-- ==========================================
-	-- TAB: Aim Assist
-	-- ==========================================
-	local AimAssistTab = Window:CreateTab("Aim Assist", 4483362458)
-	AimAssistTab:CreateSection("Aim Assist")
-	AimAssistTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "AimAssist", Callback = function(V)
-		aimAssistEnabled = V
-		if not V then aimAssistStickyTarget = nil; aimAssistCurrentTarget = nil; aimAssistFirstLock = false end
-	end})
-	AimAssistTab:CreateSlider({Name = "Pull Strength", Range = {5, 95}, Increment = 5, Suffix = "%", CurrentValue = 50, Flag = "AAStr", Callback = function(V) aimAssistStrength = V / 100 end})
-	AimAssistTab:CreateSlider({Name = "Magnetism", Range = {0, 100}, Increment = 5, Suffix = "%", CurrentValue = 60, Flag = "AAMag", Callback = function(V) aimAssistMagnetism = V / 100 end})
-	AimAssistTab:CreateSlider({Name = "FOV Radius", Range = {50, 500}, Increment = 10, Suffix = " px", CurrentValue = 150, Flag = "AAFOV", Callback = function(V) aimAssistFOV = V; if aimAssistFOVCircle then aimAssistFOVCircle.Radius = V end end})
-	AimAssistTab:CreateSlider({Name = "Max Distance", Range = {50, 1000}, Increment = 10, Suffix = " studs", CurrentValue = 200, Flag = "AADist", Callback = function(V) aimAssistDistance = V end})
+NoRecoilTab:CreateSection("No Spread")
+NoRecoilTab:CreateToggle({Name = "Enable No Spread", CurrentValue = false, Flag = "NoSpread", Callback = function(V)
+	noSpreadEnabled = V
+	if V then
+		local c = player.Character
+		if c then setupToolListener(c) end
+		Rayfield:Notify({Title = "No Spread", Content = "ON!", Duration = 3})
+	else
+		restoreAllRecoilValues()
+	end
+end})
+NoRecoilTab:CreateSlider({Name = "Spread Reduction", Range = {10, 100}, Increment = 5, Suffix = "%", CurrentValue = 100, Flag = "SpreadStr", Callback = function(V)
+	noSpreadStrength = V
+	local t = getEquippedTool()
+	if t and noSpreadEnabled then
+		noRecoilOverriddenObjects = {}
+		scanEquippedTool(t)
+	end
+end})
 
-	AimAssistTab:CreateSection("Sticky Aim")
-	AimAssistTab:CreateToggle({Name = "Sticky Aim", CurrentValue = true, Flag = "Sticky", Callback = function(V) aimAssistStickyAim = V end})
-	AimAssistTab:CreateSlider({Name = "Slowdown Zone", Range = {20, 200}, Increment = 10, Suffix = " px", CurrentValue = 80, Flag = "SDZone", Callback = function(V) aimAssistSlowdownZone = V end})
-	AimAssistTab:CreateSlider({Name = "Inner Deadzone", Range = {1, 30}, Increment = 1, Suffix = " px", CurrentValue = 5, Flag = "IDead", Callback = function(V) aimAssistInnerDeadzone = V end})
-	AimAssistTab:CreateSlider({Name = "Tracking Smooth", Range = {1, 30}, Increment = 1, Suffix = "%", CurrentValue = 12, Flag = "TSmooth", Callback = function(V) aimAssistTrackingSmooth = V / 100 end})
-	AimAssistTab:CreateSlider({Name = "Snap Strength", Range = {0, 100}, Increment = 5, Suffix = "%", CurrentValue = 80, Flag = "Snap", Callback = function(V) aimAssistSnapStrength = V / 100 end})
+NoRecoilTab:CreateSection("Methods")
+NoRecoilTab:CreateToggle({Name = "Camera Lock", CurrentValue = true, Flag = "CamLock", Callback = function(V) noRecoilCameraLock = V end})
+NoRecoilTab:CreateToggle({Name = "Value Override", CurrentValue = true, Flag = "ValOver", Callback = function(V) noRecoilValueOverride = V; if V then local t = getEquippedTool(); if t then scanEquippedTool(t) end end end})
+NoRecoilTab:CreateToggle({Name = "Remote Intercept", CurrentValue = false, Flag = "RemInt", Callback = function(V) noRecoilRemoteIntercept = V; if V then hookNoRecoilRemotes() end end})
 
-	AimAssistTab:CreateSection("Headshot")
-	AimAssistTab:CreateSlider({Name = "Headshot Rate", Range = {0, 100}, Increment = 5, Suffix = "%", CurrentValue = 70, Flag = "HSRate", Callback = function(V) aimAssistHeadshotRate = V end})
-	AimAssistTab:CreateDropdown({Name = "Target Mode", Options = {"Dynamic", "Head", "Body"}, CurrentOption = {"Dynamic"}, MultipleOptions = false, Flag = "AAPart", Callback = function(O) aimAssistTargetPart = O[1] or O end})
-
-	AimAssistTab:CreateSection("Extra")
-	AimAssistTab:CreateToggle({Name = "Only While Aiming", CurrentValue = true, Flag = "AAOnlyAim", Callback = function(V) aimAssistOnlyWhileAiming = V end})
-	AimAssistTab:CreateToggle({Name = "Smooth Assist", CurrentValue = true, Flag = "AASmooth", Callback = function(V) aimAssistSmoothing = V end})
-	AimAssistTab:CreateToggle({Name = "Prediction", CurrentValue = false, Flag = "AAPred", Callback = function(V) aimAssistPrediction = V end})
-	AimAssistTab:CreateSlider({Name = "Prediction Amount", Range = {1, 50}, Increment = 1, Suffix = "%", CurrentValue = 10, Flag = "AAPredAmt", Callback = function(V) aimAssistPredictionAmount = V / 100 end})
-	AimAssistTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "AATeam", Callback = function(V) aimAssistTeamCheck = V end})
-	AimAssistTab:CreateToggle({Name = "Show FOV", CurrentValue = false, Flag = "AAShowFOV", Callback = function(V) showAimAssistFOV = V; if aimAssistFOVCircle then aimAssistFOVCircle.Visible = V and aimAssistEnabled end end})
-
-	aimAssistFOVCircle = Drawing.new("Circle")
-	aimAssistFOVCircle.Color = Color3.fromRGB(255, 200, 0)
-	aimAssistFOVCircle.Thickness = 1
-	aimAssistFOVCircle.Filled = false
-	aimAssistFOVCircle.Radius = aimAssistFOV
-	aimAssistFOVCircle.Visible = false
-	aimAssistFOVCircle.Transparency = 0.7
-
-	-- ==========================================
-	-- TAB: Aimlock
-	-- ==========================================
-	local AimlockTab = Window:CreateTab("Aimlock", 4483362458)
-	AimlockTab:CreateSection("Aimlock")
-	AimlockTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "Aimlock", Callback = function(V) aimlockEnabled = V; if not V then aimlockTarget = nil end end})
-	AimlockTab:CreateToggle({Name = "Auto Switch", CurrentValue = true, Flag = "AutoSw", Callback = function(V) autoSwitchTarget = V end})
-	AimlockTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "ALTeam", Callback = function(V) aimlockTeamCheck = V end})
-	AimlockTab:CreateDropdown({Name = "Target Part", Options = {"Head", "HumanoidRootPart", "Torso", "UpperTorso"}, CurrentOption = {"Head"}, MultipleOptions = false, Flag = "ALPart", Callback = function(O) aimlockPart = O[1] or O end})
-	AimlockTab:CreateSlider({Name = "Max Distance", Range = {50, 1000}, Increment = 10, Suffix = " Studs", CurrentValue = 200, Flag = "ALDist", Callback = function(V) aimlockDistance = V end})
-	AimlockTab:CreateSlider({Name = "Smoothness", Range = {10, 100}, Increment = 5, Suffix = "%", CurrentValue = 50, Flag = "ALSmooth", Callback = function(V) aimlockSmooth = V / 100 end})
-	AimlockTab:CreateSlider({Name = "FOV", Range = {50, 500}, Increment = 10, Suffix = " px", CurrentValue = 100, Flag = "ALFOV", Callback = function(V) aimlockFOV = V; if fovCircle then fovCircle.Radius = V end end})
-	AimlockTab:CreateToggle({Name = "Show FOV", CurrentValue = false, Flag = "ALShowFOV", Callback = function(V) showFOVCircle = V end})
-	AimlockTab:CreateDropdown({Name = "Activation Key", Options = {"MouseButton2 (Right Click)", "MouseButton1 (Left Click)", "Q", "E", "F"}, CurrentOption = {"MouseButton2 (Right Click)"}, MultipleOptions = false, Flag = "ALKey", Callback = function(O)
-		local km = {
-			["MouseButton2 (Right Click)"] = Enum.UserInputType.MouseButton2,
-			["MouseButton1 (Left Click)"] = Enum.UserInputType.MouseButton1,
-			["Q"] = Enum.KeyCode.Q,
-			["E"] = Enum.KeyCode.E,
-			["F"] = Enum.KeyCode.F,
-		}
-		aimlockKey = km[O[1] or O] or Enum.UserInputType.MouseButton2
-	end})
-
-	fovCircle = Drawing.new("Circle")
-	fovCircle.Color = Color3.fromRGB(255, 255, 255)
-	fovCircle.Thickness = 1
-	fovCircle.Filled = false
-	fovCircle.Radius = aimlockFOV
-	fovCircle.Visible = false
-	fovCircle.Transparency = 1
-
-	-- ==========================================
-	-- TAB: ESP
-	-- ==========================================
-	local ESPTab = Window:CreateTab("ESP", 4483362458)
-	ESPTab:CreateSection("Player ESP")
-	ESPTab:CreateToggle({Name = "Enable ESP", CurrentValue = false, Flag = "ESP", Callback = function(V) espEnabled = V; if not V then clearAllESP() end end})
-	ESPTab:CreateToggle({Name = "Name", CurrentValue = false, Flag = "EName", Callback = function(V) espName = V end})
-	ESPTab:CreateToggle({Name = "Distance", CurrentValue = false, Flag = "EDist", Callback = function(V) espDistance = V end})
-	ESPTab:CreateToggle({Name = "Health", CurrentValue = false, Flag = "EHealth", Callback = function(V) espHealth = V end})
-	ESPTab:CreateToggle({Name = "Box", CurrentValue = false, Flag = "EBox", Callback = function(V) espBox = V end})
-	ESPTab:CreateToggle({Name = "Line", CurrentValue = false, Flag = "ELine", Callback = function(V) espLine = V end})
-	ESPTab:CreateToggle({Name = "Highlight", CurrentValue = false, Flag = "EHL", Callback = function(V)
-		espHighlight = V
-		if not V then
-			for _, d in pairs(espObjects) do
-				if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
-			end
-		end
-	end})
-	ESPTab:CreateSlider({Name = "Line Smoothness", Range = {5, 100}, Increment = 5, Suffix = "%", CurrentValue = 30, Flag = "ESmooth", Callback = function(V) espLineSmoothing = V / 100 end})
-	ESPTab:CreateSection("Team")
-	ESPTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "ETeam", Callback = function(V) espTeamCheck = V end})
-	ESPTab:CreateColorPicker({Name = "Enemy Color", Color = Color3.fromRGB(255, 0, 0), Flag = "EEnemy", Callback = function(V) espEnemyColor = V; espColor = V end})
-	ESPTab:CreateColorPicker({Name = "Team Color", Color = Color3.fromRGB(0, 255, 0), Flag = "ETeamC", Callback = function(V) espTeamColor = V end})
-
-	-- ==========================================
-	-- TAB: Hitbox
-	-- ==========================================
-	local HitboxTab = Window:CreateTab("Hitbox", 4483362458)
-	HitboxTab:CreateSection("Hitbox Expander")
-	HitboxTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "HB", Callback = function(V)
-		hitboxEnabled = V
-		if not V then disableHitboxExpander() end
-	end})
-	HitboxTab:CreateSlider({Name = "Size", Range = {1, 500}, Increment = 1, Suffix = " Studs", CurrentValue = 10, Flag = "HBSize", Callback = function(V) hitboxSize = V end})
-	HitboxTab:CreateSlider({Name = "Transparency", Range = {0, 100}, Increment = 5, Suffix = "%", CurrentValue = 70, Flag = "HBTr", Callback = function(V) hitboxTransparency = V / 100 end})
-	HitboxTab:CreateToggle({Name = "Show ESP", CurrentValue = false, Flag = "HBESP", Callback = function(V)
-		hitboxESPEnabled = V
-		if not V then
-			for _, d in pairs(hitboxData) do
-				if d.espVisual then pcall(function() d.espVisual:Destroy() end); d.espVisual = nil end
-			end
-		end
-	end})
-	HitboxTab:CreateColorPicker({Name = "Color", Color = Color3.fromRGB(255, 255, 0), Flag = "HBCol", Callback = function(V) hitboxESPColor = V end})
-
-	HitboxTab:CreateSection("Anti Hitbox (Self)")
-	HitboxTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "AntiHB", Callback = function(V)
-		antiHitboxEnabled = V
-		if not V then
-			for _, pd in pairs(antiHitboxParts) do
-				pcall(function() pd.fakePart:Destroy() end)
-			end
-			antiHitboxParts = {}
-			local mc = player.Character
-			if mc then
-				for _, p in ipairs(mc:GetChildren()) do
-					if p:IsA("BasePart") then p.CanQuery = true end
-				end
-			end
-		end
-	end})
-	HitboxTab:CreateSlider({Name = "Size", Range = {1, 30}, Increment = 1, Suffix = " (x0.1)", CurrentValue = 10, Flag = "AHBSize", Callback = function(V) antiHitboxSize = V / 10 end})
-
-	-- ==========================================
-	-- TAB: Movement
-	-- ==========================================
-	local MovementTab = Window:CreateTab("Movement", 4483362458)
-	MovementTab:CreateSection("Speed")
-	MovementTab:CreateDropdown({Name = "Method", Options = {"Default", "CFrame Bypass", "Velocity Bypass", "BodyVelocity Bypass"}, CurrentOption = {"Default"}, MultipleOptions = false, Flag = "SpeedM", Callback = function(O) speedMethod = O[1] or O end})
-	MovementTab:CreateSlider({Name = "Walk Speed", Range = {1, 500}, Increment = 1, CurrentValue = 16, Flag = "WSpeed", Callback = function(V) speed = V end})
-	MovementTab:CreateSection("Jump")
-	MovementTab:CreateDropdown({Name = "Method", Options = {"Default", "CFrame Bypass", "Velocity Bypass", "BodyVelocity Bypass"}, CurrentOption = {"Default"}, MultipleOptions = false, Flag = "JumpM", Callback = function(O) jumpMethod = O[1] or O end})
-	MovementTab:CreateSlider({Name = "Jump Power", Range = {1, 500}, Increment = 1, CurrentValue = 50, Flag = "JPower", Callback = function(V) jumpPower = V end})
-	MovementTab:CreateToggle({Name = "Infinite Jump", CurrentValue = false, Flag = "InfJump", Callback = function(V) _G.InfiniteJump = V end})
-	MovementTab:CreateSection("Noclip")
-	MovementTab:CreateToggle({Name = "Noclip", CurrentValue = false, Flag = "Noclip", Callback = function(V) noclip = V end})
-	MovementTab:CreateDropdown({Name = "Method", Options = {"Default", "CFrame Bypass", "Velocity Bypass", "Phase Bypass"}, CurrentOption = {"Default"}, MultipleOptions = false, Flag = "NoclipM", Callback = function(O) noclipMethod = O[1] or O end})
-	MovementTab:CreateSection("No Fall Damage")
-	MovementTab:CreateToggle({Name = "No Fall Damage", CurrentValue = false, Flag = "NoFall", Callback = function(V) noFallDamage = V end})
-	MovementTab:CreateDropdown({Name = "Method", Options = {"Default", "Velocity Brake", "Health Restore", "Hybrid"}, CurrentOption = {"Default"}, MultipleOptions = false, Flag = "NoFallM", Callback = function(O) noFallMethod = O[1] or O end})
-
-	-- ==========================================
-	-- TAB: Anti Kick
-	-- ==========================================
-	local AntiKickTab = Window:CreateTab("Anti Kick", 4483362458)
-	AntiKickTab:CreateSection("Anti Kick")
-	AntiKickTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "AntiKick", Callback = function(V)
-		antiKickEnabled = V
-		if V then enableAntiKick(); Rayfield:Notify({Title = "Anti Kick", Content = "Enabled!", Duration = 3}) end
-	end})
-	AntiKickTab:CreateButton({Name = "Delete AC Scripts", Callback = function()
+NoRecoilTab:CreateSection("Actions")
+NoRecoilTab:CreateButton({Name = "Force Scan Weapon", Callback = function()
+	local t = getEquippedTool()
+	if t then
+		noRecoilOverriddenObjects = {}
+		scanEquippedTool(t)
 		local c = 0
-		for _, s in ipairs(player.PlayerScripts:GetDescendants()) do
-			if s:IsA("LocalScript") then
-				local n = s.Name:lower()
-				for _, p in ipairs({"anticheat", "anti_cheat", "ac", "detect", "security", "check", "verify"}) do
-					if n:find(p) then
-						pcall(function() s.Disabled = true; s:Destroy() end)
-						c = c + 1
-						break
-					end
-				end
-			end
-		end
-		Rayfield:Notify({Title = "AC", Content = "Disabled " .. c .. " scripts", Duration = 3})
-	end})
-	AntiKickTab:CreateButton({Name = "Anti AFK", Callback = function()
-		pcall(function()
-			local VU = game:GetService("VirtualUser")
-			spawn(function()
-				while antiKickEnabled do
-					pcall(function() VU:CaptureController(); VU:ClickButton2(Vector2.new()) end)
-					task.wait(60)
-				end
-			end)
-		end)
-		Rayfield:Notify({Title = "Anti AFK", Content = "Enabled", Duration = 3})
-	end})
-
-	-- ==========================================
-	-- CORE MOVEMENT
-	-- ==========================================
-	local function getMoveDirection()
-		local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-		if not hum then return Vector3.zero end
-		return hum.MoveDirection.Magnitude > 0 and hum.MoveDirection.Unit or Vector3.zero
+		for _ in pairs(noRecoilOverriddenObjects) do c = c + 1 end
+		Rayfield:Notify({Title = "Done", Content = "Overrode " .. c .. " values on: " .. t.Name, Duration = 4})
+	else
+		Rayfield:Notify({Title = "Error", Content = "Equip senjata dulu!", Duration = 3})
 	end
+end})
+NoRecoilTab:CreateButton({Name = "Deep Scan Modules", Callback = function()
+	local c = deepScanModules()
+	Rayfield:Notify({Title = "Done", Content = "Overrode " .. c .. " modules", Duration = 4})
+end})
+NoRecoilTab:CreateButton({Name = "Restore Values", Callback = function()
+	restoreAllRecoilValues()
+	Rayfield:Notify({Title = "Restored", Content = "Done", Duration = 3})
+end})
 
-	local function getGroundInfo()
-		local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-		if not hrp then return math.huge end
-		local p = RaycastParams.new()
-		p.FilterDescendantsInstances = {player.Character}
-		p.FilterType = Enum.RaycastFilterType.Exclude
-		local r = workspace:Raycast(hrp.Position, Vector3.new(0, -500, 0), p)
-		return r and (hrp.Position - r.Position).Magnitude or math.huge
-	end
+-- ==========================================
+-- TAB: Aim Assist
+-- ==========================================
+local AimAssistTab = Window:CreateTab("Aim Assist", 4483362458)
+AimAssistTab:CreateSection("Aim Assist")
+AimAssistTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "AimAssist", Callback = function(V)
+	aimAssistEnabled = V
+	if not V then aimAssistStickyTarget = nil; aimAssistCurrentTarget = nil; aimAssistFirstLock = false end
+end})
+AimAssistTab:CreateSlider({Name = "Pull Strength", Range = {5, 95}, Increment = 5, Suffix = "%", CurrentValue = 50, Flag = "AAStr", Callback = function(V) aimAssistStrength = V / 100 end})
+AimAssistTab:CreateSlider({Name = "Magnetism", Range = {0, 100}, Increment = 5, Suffix = "%", CurrentValue = 60, Flag = "AAMag", Callback = function(V) aimAssistMagnetism = V / 100 end})
+AimAssistTab:CreateSlider({Name = "FOV Radius", Range = {50, 500}, Increment = 10, Suffix = " px", CurrentValue = 150, Flag = "AAFOV", Callback = function(V) aimAssistFOV = V; if aimAssistFOVCircle then aimAssistFOVCircle.Radius = V end end})
+AimAssistTab:CreateSlider({Name = "Max Distance", Range = {50, 1000}, Increment = 10, Suffix = " studs", CurrentValue = 200, Flag = "AADist", Callback = function(V) aimAssistDistance = V end})
 
-	local function applySpeed(dt)
-		local char = player.Character
-		if not char then return end
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if not hrp or not hum then return end
+AimAssistTab:CreateSection("Sticky Aim")
+AimAssistTab:CreateToggle({Name = "Sticky Aim", CurrentValue = true, Flag = "Sticky", Callback = function(V) aimAssistStickyAim = V end})
+AimAssistTab:CreateSlider({Name = "Slowdown Zone", Range = {20, 200}, Increment = 10, Suffix = " px", CurrentValue = 80, Flag = "SDZone", Callback = function(V) aimAssistSlowdownZone = V end})
+AimAssistTab:CreateSlider({Name = "Inner Deadzone", Range = {1, 30}, Increment = 1, Suffix = " px", CurrentValue = 5, Flag = "IDead", Callback = function(V) aimAssistInnerDeadzone = V end})
+AimAssistTab:CreateSlider({Name = "Tracking Smooth", Range = {1, 30}, Increment = 1, Suffix = "%", CurrentValue = 12, Flag = "TSmooth", Callback = function(V) aimAssistTrackingSmooth = V / 100 end})
+AimAssistTab:CreateSlider({Name = "Snap Strength", Range = {0, 100}, Increment = 5, Suffix = "%", CurrentValue = 80, Flag = "Snap", Callback = function(V) aimAssistSnapStrength = V / 100 end})
 
-		if speedMethod == "Default" then
-			hum.WalkSpeed = speed
-		elseif speedMethod == "CFrame Bypass" then
-			hum.WalkSpeed = 16
-			local d = getMoveDirection()
-			if d.Magnitude > 0 and speed > 16 then
-				hrp.CFrame = hrp.CFrame + (d * (speed - 16) * dt)
-			end
-		elseif speedMethod == "Velocity Bypass" then
-			hum.WalkSpeed = 16
-			local d = getMoveDirection()
-			if d.Magnitude > 0 then
-				hrp.AssemblyLinearVelocity = Vector3.new(d.X * speed, hrp.AssemblyLinearVelocity.Y, d.Z * speed)
-			end
-		elseif speedMethod == "BodyVelocity Bypass" then
-			hum.WalkSpeed = 16
-			local bv = hrp:FindFirstChild("SpeedBV")
-			if not bv then
-				bv = Instance.new("BodyVelocity")
-				bv.Name = "SpeedBV"
-				bv.MaxForce = Vector3.new(100000, 0, 100000)
-				bv.P = 10000
-				bv.Parent = hrp
-			end
-			local d = getMoveDirection()
-			if d.Magnitude > 0 then
-				bv.Velocity = d * speed
-				bv.MaxForce = Vector3.new(100000, 0, 100000)
-			else
-				bv.Velocity = Vector3.zero
-				bv.MaxForce = Vector3.zero
-			end
-		end
-	end
+AimAssistTab:CreateSection("Headshot")
+AimAssistTab:CreateSlider({Name = "Headshot Rate", Range = {0, 100}, Increment = 5, Suffix = "%", CurrentValue = 70, Flag = "HSRate", Callback = function(V) aimAssistHeadshotRate = V end})
+AimAssistTab:CreateDropdown({Name = "Target Mode", Options = {"Dynamic", "Head", "Body"}, CurrentOption = {"Dynamic"}, MultipleOptions = false, Flag = "AAPart", Callback = function(O) aimAssistTargetPart = O[1] or O end})
 
-	local function applyJump()
-		local char = player.Character
-		if not char then return end
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if not hrp or not hum then return end
+AimAssistTab:CreateSection("Extra")
+AimAssistTab:CreateToggle({Name = "Only While Aiming", CurrentValue = true, Flag = "AAOnlyAim", Callback = function(V) aimAssistOnlyWhileAiming = V end})
+AimAssistTab:CreateToggle({Name = "Smooth Assist", CurrentValue = true, Flag = "AASmooth", Callback = function(V) aimAssistSmoothing = V end})
+AimAssistTab:CreateToggle({Name = "Prediction", CurrentValue = false, Flag = "AAPred", Callback = function(V) aimAssistPrediction = V end})
+AimAssistTab:CreateSlider({Name = "Prediction Amount", Range = {1, 50}, Increment = 1, Suffix = "%", CurrentValue = 10, Flag = "AAPredAmt", Callback = function(V) aimAssistPredictionAmount = V / 100 end})
+AimAssistTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "AATeam", Callback = function(V) aimAssistTeamCheck = V end})
+AimAssistTab:CreateToggle({Name = "Show FOV", CurrentValue = false, Flag = "AAShowFOV", Callback = function(V) showAimAssistFOV = V; if aimAssistFOVCircle then aimAssistFOVCircle.Visible = V and aimAssistEnabled end end})
 
-		if jumpMethod == "Default" then
-			hum.UseJumpPower = true
-			hum.JumpPower = jumpPower
-		else
-			hum.JumpPower = 0
-			if isJumping and canJump then
-				canJump = false
-				if jumpMethod == "CFrame Bypass" then
-					hrp.CFrame = hrp.CFrame + Vector3.new(0, jumpPower / 50, 0)
-				elseif jumpMethod == "Velocity Bypass" then
-					hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, jumpPower, hrp.AssemblyLinearVelocity.Z)
-				elseif jumpMethod == "BodyVelocity Bypass" then
-					local bv = Instance.new("BodyVelocity")
-					bv.MaxForce = Vector3.new(0, 100000, 0)
-					bv.Velocity = Vector3.new(0, jumpPower, 0)
-					bv.Parent = hrp
-					task.delay(0.15, function()
-						if bv.Parent then bv:Destroy() end
-					end)
-				end
-				task.delay(0.3, function() canJump = true end)
-			end
+aimAssistFOVCircle = Drawing.new("Circle")
+aimAssistFOVCircle.Color = Color3.fromRGB(255, 200, 0)
+aimAssistFOVCircle.Thickness = 1
+aimAssistFOVCircle.Filled = false
+aimAssistFOVCircle.Radius = aimAssistFOV
+aimAssistFOVCircle.Visible = false
+aimAssistFOVCircle.Transparency = 0.7
+
+-- ==========================================
+-- TAB: Aimlock
+-- ==========================================
+local AimlockTab = Window:CreateTab("Aimlock", 4483362458)
+AimlockTab:CreateSection("Aimlock")
+AimlockTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "Aimlock", Callback = function(V) aimlockEnabled = V; if not V then aimlockTarget = nil end end})
+AimlockTab:CreateToggle({Name = "Auto Switch", CurrentValue = true, Flag = "AutoSw", Callback = function(V) autoSwitchTarget = V end})
+AimlockTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "ALTeam", Callback = function(V) aimlockTeamCheck = V end})
+AimlockTab:CreateDropdown({Name = "Target Part", Options = {"Head", "HumanoidRootPart", "Torso", "UpperTorso"}, CurrentOption = {"Head"}, MultipleOptions = false, Flag = "ALPart", Callback = function(O) aimlockPart = O[1] or O end})
+AimlockTab:CreateSlider({Name = "Max Distance", Range = {50, 1000}, Increment = 10, Suffix = " Studs", CurrentValue = 200, Flag = "ALDist", Callback = function(V) aimlockDistance = V end})
+AimlockTab:CreateSlider({Name = "Smoothness", Range = {10, 100}, Increment = 5, Suffix = "%", CurrentValue = 50, Flag = "ALSmooth", Callback = function(V) aimlockSmooth = V / 100 end})
+AimlockTab:CreateSlider({Name = "FOV", Range = {50, 500}, Increment = 10, Suffix = " px", CurrentValue = 100, Flag = "ALFOV", Callback = function(V) aimlockFOV = V; if fovCircle then fovCircle.Radius = V end end})
+AimlockTab:CreateToggle({Name = "Show FOV", CurrentValue = false, Flag = "ALShowFOV", Callback = function(V) showFOVCircle = V end})
+AimlockTab:CreateDropdown({Name = "Activation Key", Options = {"MouseButton2 (Right Click)", "MouseButton1 (Left Click)", "Q", "E", "F"}, CurrentOption = {"MouseButton2 (Right Click)"}, MultipleOptions = false, Flag = "ALKey", Callback = function(O)
+	local km = {
+		["MouseButton2 (Right Click)"] = Enum.UserInputType.MouseButton2,
+		["MouseButton1 (Left Click)"] = Enum.UserInputType.MouseButton1,
+		["Q"] = Enum.KeyCode.Q,
+		["E"] = Enum.KeyCode.E,
+		["F"] = Enum.KeyCode.F,
+	}
+	aimlockKey = km[O[1] or O] or Enum.UserInputType.MouseButton2
+end})
+
+fovCircle = Drawing.new("Circle")
+fovCircle.Color = Color3.fromRGB(255, 255, 255)
+fovCircle.Thickness = 1
+fovCircle.Filled = false
+fovCircle.Radius = aimlockFOV
+fovCircle.Visible = false
+fovCircle.Transparency = 1
+
+-- ==========================================
+-- TAB: ESP
+-- ==========================================
+local ESPTab = Window:CreateTab("ESP", 4483362458)
+ESPTab:CreateSection("Player ESP")
+ESPTab:CreateToggle({Name = "Enable ESP", CurrentValue = false, Flag = "ESP", Callback = function(V) espEnabled = V; if not V then clearAllESP() end end})
+ESPTab:CreateToggle({Name = "Name", CurrentValue = false, Flag = "EName", Callback = function(V) espName = V end})
+ESPTab:CreateToggle({Name = "Distance", CurrentValue = false, Flag = "EDist", Callback = function(V) espDistance = V end})
+ESPTab:CreateToggle({Name = "Health", CurrentValue = false, Flag = "EHealth", Callback = function(V) espHealth = V end})
+ESPTab:CreateToggle({Name = "Box", CurrentValue = false, Flag = "EBox", Callback = function(V) espBox = V end})
+ESPTab:CreateToggle({Name = "Line", CurrentValue = false, Flag = "ELine", Callback = function(V) espLine = V end})
+ESPTab:CreateToggle({Name = "Highlight", CurrentValue = false, Flag = "EHL", Callback = function(V)
+	espHighlight = V
+	if not V then
+		for _, d in pairs(espObjects) do
+			if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
 		end
 	end
+end})
+ESPTab:CreateSlider({Name = "Line Smoothness", Range = {5, 100}, Increment = 5, Suffix = "%", CurrentValue = 30, Flag = "ESmooth", Callback = function(V) espLineSmoothing = V / 100 end})
+ESPTab:CreateSection("Team")
+ESPTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "ETeam", Callback = function(V) espTeamCheck = V end})
+ESPTab:CreateColorPicker({Name = "Enemy Color", Color = Color3.fromRGB(255, 0, 0), Flag = "EEnemy", Callback = function(V) espEnemyColor = V; espColor = V end})
+ESPTab:CreateColorPicker({Name = "Team Color", Color = Color3.fromRGB(0, 255, 0), Flag = "ETeamC", Callback = function(V) espTeamColor = V end})
 
-	local function applyNoFall()
-		local char = player.Character
-		if not char then return end
-		local hrp = char:FindFirstChild("HumanoidRootPart")
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		if not hrp or not hum then return end
-
-		hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-		hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-		local vel = hrp.AssemblyLinearVelocity
-
-		if noFallMethod == "Default" then
-			if vel.Y < -50 then
-				hrp.AssemblyLinearVelocity = Vector3.new(vel.X, -10, vel.Z)
-			end
-		elseif noFallMethod == "Velocity Brake" then
-			if vel.Y < -50 and getGroundInfo() < 20 then
-				hrp.AssemblyLinearVelocity = Vector3.new(vel.X, -10, vel.Z)
-			end
-		elseif noFallMethod == "Health Restore" then
-			if vel.Y < -20 then
-				wasInAir = true
-				lastHealth = hum.Health
-			end
-			if wasInAir and hum.FloorMaterial ~= Enum.Material.Air then
-				if hum.Health < lastHealth then hum.Health = lastHealth end
-				wasInAir = false
-			end
-		elseif noFallMethod == "Hybrid" then
-			if vel.Y < -20 and not isFalling then
-				isFalling = true
-				lastHealth = hum.Health
-			end
-			if vel.Y < -80 then
-				hrp.AssemblyLinearVelocity = Vector3.new(vel.X, -30, vel.Z)
-			end
-			if isFalling and hum.FloorMaterial ~= Enum.Material.Air then
-				if hum.Health < lastHealth then hum.Health = lastHealth end
-				isFalling = false
-			end
+-- ==========================================
+-- TAB: Hitbox
+-- ==========================================
+local HitboxTab = Window:CreateTab("Hitbox", 4483362458)
+HitboxTab:CreateSection("Hitbox Expander")
+HitboxTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "HB", Callback = function(V)
+	hitboxEnabled = V
+	if not V then disableHitboxExpander() end
+end})
+HitboxTab:CreateSlider({Name = "Size", Range = {1, 500}, Increment = 1, Suffix = " Studs", CurrentValue = 10, Flag = "HBSize", Callback = function(V) hitboxSize = V end})
+HitboxTab:CreateSlider({Name = "Transparency", Range = {0, 100}, Increment = 5, Suffix = "%", CurrentValue = 70, Flag = "HBTr", Callback = function(V) hitboxTransparency = V / 100 end})
+HitboxTab:CreateToggle({Name = "Show ESP", CurrentValue = false, Flag = "HBESP", Callback = function(V)
+	hitboxESPEnabled = V
+	if not V then
+		for _, d in pairs(hitboxData) do
+			if d.espVisual then pcall(function() d.espVisual:Destroy() end); d.espVisual = nil end
 		end
 	end
+end})
+HitboxTab:CreateColorPicker({Name = "Color", Color = Color3.fromRGB(255, 255, 0), Flag = "HBCol", Callback = function(V) hitboxESPColor = V end})
 
-	local function getClosestInFOV()
-		local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-		if not myHrp then return nil end
-		local closest, cd = nil, math.huge
-		local sc = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p ~= player and p.Character then
-				if aimlockTeamCheck and isTeammate(p) then continue end
-				local tp = p.Character:FindFirstChild(aimlockPart) or p.Character:FindFirstChild("HumanoidRootPart")
-				local hum = p.Character:FindFirstChildOfClass("Humanoid")
-				if tp and hum and hum.Health > 0 and (myHrp.Position - tp.Position).Magnitude <= aimlockDistance then
-					local sp, os = camera:WorldToScreenPoint(tp.Position)
-					if os then
-						local sd = (Vector2.new(sp.X, sp.Y) - sc).Magnitude
-						if sd <= aimlockFOV and sd < cd then
-							cd = sd
-							closest = p
-						end
-					end
-				end
-			end
-		end
-		return closest
-	end
-
-	local function isTargetValid(t)
-		if not t or not t.Character then return false end
-		local hum = t.Character:FindFirstChildOfClass("Humanoid")
-		if not hum or hum.Health <= 0 then return false end
-		local tp = t.Character:FindFirstChild(aimlockPart) or t.Character:FindFirstChild("HumanoidRootPart")
-		if not tp then return false end
-		local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-		return myHrp and (myHrp.Position - tp.Position).Magnitude <= aimlockDistance
-	end
-
-	-- ==========================================
-	-- INPUT
-	-- ==========================================
-	local aimlockHeld = false
-
-	UserInputService.InputBegan:Connect(function(input, processed)
-		if processed then return end
-		local isAK = false
-		if typeof(aimlockKey) == "EnumItem" then
-			if aimlockKey.EnumType == Enum.UserInputType then
-				isAK = input.UserInputType == aimlockKey
-			elseif aimlockKey.EnumType == Enum.KeyCode then
-				isAK = input.KeyCode == aimlockKey
-			end
-		end
-		if isAK then
-			aimlockHeld = true
-			if aimlockEnabled then aimlockTarget = getClosestInFOV() end
-		end
-		if input.KeyCode == Enum.KeyCode.Space and jumpMethod ~= "Default" then
-			isJumping = true
-			task.delay(0.15, function() isJumping = false end)
-		end
-	end)
-
-	UserInputService.InputEnded:Connect(function(input)
-		local isAK = false
-		if typeof(aimlockKey) == "EnumItem" then
-			if aimlockKey.EnumType == Enum.UserInputType then
-				isAK = input.UserInputType == aimlockKey
-			elseif aimlockKey.EnumType == Enum.KeyCode then
-				isAK = input.KeyCode == aimlockKey
-			end
-		end
-		if isAK then aimlockHeld = false end
-	end)
-
-	UserInputService.JumpRequest:Connect(function()
-		local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-		if not hum then return end
-		if _G.InfiniteJump then
-			if jumpMethod == "Default" then
-				hum:ChangeState(Enum.HumanoidStateType.Jumping)
-			else
-				isJumping = true
-				task.delay(0.1, function() isJumping = false end)
-			end
-		elseif hum.FloorMaterial ~= Enum.Material.Air then
-			isJumping = true
-			task.delay(0.1, function() isJumping = false end)
-		end
-	end)
-
-	-- ==========================================
-	-- CHARACTER ADDED
-	-- ==========================================
-	player.CharacterAdded:Connect(function(char)
-		local hum = char:WaitForChild("Humanoid", 10)
-		if hum then
-			lastHealth = hum.Health
-			isFalling = false
-			wasInAir = false
-		end
+HitboxTab:CreateSection("Anti Hitbox (Self)")
+HitboxTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "AntiHB", Callback = function(V)
+	antiHitboxEnabled = V
+	if not V then
 		for _, pd in pairs(antiHitboxParts) do
 			pcall(function() pd.fakePart:Destroy() end)
 		end
 		antiHitboxParts = {}
-		noRecoilOverriddenObjects = {}
-		noRecoilCurrentTool = nil
-		noRecoilIsShooting = false
-		noRecoilLockedCFrame = nil
-		if noRecoilEnabled or noSpreadEnabled then
-			task.wait(0.5)
-			if char and char.Parent then setupToolListener(char) end
-		end
-	end)
-
-	-- ==========================================
-	-- MAIN LOOP
-	-- ==========================================
-	RunService.RenderStepped:Connect(function(dt)
-		local char = player.Character
-		if not char then return end
-		local now = tick()
-
-		if noclip then applyNoclip() end
-		applySpeed(dt)
-		applyJump()
-		if noFallDamage then applyNoFall() end
-		if (noRecoilEnabled or noSpreadEnabled) and noRecoilCameraLock then applyNoRecoilCameraLock() end
-
-		-- Aimlock
-		if aimlockEnabled and aimlockHeld then
-			if autoSwitchTarget and not isTargetValid(aimlockTarget) then
-				aimlockTarget = getClosestInFOV()
+		local mc = player.Character
+		if mc then
+			for _, p in ipairs(mc:GetChildren()) do
+				if p:IsA("BasePart") then p.CanQuery = true end
 			end
-			if aimlockTarget and aimlockTarget.Character then
-				local tp = aimlockTarget.Character:FindFirstChild(aimlockPart) or aimlockTarget.Character:FindFirstChild("HumanoidRootPart")
-				local hum = aimlockTarget.Character:FindFirstChildOfClass("Humanoid")
-				if tp and hum and hum.Health > 0 then
-					local myHrp = char:FindFirstChild("HumanoidRootPart")
-					if myHrp and (myHrp.Position - tp.Position).Magnitude <= aimlockDistance then
-						camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, tp.Position), aimlockSmooth)
-					else
-						aimlockTarget = autoSwitchTarget and getClosestInFOV() or nil
+		end
+	end
+end})
+HitboxTab:CreateSlider({Name = "Size", Range = {1, 30}, Increment = 1, Suffix = " (x0.1)", CurrentValue = 10, Flag = "AHBSize", Callback = function(V) antiHitboxSize = V / 10 end})
+
+-- ==========================================
+-- TAB: Movement
+-- ==========================================
+local MovementTab = Window:CreateTab("Movement", 4483362458)
+MovementTab:CreateSection("Speed")
+MovementTab:CreateDropdown({Name = "Method", Options = {"Default", "CFrame Bypass", "Velocity Bypass", "BodyVelocity Bypass"}, CurrentOption = {"Default"}, MultipleOptions = false, Flag = "SpeedM", Callback = function(O) speedMethod = O[1] or O end})
+MovementTab:CreateSlider({Name = "Walk Speed", Range = {1, 500}, Increment = 1, CurrentValue = 16, Flag = "WSpeed", Callback = function(V) speed = V end})
+MovementTab:CreateSection("Jump")
+MovementTab:CreateDropdown({Name = "Method", Options = {"Default", "CFrame Bypass", "Velocity Bypass", "BodyVelocity Bypass"}, CurrentOption = {"Default"}, MultipleOptions = false, Flag = "JumpM", Callback = function(O) jumpMethod = O[1] or O end})
+MovementTab:CreateSlider({Name = "Jump Power", Range = {1, 500}, Increment = 1, CurrentValue = 50, Flag = "JPower", Callback = function(V) jumpPower = V end})
+MovementTab:CreateToggle({Name = "Infinite Jump", CurrentValue = false, Flag = "InfJump", Callback = function(V) _G.InfiniteJump = V end})
+MovementTab:CreateSection("Noclip")
+MovementTab:CreateToggle({Name = "Noclip", CurrentValue = false, Flag = "Noclip", Callback = function(V) noclip = V end})
+MovementTab:CreateDropdown({Name = "Method", Options = {"Default", "CFrame Bypass", "Velocity Bypass", "Phase Bypass"}, CurrentOption = {"Default"}, MultipleOptions = false, Flag = "NoclipM", Callback = function(O) noclipMethod = O[1] or O end})
+MovementTab:CreateSection("No Fall Damage")
+MovementTab:CreateToggle({Name = "No Fall Damage", CurrentValue = false, Flag = "NoFall", Callback = function(V) noFallDamage = V end})
+MovementTab:CreateDropdown({Name = "Method", Options = {"Default", "Velocity Brake", "Health Restore", "Hybrid"}, CurrentOption = {"Default"}, MultipleOptions = false, Flag = "NoFallM", Callback = function(O) noFallMethod = O[1] or O end})
+
+-- ==========================================
+-- TAB: Anti Kick
+-- ==========================================
+local AntiKickTab = Window:CreateTab("Anti Kick", 4483362458)
+AntiKickTab:CreateSection("Anti Kick")
+AntiKickTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "AntiKick", Callback = function(V)
+	antiKickEnabled = V
+	if V then enableAntiKick(); Rayfield:Notify({Title = "Anti Kick", Content = "Enabled!", Duration = 3}) end
+end})
+AntiKickTab:CreateButton({Name = "Delete AC Scripts", Callback = function()
+	local c = 0
+	for _, s in ipairs(player.PlayerScripts:GetDescendants()) do
+		if s:IsA("LocalScript") then
+			local n = s.Name:lower()
+			for _, p in ipairs({"anticheat", "anti_cheat", "ac", "detect", "security", "check", "verify"}) do
+				if n:find(p) then
+					pcall(function() s.Disabled = true; s:Destroy() end)
+					c = c + 1
+					break
+				end
+			end
+		end
+	end
+	Rayfield:Notify({Title = "AC", Content = "Disabled " .. c .. " scripts", Duration = 3})
+end})
+AntiKickTab:CreateButton({Name = "Anti AFK", Callback = function()
+	pcall(function()
+		local VU = game:GetService("VirtualUser")
+		spawn(function()
+			while antiKickEnabled do
+				pcall(function() VU:CaptureController(); VU:ClickButton2(Vector2.new()) end)
+				task.wait(60)
+			end
+		end)
+	end)
+	Rayfield:Notify({Title = "Anti AFK", Content = "Enabled", Duration = 3})
+end})
+
+-- ==========================================
+-- CORE MOVEMENT
+-- ==========================================
+local function getMoveDirection()
+	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if not hum then return Vector3.zero end
+	return hum.MoveDirection.Magnitude > 0 and hum.MoveDirection.Unit or Vector3.zero
+end
+
+local function getGroundInfo()
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return math.huge end
+	local p = RaycastParams.new()
+	p.FilterDescendantsInstances = {player.Character}
+	p.FilterType = Enum.RaycastFilterType.Exclude
+	local r = workspace:Raycast(hrp.Position, Vector3.new(0, -500, 0), p)
+	return r and (hrp.Position - r.Position).Magnitude or math.huge
+end
+
+local function applySpeed(dt)
+	local char = player.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum then return end
+
+	if speedMethod == "Default" then
+		hum.WalkSpeed = speed
+	elseif speedMethod == "CFrame Bypass" then
+		hum.WalkSpeed = 16
+		local d = getMoveDirection()
+		if d.Magnitude > 0 and speed > 16 then
+			hrp.CFrame = hrp.CFrame + (d * (speed - 16) * dt)
+		end
+	elseif speedMethod == "Velocity Bypass" then
+		hum.WalkSpeed = 16
+		local d = getMoveDirection()
+		if d.Magnitude > 0 then
+			hrp.AssemblyLinearVelocity = Vector3.new(d.X * speed, hrp.AssemblyLinearVelocity.Y, d.Z * speed)
+		end
+	elseif speedMethod == "BodyVelocity Bypass" then
+		hum.WalkSpeed = 16
+		local bv = hrp:FindFirstChild("SpeedBV")
+		if not bv then
+			bv = Instance.new("BodyVelocity")
+			bv.Name = "SpeedBV"
+			bv.MaxForce = Vector3.new(100000, 0, 100000)
+			bv.P = 10000
+			bv.Parent = hrp
+		end
+		local d = getMoveDirection()
+		if d.Magnitude > 0 then
+			bv.Velocity = d * speed
+			bv.MaxForce = Vector3.new(100000, 0, 100000)
+		else
+			bv.Velocity = Vector3.zero
+			bv.MaxForce = Vector3.zero
+		end
+	end
+end
+
+local function applyJump()
+	local char = player.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum then return end
+
+	if jumpMethod == "Default" then
+		hum.UseJumpPower = true
+		hum.JumpPower = jumpPower
+	else
+		hum.JumpPower = 0
+		if isJumping and canJump then
+			canJump = false
+			if jumpMethod == "CFrame Bypass" then
+				hrp.CFrame = hrp.CFrame + Vector3.new(0, jumpPower / 50, 0)
+			elseif jumpMethod == "Velocity Bypass" then
+				hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, jumpPower, hrp.AssemblyLinearVelocity.Z)
+			elseif jumpMethod == "BodyVelocity Bypass" then
+				local bv = Instance.new("BodyVelocity")
+				bv.MaxForce = Vector3.new(0, 100000, 0)
+				bv.Velocity = Vector3.new(0, jumpPower, 0)
+				bv.Parent = hrp
+				task.delay(0.15, function()
+					if bv.Parent then bv:Destroy() end
+				end)
+			end
+			task.delay(0.3, function() canJump = true end)
+		end
+	end
+end
+
+local function applyNoFall()
+	local char = player.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	local hum = char:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum then return end
+
+	hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+	hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+	local vel = hrp.AssemblyLinearVelocity
+
+	if noFallMethod == "Default" then
+		if vel.Y < -50 then
+			hrp.AssemblyLinearVelocity = Vector3.new(vel.X, -10, vel.Z)
+		end
+	elseif noFallMethod == "Velocity Brake" then
+		if vel.Y < -50 and getGroundInfo() < 20 then
+			hrp.AssemblyLinearVelocity = Vector3.new(vel.X, -10, vel.Z)
+		end
+	elseif noFallMethod == "Health Restore" then
+		if vel.Y < -20 then
+			wasInAir = true
+			lastHealth = hum.Health
+		end
+		if wasInAir and hum.FloorMaterial ~= Enum.Material.Air then
+			if hum.Health < lastHealth then hum.Health = lastHealth end
+			wasInAir = false
+		end
+	elseif noFallMethod == "Hybrid" then
+		if vel.Y < -20 and not isFalling then
+			isFalling = true
+			lastHealth = hum.Health
+		end
+		if vel.Y < -80 then
+			hrp.AssemblyLinearVelocity = Vector3.new(vel.X, -30, vel.Z)
+		end
+		if isFalling and hum.FloorMaterial ~= Enum.Material.Air then
+			if hum.Health < lastHealth then hum.Health = lastHealth end
+			isFalling = false
+		end
+	end
+end
+
+local function getClosestInFOV()
+	local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not myHrp then return nil end
+	local closest, cd = nil, math.huge
+	local sc = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2)
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			if aimlockTeamCheck and isTeammate(p) then continue end
+			local tp = p.Character:FindFirstChild(aimlockPart) or p.Character:FindFirstChild("HumanoidRootPart")
+			local hum = p.Character:FindFirstChildOfClass("Humanoid")
+			if tp and hum and hum.Health > 0 and (myHrp.Position - tp.Position).Magnitude <= aimlockDistance then
+				local sp, os = camera:WorldToScreenPoint(tp.Position)
+				if os then
+					local sd = (Vector2.new(sp.X, sp.Y) - sc).Magnitude
+					if sd <= aimlockFOV and sd < cd then
+						cd = sd
+						closest = p
 					end
+				end
+			end
+		end
+	end
+	return closest
+end
+
+local function isTargetValid(t)
+	if not t or not t.Character then return false end
+	local hum = t.Character:FindFirstChildOfClass("Humanoid")
+	if not hum or hum.Health <= 0 then return false end
+	local tp = t.Character:FindFirstChild(aimlockPart) or t.Character:FindFirstChild("HumanoidRootPart")
+	if not tp then return false end
+	local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	return myHrp and (myHrp.Position - tp.Position).Magnitude <= aimlockDistance
+end
+
+-- ==========================================
+-- INPUT
+-- ==========================================
+local aimlockHeld = false
+
+UserInputService.InputBegan:Connect(function(input, processed)
+	if processed then return end
+	local isAK = false
+	if typeof(aimlockKey) == "EnumItem" then
+		if aimlockKey.EnumType == Enum.UserInputType then
+			isAK = input.UserInputType == aimlockKey
+		elseif aimlockKey.EnumType == Enum.KeyCode then
+			isAK = input.KeyCode == aimlockKey
+		end
+	end
+	if isAK then
+		aimlockHeld = true
+		if aimlockEnabled then aimlockTarget = getClosestInFOV() end
+	end
+	if input.KeyCode == Enum.KeyCode.Space and jumpMethod ~= "Default" then
+		isJumping = true
+		task.delay(0.15, function() isJumping = false end)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	local isAK = false
+	if typeof(aimlockKey) == "EnumItem" then
+		if aimlockKey.EnumType == Enum.UserInputType then
+			isAK = input.UserInputType == aimlockKey
+		elseif aimlockKey.EnumType == Enum.KeyCode then
+			isAK = input.KeyCode == aimlockKey
+		end
+	end
+	if isAK then aimlockHeld = false end
+end)
+
+UserInputService.JumpRequest:Connect(function()
+	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+	if not hum then return end
+	if _G.InfiniteJump then
+		if jumpMethod == "Default" then
+			hum:ChangeState(Enum.HumanoidStateType.Jumping)
+		else
+			isJumping = true
+			task.delay(0.1, function() isJumping = false end)
+		end
+	elseif hum.FloorMaterial ~= Enum.Material.Air then
+		isJumping = true
+		task.delay(0.1, function() isJumping = false end)
+	end
+end)
+
+-- ==========================================
+-- CHARACTER ADDED
+-- ==========================================
+player.CharacterAdded:Connect(function(char)
+	local hum = char:WaitForChild("Humanoid", 10)
+	if hum then
+		lastHealth = hum.Health
+		isFalling = false
+		wasInAir = false
+	end
+	for _, pd in pairs(antiHitboxParts) do
+		pcall(function() pd.fakePart:Destroy() end)
+	end
+	antiHitboxParts = {}
+	noRecoilOverriddenObjects = {}
+	noRecoilCurrentTool = nil
+	noRecoilIsShooting = false
+	noRecoilLockedCFrame = nil
+	if noRecoilEnabled or noSpreadEnabled then
+		task.wait(0.5)
+		if char and char.Parent then setupToolListener(char) end
+	end
+end)
+
+-- ==========================================
+-- MAIN LOOP
+-- ==========================================
+RunService.RenderStepped:Connect(function(dt)
+	local char = player.Character
+	if not char then return end
+	local now = tick()
+
+	if noclip then applyNoclip() end
+	applySpeed(dt)
+	applyJump()
+	if noFallDamage then applyNoFall() end
+	if (noRecoilEnabled or noSpreadEnabled) and noRecoilCameraLock then applyNoRecoilCameraLock() end
+
+	-- Aimlock
+	if aimlockEnabled and aimlockHeld then
+		if autoSwitchTarget and not isTargetValid(aimlockTarget) then
+			aimlockTarget = getClosestInFOV()
+		end
+		if aimlockTarget and aimlockTarget.Character then
+			local tp = aimlockTarget.Character:FindFirstChild(aimlockPart) or aimlockTarget.Character:FindFirstChild("HumanoidRootPart")
+			local hum = aimlockTarget.Character:FindFirstChildOfClass("Humanoid")
+			if tp and hum and hum.Health > 0 then
+				local myHrp = char:FindFirstChild("HumanoidRootPart")
+				if myHrp and (myHrp.Position - tp.Position).Magnitude <= aimlockDistance then
+					camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, tp.Position), aimlockSmooth)
 				else
 					aimlockTarget = autoSwitchTarget and getClosestInFOV() or nil
 				end
+			else
+				aimlockTarget = autoSwitchTarget and getClosestInFOV() or nil
 			end
 		end
+	end
 
-		if aimAssistEnabled then applyAimAssist(dt) end
+	if aimAssistEnabled then applyAimAssist(dt) end
 
-		-- FOV Circles
-		local cx, cy = camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2
-		if fovCircle then
-			fovCircle.Position = Vector2.new(cx, cy)
-			fovCircle.Radius = aimlockFOV
-			fovCircle.Visible = showFOVCircle and aimlockEnabled
-		end
-		if aimAssistFOVCircle then
-			aimAssistFOVCircle.Position = Vector2.new(cx, cy)
-			aimAssistFOVCircle.Radius = aimAssistFOV
-			aimAssistFOVCircle.Visible = showAimAssistFOV and aimAssistEnabled
-		end
-		if silentAimFOVCircle then
-			silentAimFOVCircle.Position = Vector2.new(cx, cy)
-			silentAimFOVCircle.Radius = silentAimFOV
-			silentAimFOVCircle.Visible = silentAimShowFOV and silentAimEnabled
-		end
+	-- FOV Circles
+	local cx, cy = camera.ViewportSize.X / 2, camera.ViewportSize.Y / 2
+	if fovCircle then
+		fovCircle.Position = Vector2.new(cx, cy)
+		fovCircle.Radius = aimlockFOV
+		fovCircle.Visible = showFOVCircle and aimlockEnabled
+	end
+	if aimAssistFOVCircle then
+		aimAssistFOVCircle.Position = Vector2.new(cx, cy)
+		aimAssistFOVCircle.Radius = aimAssistFOV
+		aimAssistFOVCircle.Visible = showAimAssistFOV and aimAssistEnabled
+	end
+	if silentAimFOVCircle then
+		silentAimFOVCircle.Position = Vector2.new(cx, cy)
+		silentAimFOVCircle.Radius = silentAimFOV
+		silentAimFOVCircle.Visible = silentAimShowFOV and silentAimEnabled
+	end
 
-		-- No Recoil
-		if now - lastNoRecoilUpdate >= NO_RECOIL_UPDATE_RATE then
-			lastNoRecoilUpdate = now
-			if (noRecoilEnabled or noSpreadEnabled) and noRecoilValueOverride then refreshRecoilOverrides() end
-			if noRecoilEnabled then overrideRecoilPhysics() end
-		end
+	-- No Recoil
+	if now - lastNoRecoilUpdate >= NO_RECOIL_UPDATE_RATE then
+		lastNoRecoilUpdate = now
+		if (noRecoilEnabled or noSpreadEnabled) and noRecoilValueOverride then refreshRecoilOverrides() end
+		if noRecoilEnabled then overrideRecoilPhysics() end
+	end
 
-		-- Silent Aim Visual
-		if now - lastSilentAimUpdate >= SILENT_AIM_UPDATE_RATE then
-			lastSilentAimUpdate = now
-			if silentAimEnabled then
-				local t, tp = getSilentAimTarget()
-				silentAimCurrentTarget = t
-				if silentAimVisualLine and t and tp then
-					local sp, onS = camera:WorldToViewportPoint(tp.Position)
-					if onS then
-						silentAimVisualLineObj.From = Vector2.new(cx, cy)
-						silentAimVisualLineObj.To = Vector2.new(sp.X, sp.Y)
-						silentAimVisualLineObj.Visible = true
-						silentAimVisualLineObj.Color = tp.Name == "Head" and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(255, 0, 255)
-					else
-						silentAimVisualLineObj.Visible = false
-					end
-				elseif silentAimVisualLineObj then
+	-- Silent Aim Visual
+	if now - lastSilentAimUpdate >= SILENT_AIM_UPDATE_RATE then
+		lastSilentAimUpdate = now
+		if silentAimEnabled then
+			local t, tp = getSilentAimTarget()
+			silentAimCurrentTarget = t
+			if silentAimVisualLine and t and tp then
+				local sp, onS = camera:WorldToViewportPoint(tp.Position)
+				if onS then
+					silentAimVisualLineObj.From = Vector2.new(cx, cy)
+					silentAimVisualLineObj.To = Vector2.new(sp.X, sp.Y)
+					silentAimVisualLineObj.Visible = true
+					silentAimVisualLineObj.Color = tp.Name == "Head" and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(255, 0, 255)
+				else
 					silentAimVisualLineObj.Visible = false
 				end
-			else
-				if silentAimVisualLineObj then silentAimVisualLineObj.Visible = false end
+			elseif silentAimVisualLineObj then
+				silentAimVisualLineObj.Visible = false
 			end
+		else
+			if silentAimVisualLineObj then silentAimVisualLineObj.Visible = false end
 		end
+	end
 
-		-- ESP
-		if now - lastESPUpdate >= ESP_UPDATE_RATE then
-			lastESPUpdate = now
-			if espEnabled then updatePlayerESP() end
-		end
+	-- ESP
+	if now - lastESPUpdate >= ESP_UPDATE_RATE then
+		lastESPUpdate = now
+		if espEnabled then updatePlayerESP() end
+	end
 
-		-- Hitbox
-		if now - lastHitboxUpdate >= HITBOX_UPDATE_RATE then
-			lastHitboxUpdate = now
-			if hitboxEnabled then updateHitboxExpander() end
-			if antiHitboxEnabled then updateAntiHitbox() end
-		end
-	end)
+	-- Hitbox
+	if now - lastHitboxUpdate >= HITBOX_UPDATE_RATE then
+		lastHitboxUpdate = now
+		if hitboxEnabled then updateHitboxExpander() end
+		if antiHitboxEnabled then updateAntiHitbox() end
+	end
+end)
 
-	-- Cleanup
-	Players.PlayerRemoving:Connect(function(p)
-		if espObjects[p] then
-			local d = espObjects[p]
-			pcall(function() d.box:Remove() end)
-			pcall(function() d.line:Remove() end)
-			pcall(function() d.name:Remove() end)
-			pcall(function() d.distText:Remove() end)
-			pcall(function() d.healthText:Remove() end)
-			pcall(function() d.healthBar:Remove() end)
-			pcall(function() d.healthBg:Remove() end)
-			if d.highlight then pcall(function() d.highlight:Destroy() end) end
-			espObjects[p] = nil
-		end
-		if hitboxData[p] then
-			cleanHitboxForPlayer(p)
-			hitboxData[p] = nil
-		end
-	end)
+-- Cleanup on player leaving
+Players.PlayerRemoving:Connect(function(p)
+	if espObjects[p] then
+		local d = espObjects[p]
+		pcall(function() d.box:Remove() end)
+		pcall(function() d.line:Remove() end)
+		pcall(function() d.name:Remove() end)
+		pcall(function() d.distText:Remove() end)
+		pcall(function() d.healthText:Remove() end)
+		pcall(function() d.healthBar:Remove() end)
+		pcall(function() d.healthBg:Remove() end)
+		if d.highlight then pcall(function() d.highlight:Destroy() end) end
+		espObjects[p] = nil
+	end
+	if hitboxData[p] then
+		cleanHitboxForPlayer(p)
+		hitboxData[p] = nil
+	end
+end)
 
-	task.spawn(function()
-		task.wait(1)
-		if player.Character and (noRecoilEnabled or noSpreadEnabled) then
-			setupToolListener(player.Character)
-		end
-	end)
+-- Initial setup
+task.spawn(function()
+	task.wait(1)
+	if player.Character and (noRecoilEnabled or noSpreadEnabled) then
+		setupToolListener(player.Character)
+	end
+end)
 
-	Rayfield:Notify({
-		Title = "RyuExploit v3.6",
-		Content = "Loaded!\n\nSilent Aim + No Recoil + Aim Assist\n= Peluru pasti kena!",
-		Duration = 5
-	})
+Rayfield:Notify({
+	Title = "RyuExploit v3.6",
+	Content = "Loaded!\n\nSilent Aim + No Recoil + Aim Assist\n= Peluru pasti kena!",
+	Duration = 5
+})
 end
