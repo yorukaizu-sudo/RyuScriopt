@@ -812,83 +812,106 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	-- ==========================================
 	-- HITBOX
 	-- ==========================================
-	local function cleanHitboxForPlayer(p)
-		local dd = hitboxData[p]
-		if not dd then return end
-		if dd.overlayPart and dd.overlayPart.Parent then
-			pcall(function() dd.overlayPart:Destroy() end)
-		end
-		if dd.espVisual and dd.espVisual.Parent then
-			pcall(function() dd.espVisual:Destroy() end)
-		end
-		if dd.deathConn then
-			pcall(function() dd.deathConn:Disconnect() end)
-		end
-		if p.Character then
-			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				pcall(function() hrp.CanQuery = true end)
-			end
-		end
-		dd.overlayPart = nil
-		dd.espVisual = nil
-		dd.trackedChar = nil
-		dd.deathConn = nil
-	end
+local function cleanHitboxForPlayer(p)
+    local dd = hitboxData[p]
+    if not dd then return end
+    if dd.overlayPart and dd.overlayPart.Parent then
+        pcall(function() dd.overlayPart:Destroy() end)
+    end
+    if dd.espVisual and dd.espVisual.Parent then
+        pcall(function() dd.espVisual:Destroy() end)
+    end
+    if dd.deathConn then
+        pcall(function() dd.deathConn:Disconnect() end)
+    end
+    if dd.updateConn then
+        pcall(function() dd.updateConn:Disconnect() end)
+    end
+    if p and p.Parent and p.Character then
+        local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            pcall(function() hrp.CanQuery = true end)
+        end
+    end
+    dd.overlayPart = nil
+    dd.espVisual = nil
+    dd.trackedChar = nil
+    dd.deathConn = nil
+    dd.updateConn = nil
+end
 
-	local function createHitboxOverlay(p)
-		if not p or not p.Character then return end
-		local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-		local hum = p.Character:FindFirstChildOfClass("Humanoid")
-		if not hrp or not hum or hum.Health <= 0 then return end
+local function createHitboxOverlay(p)
+    if not p or not p.Character then return end
+    local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+    local hum = p.Character:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum or hum.Health <= 0 then return end
 
-		if not hitboxData[p] then hitboxData[p] = {} end
-		local dd = hitboxData[p]
+    if not hitboxData[p] then hitboxData[p] = {} end
+    local dd = hitboxData[p]
 
-		-- Clean old overlay
-		if dd.overlayPart and dd.overlayPart.Parent then
-			pcall(function() dd.overlayPart:Destroy() end)
-		end
-		if dd.espVisual and dd.espVisual.Parent then
-			pcall(function() dd.espVisual:Destroy() end)
-		end
-		if dd.deathConn then
-			pcall(function() dd.deathConn:Disconnect() end)
-		end
+    -- Clean old overlay
+    if dd.overlayPart and dd.overlayPart.Parent then
+        pcall(function() dd.overlayPart:Destroy() end)
+    end
+    if dd.espVisual and dd.espVisual.Parent then
+        pcall(function() dd.espVisual:Destroy() end)
+    end
+    if dd.deathConn then
+        pcall(function() dd.deathConn:Disconnect() end)
+    end
+    if dd.updateConn then
+        pcall(function() dd.updateConn:Disconnect() end)
+    end
 
-		-- Create overlay part
-		local ov = Instance.new("Part")
-		ov.Name = "HitboxOverlay"
-		ov.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-		ov.Transparency = hitboxTransparency
-		ov.CanCollide = false
-		ov.CanQuery = true
-		ov.Anchored = false
-		ov.Massless = true
-		ov.Material = Enum.Material.ForceField
-		ov.Color = hitboxESPColor
-		ov.Shape = Enum.PartType.Ball
-		ov.Parent = p.Character
+    -- Create overlay part
+    local ov = Instance.new("Part")
+    ov.Name = "HitboxOverlay"
+    ov.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+    ov.Transparency = hitboxTransparency
+    ov.CanCollide = false
+    ov.CanQuery = true
+    ov.Anchored = true  -- PENTING: Anchored supaya tidak jatuh/geser
+    ov.Massless = true
+    ov.Material = Enum.Material.ForceField
+    ov.Color = hitboxESPColor
+    ov.Shape = Enum.PartType.Ball
+    ov.CFrame = hrp.CFrame  -- Set posisi awal pas di tengah HRP
+    ov.Parent = workspace  -- Parent ke workspace, bukan character (supaya tidak kena physics character)
 
-		-- Weld to HumanoidRootPart
-		local w = Instance.new("WeldConstraint")
-		w.Part0 = hrp
-		w.Part1 = ov
-		w.Parent = ov
-		ov.CFrame = hrp.CFrame
+    -- JANGAN pakai WeldConstraint karena bisa bikin offset
+    -- Pakai RunService update posisi setiap frame supaya SELALU di tengah
+    dd.updateConn = game:GetService("RunService").Heartbeat:Connect(function()
+        if not ov or not ov.Parent then
+            if dd.updateConn then
+                pcall(function() dd.updateConn:Disconnect() end)
+            end
+            return
+        end
+        if not p or not p.Parent or not p.Character then
+            pcall(function() ov:Destroy() end)
+            if dd.updateConn then
+                pcall(function() dd.updateConn:Disconnect() end)
+            end
+            return
+        end
+        local targetHRP = p.Character:FindFirstChild("HumanoidRootPart")
+        if targetHRP then
+            ov.CFrame = targetHRP.CFrame  -- Selalu tepat di tengah
+        end
+    end)
 
-		-- Make original HRP not queryable so shots hit overlay
-		pcall(function() hrp.CanQuery = false end)
+    -- Make original HRP not queryable so shots hit overlay
+    pcall(function() hrp.CanQuery = false end)
 
-		dd.overlayPart = ov
-		dd.trackedChar = p.Character
+    dd.overlayPart = ov
+    dd.trackedChar = p.Character
 
-		-- Listen for death
-		dd.deathConn = hum.Died:Connect(function()
-			task.wait(0.5)
-			cleanHitboxForPlayer(p)
-		end)
-	end
+    -- Listen for death
+    dd.deathConn = hum.Died:Connect(function()
+        task.wait(0.5)
+        cleanHitboxForPlayer(p)
+    end)
+end
 
 	local function updateHitboxExpander()
 		if not hitboxEnabled then return end
