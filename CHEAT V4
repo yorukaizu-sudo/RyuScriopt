@@ -568,27 +568,6 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 		end
 		return nil, nil
 	end
-	local function setupHitboxRaycastHook()
-    pcall(function()
-        local mt = getrawmetatable(game)
-        if not mt then return end
-        local oldIdx = mt.__index
-        setreadonly(mt, false)
-        
-        mt.__index = newcclosure(function(self, key)
-            -- Kalau akses property "Parent" dari HitboxPart, return character
-            if typeof(self) == "Instance" and self.Name == "HitboxPart" then
-                if key == "Parent" then
-                    -- Return parent seperti biasa
-                    return oldIdx(self, key)
-                end
-            end
-            return oldIdx(self, key)
-        end)
-        
-        setreadonly(mt, true)
-    end)
-end
 
 	local function hookSilentAim()
 		if silentAimHooked then return end
@@ -830,37 +809,36 @@ end
 		end
 	end
 
--- ==========================================
--- HITBOX (FIXED - No Anchor + Damage Works)
--- ==========================================
-
+	-- ==========================================
+	-- HITBOX
+	-- ==========================================
 local function cleanHitboxForPlayer(p)
     local dd = hitboxData[p]
     if not dd then return end
-
-    -- Disconnect semua connections
+    if dd.overlayPart and dd.overlayPart.Parent then
+        pcall(function() dd.overlayPart:Destroy() end)
+    end
+    if dd.espVisual and dd.espVisual.Parent then
+        pcall(function() dd.espVisual:Destroy() end)
+    end
     if dd.deathConn then
         pcall(function() dd.deathConn:Disconnect() end)
     end
     if dd.updateConn then
         pcall(function() dd.updateConn:Disconnect() end)
     end
-    
-    -- Hapus highlight/ESP
-    if dd.espHighlight and dd.espHighlight.Parent then
-        pcall(function() dd.espHighlight:Destroy() end)
+    if p and p.Parent and p.Character then
+        local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            pcall(function() hrp.CanQuery = true end)
+        end
     end
-
-    -- JANGAN restore HRP size karena bisa cause issues
-    -- Biarkan game handle sendiri saat respawn
-
-    dd.espHighlight = nil
+    dd.overlayPart = nil
+    dd.espVisual = nil
     dd.trackedChar = nil
     dd.deathConn = nil
     dd.updateConn = nil
-    dd.originalSize = nil
 end
-
 local function createHitboxOverlay(p)
     if not p or not p.Character then return end
     local hrp = p.Character:FindFirstChild("HumanoidRootPart")
@@ -870,96 +848,109 @@ local function createHitboxOverlay(p)
     if not hitboxData[p] then hitboxData[p] = {} end
     local dd = hitboxData[p]
 
-    -- Clean old connections
+    -- Clean old overlay
+    if dd.overlayPart and dd.overlayPart.Parent then
+        pcall(function() dd.overlayPart:Destroy() end)
+    end
+    if dd.espVisual and dd.espVisual.Parent then
+        pcall(function() dd.espVisual:Destroy() end)
+    end
     if dd.deathConn then
         pcall(function() dd.deathConn:Disconnect() end)
     end
     if dd.updateConn then
         pcall(function() dd.updateConn:Disconnect() end)
     end
-    if dd.espHighlight and dd.espHighlight.Parent then
-        pcall(function() dd.espHighlight:Destroy() end)
-    end
 
-    -- Simpan original size untuk restore nanti
-    dd.originalSize = hrp.Size
+    -- =============================================
+    -- FIX 1: Langsung expand HRP saja, TANPA overlay part
+    -- Ini menghindari masalah anchored & collision
+    -- =============================================
+    
+    -- Metode: Expand HRP langsung + buat visual overlay yang TIDAK punya physics
+    local ov = Instance.new("Part")
+    ov.Name = "HitboxOverlay"
+    ov.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+    ov.Transparency = hitboxTransparency
+    ov.CanCollide = false       -- Tidak bisa ditabrak
+    ov.CanTouch = false         -- FIX: Tidak trigger .Touched events
+    ov.CanQuery = false         -- FIX: Tidak terdeteksi raycast (biar HRP asli yang kena)
+    ov.Anchored = false         -- FIX: TIDAK anchored, ikut physics character
+    ov.Massless = true          -- Tidak tambah berat
+    ov.Material = Enum.Material.ForceField
+    ov.Color = hitboxESPColor
+    ov.Shape = Enum.PartType.Ball
+    ov.CFrame = hrp.CFrame
+    
+    -- FIX 2: Collision group supaya tidak interact sama sekali
+    pcall(function()
+        local PhysicsService = game:GetService("PhysicsService")
+        -- Coba buat collision group khusus
+        pcall(function() PhysicsService:RegisterCollisionGroup("HitboxNoCollide") end)
+        pcall(function() PhysicsService:CollisionGroupSetCollidable("HitboxNoCollide", "Default", false) end)
+        ov.CollisionGroup = "HitboxNoCollide"
+    end)
+    
+    ov.Parent = workspace
+
+    -- FIX 3: Pakai WeldConstraint BUKAN Anchored
+    -- Ini bikin overlay ikut karakter TANPA bikin macet
+    local weld = Instance.new("WeldConstraint")
+    weld.Part0 = hrp
+    weld.Part1 = ov
+    weld.Parent = ov
+    -- Posisikan tepat di tengah HRP
+    ov.CFrame = hrp.CFrame
+
+    -- FIX 4: Expand HRP asli (ini yang bikin hitbox besar untuk raycast)
+    pcall(function()
+        hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+        hrp.Transparency = 1  -- HRP tetap invisible
+        hrp.CanCollide = false  -- HRP tidak bisa ditabrak player lain
+    end)
+
+    -- FIX 5: Backup update posisi kalau weld gagal
+    -- Tapi TANPA set Anchored
+    dd.updateConn = RunService.Heartbeat:Connect(function()
+        if not ov or not ov.Parent then
+            if dd.updateConn then
+                pcall(function() dd.updateConn:Disconnect() end)
+            end
+            return
+        end
+        if not p or not p.Parent or not p.Character then
+            pcall(function() ov:Destroy() end)
+            if dd.updateConn then
+                pcall(function() dd.updateConn:Disconnect() end)
+            end
+            return
+        end
+        local targetHRP = p.Character:FindFirstChild("HumanoidRootPart")
+        if not targetHRP then
+            pcall(function() ov:Destroy() end)
+            if dd.updateConn then
+                pcall(function() dd.updateConn:Disconnect() end)
+            end
+            return
+        end
+        
+        -- Update size kalau berubah
+        if ov.Size ~= Vector3.new(hitboxSize, hitboxSize, hitboxSize) then
+            ov.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+        end
+        
+        -- FIX 6: Expand HRP juga setiap frame (game bisa reset)
+        pcall(function()
+            if targetHRP.Size ~= Vector3.new(hitboxSize, hitboxSize, hitboxSize) then
+                targetHRP.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+            end
+        end)
+    end)
+
+    dd.overlayPart = ov
     dd.trackedChar = p.Character
 
-    -- METODE: Langsung modify HRP properties
-    -- Ini TIDAK akan anchor player karena kita tidak sentuh Anchored/physics
-    pcall(function()
-        -- Hanya ubah VISUAL properties, bukan physics
-        hrp.Transparency = hitboxTransparency
-        hrp.Color = hitboxESPColor
-        hrp.Material = Enum.Material.ForceField
-        
-        -- Size akan di-handle di update loop dengan cara aman
-    end)
-
-    -- Buat Highlight untuk visual (lebih aman dari resize)
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "HitboxHighlight"
-    highlight.FillColor = hitboxESPColor
-    highlight.OutlineColor = hitboxESPColor
-    highlight.FillTransparency = hitboxTransparency
-    highlight.OutlineTransparency = 0.3
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.Adornee = p.Character
-    highlight.Parent = p.Character
-    dd.espHighlight = highlight
-
-    -- Update loop - resize dengan cara aman
-    dd.updateConn = game:GetService("RunService").Heartbeat:Connect(function()
-        -- Check validity
-        if not p or not p.Parent or not p.Character then
-            cleanHitboxForPlayer(p)
-            return
-        end
-
-        local targetHRP = p.Character:FindFirstChild("HumanoidRootPart")
-        local targetHum = p.Character:FindFirstChildOfClass("Humanoid")
-        
-        if not targetHRP or not targetHum or targetHum.Health <= 0 then
-            cleanHitboxForPlayer(p)
-            return
-        end
-
-        -- SAFE RESIZE: Gunakan pcall dan check sebelum modify
-        pcall(function()
-            -- Resize HRP - ini akan expand hitbox untuk raycast
-            -- Tapi TIDAK akan affect physics karena CanCollide tetap false
-            local newSize = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-            
-            if targetHRP.Size ~= newSize then
-                targetHRP.Size = newSize
-            end
-            
-            -- Update visual
-            targetHRP.Transparency = hitboxTransparency
-            targetHRP.Color = hitboxESPColor
-            targetHRP.Material = Enum.Material.ForceField
-            
-            -- PENTING: Pastikan CanCollide false supaya tidak nabrak
-            targetHRP.CanCollide = false
-            
-            -- CanQuery true supaya raycast kena = damage kena
-            targetHRP.CanQuery = true
-        end)
-
-        -- Update highlight jika ESP enabled
-        if dd.espHighlight and dd.espHighlight.Parent then
-            if hitboxESPEnabled then
-                dd.espHighlight.FillColor = hitboxESPColor
-                dd.espHighlight.OutlineColor = hitboxESPColor
-                dd.espHighlight.FillTransparency = hitboxTransparency
-                dd.espHighlight.Enabled = true
-            else
-                dd.espHighlight.Enabled = false
-            end
-        end
-    end)
-
-    -- Death listener
+    -- Listen for death
     dd.deathConn = hum.Died:Connect(function()
         task.wait(0.5)
         cleanHitboxForPlayer(p)
@@ -968,61 +959,106 @@ end
 
 local function updateHitboxExpander()
     if not hitboxEnabled then return end
-    
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player and p.Character then
             local hrp = p.Character:FindFirstChild("HumanoidRootPart")
             local hum = p.Character:FindFirstChildOfClass("Humanoid")
-            
             if hrp and hum and hum.Health > 0 then
                 if not hitboxData[p] then hitboxData[p] = {} end
                 local dd = hitboxData[p]
 
-                -- Buat hitbox kalau belum ada atau character berubah
-                if not dd.updateConn or dd.trackedChar ~= p.Character then
+                if not dd.overlayPart or not dd.overlayPart.Parent or dd.trackedChar ~= p.Character then
                     createHitboxOverlay(p)
+                else
+                    -- Update visual overlay
+                    pcall(function()
+                        dd.overlayPart.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                        dd.overlayPart.Transparency = hitboxTransparency
+                        dd.overlayPart.Color = hitboxESPColor
+                    end)
+                    -- FIX: Update HRP size tapi JANGAN ubah CanCollide ke true
+                    pcall(function()
+                        hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+                        hrp.Transparency = 1  -- Tetap invisible
+                        hrp.CanCollide = false -- PENTING: tetap false
+                        -- HAPUS Material ForceField dari HRP (bikin lag)
+                    end)
                 end
-                -- Update size sudah di-handle oleh updateConn di dalam createHitboxOverlay
-                
-            elseif hitboxData[p] then
+
+                -- ESP visual
+                if hitboxESPEnabled and dd.overlayPart and dd.overlayPart.Parent then
+                    if not dd.espVisual or not dd.espVisual.Parent then
+                        local b = Instance.new("BoxHandleAdornment")
+                        b.Adornee = dd.overlayPart
+                        b.Size = dd.overlayPart.Size
+                        b.Color3 = hitboxESPColor
+                        b.Transparency = 0.5
+                        b.AlwaysOnTop = true
+                        b.ZIndex = 10
+                        b.Parent = dd.overlayPart
+                        dd.espVisual = b
+                    else
+                        dd.espVisual.Size = dd.overlayPart.Size
+                        dd.espVisual.Color3 = hitboxESPColor
+                    end
+                elseif dd.espVisual then
+                    pcall(function() dd.espVisual:Destroy() end)
+                    dd.espVisual = nil
+                end
+            elseif hitboxData[p] and hitboxData[p].overlayPart then
                 cleanHitboxForPlayer(p)
             end
         end
     end
 
-    -- Cleanup disconnected players
     for p, _ in pairs(hitboxData) do
-        if not p or not p.Parent then
+        if not p.Parent then
             cleanHitboxForPlayer(p)
             hitboxData[p] = nil
         end
     end
 end
 
-local function disableHitboxExpander()
-    -- Clean semua data
-    for p, dd in pairs(hitboxData) do
-        -- Restore HRP ke normal
-        if p and p.Parent and p.Character then
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                pcall(function()
-                    -- Restore ke size normal
-                    hrp.Size = Vector3.new(2, 2, 1)
-                    hrp.Transparency = 1
-                    hrp.Material = Enum.Material.SmoothPlastic
-                    hrp.CanCollide = false
-                    hrp.CanQuery = true
-                end)
-            end
+local function cleanHitboxForPlayer(p)
+    local dd = hitboxData[p]
+    if not dd then return end
+    if dd.overlayPart and dd.overlayPart.Parent then
+        pcall(function() dd.overlayPart:Destroy() end)
+    end
+    if dd.espVisual and dd.espVisual.Parent then
+        pcall(function() dd.espVisual:Destroy() end)
+    end
+    if dd.deathConn then
+        pcall(function() dd.deathConn:Disconnect() end)
+    end
+    if dd.updateConn then
+        pcall(function() dd.updateConn:Disconnect() end)
+    end
+    -- FIX: Restore HRP ke ukuran normal
+    if p and p.Parent and p.Character then
+        local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            pcall(function()
+                hrp.Size = Vector3.new(2, 2, 1)
+                hrp.Transparency = 1
+                hrp.CanCollide = false
+                hrp.CanQuery = true
+                hrp.Material = Enum.Material.SmoothPlastic
+            end)
         end
-        
+    end
+    dd.overlayPart = nil
+    dd.espVisual = nil
+    dd.trackedChar = nil
+    dd.deathConn = nil
+    dd.updateConn = nil
+end
+
+local function disableHitboxExpander()
+    for p, _ in pairs(hitboxData) do
         cleanHitboxForPlayer(p)
     end
-    
     hitboxData = {}
-    
-    -- Extra cleanup - hapus semua highlight yang tersisa
     for _, p in ipairs(Players:GetPlayers()) do
         if p ~= player and p.Character then
             local hrp = p.Character:FindFirstChild("HumanoidRootPart")
@@ -1030,16 +1066,48 @@ local function disableHitboxExpander()
                 pcall(function()
                     hrp.Size = Vector3.new(2, 2, 1)
                     hrp.Transparency = 1
+                    hrp.CanCollide = false
+                    hrp.CanQuery = true
                     hrp.Material = Enum.Material.SmoothPlastic
                 end)
             end
-            
-            -- Hapus highlight
-            local hl = p.Character:FindFirstChild("HitboxHighlight")
-            if hl then pcall(function() hl:Destroy() end) end
         end
     end
 end
+
+	local function updateAntiHitbox()
+		if not antiHitboxEnabled then return end
+		local mc = player.Character
+		if not mc or not mc:FindFirstChild("HumanoidRootPart") then return end
+		local partNames = {"Head", "Torso", "UpperTorso", "LowerTorso", "LeftArm", "RightArm", "LeftLeg", "RightLeg", "Left Arm", "Right Arm", "Left Leg", "Right Leg", "HumanoidRootPart"}
+		for _, pn in ipairs(partNames) do
+			local part = mc:FindFirstChild(pn)
+			if part and part:IsA("BasePart") then
+				if not antiHitboxParts[pn] then antiHitboxParts[pn] = {} end
+				local d = antiHitboxParts[pn]
+				if not d.fakePart or not d.fakePart.Parent then
+					local fp = Instance.new("Part")
+					fp.Name = "AH_" .. pn
+					fp.Size = Vector3.new(antiHitboxSize, antiHitboxSize, antiHitboxSize)
+					fp.Transparency = 1
+					fp.CanCollide = false
+					fp.CanQuery = true
+					fp.Anchored = false
+					fp.Massless = true
+					fp.Parent = mc
+					local w = Instance.new("WeldConstraint")
+					w.Part0 = part
+					w.Part1 = fp
+					w.Parent = fp
+					fp.CFrame = part.CFrame
+					d.fakePart = fp
+				else
+					d.fakePart.Size = Vector3.new(antiHitboxSize, antiHitboxSize, antiHitboxSize)
+				end
+				part.CanQuery = false
+			end
+		end
+	end
 
 	-- ==========================================
 	-- AIM ASSIST
