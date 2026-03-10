@@ -38,10 +38,12 @@ local lastESPUpdate = 0
 local lastHitboxUpdate = 0
 local lastNoRecoilUpdate = 0
 local lastSilentAimUpdate = 0
+local lastDamageUpdate = 0
 local ESP_UPDATE_RATE = 0.03
 local HITBOX_UPDATE_RATE = 0.1
 local NO_RECOIL_UPDATE_RATE = 0.05
 local SILENT_AIM_UPDATE_RATE = 0.01
+local DAMAGE_UPDATE_RATE = 0.05
 
 -- Movement
 local speed = 16
@@ -84,11 +86,34 @@ local hitboxTransparency = 0.7
 local hitboxESPEnabled = false
 local hitboxESPColor = Color3.fromRGB(255, 255, 0)
 local hitboxData = {}
+local hitboxMethod = "Auto"
+local hitboxAutoDetect = true
+local hitboxDetectedMethod = nil
+local hitboxAllParts = false
+local hitboxHeadOnly = false
+local hitboxBodyMultiplier = 1
 
 -- Anti Hitbox
 local antiHitboxEnabled = false
 local antiHitboxSize = 1
 local antiHitboxParts = {}
+
+-- Damage Boost
+local damageBoostEnabled = false
+local damageMultiplier = 2
+local damageMethod = "Auto"
+local damageHooked = false
+local damageAutoHeadshot = true
+local damageHeadshotMultiplier = 2.5
+local damageCriticalEnabled = false
+local damageCriticalChance = 30
+local damageCriticalMultiplier = 3
+local damageBypassEnabled = false
+local damageInstantKill = false
+local damageInstantKillChance = 10
+local damageDetectedMethod = nil
+local damageOverriddenValues = {}
+local damageRemoteHooked = false
 
 -- Aimlock
 local aimlockEnabled = false
@@ -171,6 +196,8 @@ local noRecoilOverriddenObjects = {}
 
 local recoilKeywords = {"recoil","kickback","kick","bloom","sway","shake","camshake","camerashake","deviation","recovery","camjump","rise","climb","rebound","wobble","jitter","bounce","cameraoffset","impulse","pushback","knockback","gunraise","muzzlerise","vertical_recoil","horizontal_recoil","recoilup","recoilside"}
 local spreadKeywords = {"spread","accuracy","inaccuracy","cone","spreadcone","dispersion","scatter","randomspread","hipfire","hipspread","aimspread","movingspread","bulletspread","maxspread","minspread","basespread","bulletdeviation","firedeviation"}
+local damageKeywords = {"damage","dmg","basedamage","weapondamage","hitdamage","bodydamage","headdamage","limbdamage","bulletdamage","firedamage","attackdamage","mindamage","maxdamage","critdamage","bonusdamage","rawdamage","finaldamage","totaldamage","dps","hurt","harm","attack","power","strength"}
+local headshotKeywords = {"headshot","headshotmult","headshotmultiplier","headdamage","headbonus","criticalhead","headmult","hsbonus","hsmultiplier","headmodifier"}
 
 -- ==========================================
 -- UTILITY
@@ -199,7 +226,664 @@ local function getEquippedTool()
 end
 
 -- ==========================================
--- NO RECOIL
+-- HITBOX ALL METHODS
+-- ==========================================
+local hitboxMethods = {
+	"Part Resize",
+	"Overlay Part",
+	"CanQuery Swap",
+	"Transparency Trick",
+	"Clone Part",
+	"Weld Expander",
+	"TouchTransmitter",
+	"Collision Group"
+}
+
+local function testHitboxMethod(methodName, testPlayer)
+	if not testPlayer or not testPlayer.Character then return false end
+	local hrp = testPlayer.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp then return false end
+	
+	local success = false
+	pcall(function()
+		if methodName == "Part Resize" then
+			local head = testPlayer.Character:FindFirstChild("Head")
+			if head then
+				local oldSize = head.Size
+				head.Size = Vector3.new(5,5,5)
+				success = head.Size.X > 3
+				head.Size = oldSize
+			end
+		elseif methodName == "Overlay Part" then
+			local test = Instance.new("Part")
+			test.Parent = testPlayer.Character
+			test.Size = Vector3.new(10,10,10)
+			test.CanQuery = true
+			success = test.Parent ~= nil
+			test:Destroy()
+		elseif methodName == "CanQuery Swap" then
+			local oldQ = hrp.CanQuery
+			hrp.CanQuery = false
+			success = not hrp.CanQuery
+			hrp.CanQuery = oldQ
+		elseif methodName == "Transparency Trick" then
+			success = true -- Always works
+		elseif methodName == "Clone Part" then
+			local clone = hrp:Clone()
+			clone.Parent = testPlayer.Character
+			success = clone.Parent ~= nil
+			clone:Destroy()
+		elseif methodName == "Weld Expander" then
+			local test = Instance.new("Part")
+			local weld = Instance.new("WeldConstraint")
+			weld.Part0 = hrp
+			weld.Part1 = test
+			test.Parent = testPlayer.Character
+			weld.Parent = test
+			success = weld.Parent ~= nil
+			test:Destroy()
+		elseif methodName == "TouchTransmitter" then
+			success = true -- Check later
+		elseif methodName == "Collision Group" then
+			success = pcall(function() 
+				game:GetService("PhysicsService"):GetCollisionGroupId("Default")
+			end)
+		end
+	end)
+	return success
+end
+
+local function autoDetectHitboxMethod()
+	local workingMethods = {}
+	
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			for _, method in ipairs(hitboxMethods) do
+				if testHitboxMethod(method, p) then
+					table.insert(workingMethods, method)
+				end
+			end
+			break
+		end
+	end
+	
+	-- Priority order
+	local priority = {"Overlay Part", "Part Resize", "CanQuery Swap", "Weld Expander", "Clone Part"}
+	for _, method in ipairs(priority) do
+		for _, working in ipairs(workingMethods) do
+			if method == working then
+				hitboxDetectedMethod = method
+				return method
+			end
+		end
+	end
+	
+	hitboxDetectedMethod = workingMethods[1] or "Overlay Part"
+	return hitboxDetectedMethod
+end
+
+local function cleanHitboxForPlayer(p)
+	local dd = hitboxData[p] if not dd then return end
+	if dd.overlayPart and dd.overlayPart.Parent then pcall(function() dd.overlayPart:Destroy() end) end
+	if dd.espVisual and dd.espVisual.Parent then pcall(function() dd.espVisual:Destroy() end) end
+	if dd.deathConn then pcall(function() dd.deathConn:Disconnect() end) end
+	if dd.clonedParts then for _, cp in pairs(dd.clonedParts) do pcall(function() cp:Destroy() end) end end
+	if dd.expandedParts then for pn, data in pairs(dd.expandedParts) do
+		pcall(function() 
+			local part = p.Character and p.Character:FindFirstChild(pn)
+			if part and data.originalSize then part.Size = data.originalSize end
+		end)
+	end end
+	if p.Character then 
+		local hrp = p.Character:FindFirstChild("HumanoidRootPart") 
+		if hrp then hrp.CanQuery = true end 
+		for _, part in ipairs(p.Character:GetDescendants()) do
+			if part:IsA("BasePart") then part.CanQuery = true end
+		end
+	end
+	hitboxData[p] = nil
+end
+
+local function applyHitboxMethod(p, method)
+	if not p.Character then return end
+	local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+	local hum = p.Character:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum or hum.Health <= 0 then return end
+	
+	if not hitboxData[p] then hitboxData[p] = {expandedParts = {}, clonedParts = {}} end
+	local dd = hitboxData[p]
+	dd.trackedChar = p.Character
+	
+	local targetParts = hitboxHeadOnly and {"Head"} or (hitboxAllParts and {"Head","HumanoidRootPart","UpperTorso","LowerTorso","Torso","LeftArm","RightArm","LeftLeg","RightLeg","Left Arm","Right Arm","Left Leg","Right Leg"} or {"Head","HumanoidRootPart"})
+	
+	if method == "Part Resize" then
+		for _, pn in ipairs(targetParts) do
+			local part = p.Character:FindFirstChild(pn)
+			if part and part:IsA("BasePart") then
+				if not dd.expandedParts[pn] then
+					dd.expandedParts[pn] = {originalSize = part.Size}
+				end
+				local mult = pn == "Head" and 1.5 or hitboxBodyMultiplier
+				local newSize = hitboxSize * mult
+				pcall(function() part.Size = Vector3.new(newSize, newSize, newSize) end)
+			end
+		end
+		
+	elseif method == "Overlay Part" then
+		if dd.overlayPart and dd.overlayPart.Parent then pcall(function() dd.overlayPart:Destroy() end) end
+		local ov = Instance.new("Part") 
+		ov.Name = "HitboxOverlay"
+		ov.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+		ov.Transparency = hitboxTransparency 
+		ov.CanCollide = false 
+		ov.CanQuery = true
+		ov.Anchored = false 
+		ov.Massless = true 
+		ov.Material = Enum.Material.ForceField
+		ov.Color = hitboxESPColor 
+		ov.Parent = p.Character
+		local w = Instance.new("WeldConstraint") 
+		w.Part0 = hrp 
+		w.Part1 = ov 
+		w.Parent = ov
+		ov.CFrame = hrp.CFrame 
+		hrp.CanQuery = false
+		dd.overlayPart = ov
+		
+	elseif method == "CanQuery Swap" then
+		for _, pn in ipairs(targetParts) do
+			local part = p.Character:FindFirstChild(pn)
+			if part and part:IsA("BasePart") then
+				pcall(function() part.CanQuery = true end)
+			end
+		end
+		-- Create invisible expanded hitbox
+		if not dd.overlayPart or not dd.overlayPart.Parent then
+			local ov = Instance.new("Part")
+			ov.Name = "InvisibleHitbox"
+			ov.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+			ov.Transparency = 1
+			ov.CanCollide = false
+			ov.CanQuery = true
+			ov.Anchored = false
+			ov.Massless = true
+			ov.Parent = p.Character
+			local w = Instance.new("WeldConstraint")
+			w.Part0 = hrp
+			w.Part1 = ov
+			w.Parent = ov
+			ov.CFrame = hrp.CFrame
+			dd.overlayPart = ov
+		else
+			dd.overlayPart.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+		end
+		
+	elseif method == "Weld Expander" then
+		for _, pn in ipairs(targetParts) do
+			local part = p.Character:FindFirstChild(pn)
+			if part and part:IsA("BasePart") and not dd.clonedParts[pn] then
+				local expander = Instance.new("Part")
+				expander.Name = "Expander_" .. pn
+				expander.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+				expander.Transparency = hitboxTransparency
+				expander.CanCollide = false
+				expander.CanQuery = true
+				expander.Anchored = false
+				expander.Massless = true
+				expander.Material = Enum.Material.ForceField
+				expander.Color = hitboxESPColor
+				expander.Parent = p.Character
+				local w = Instance.new("WeldConstraint")
+				w.Part0 = part
+				w.Part1 = expander
+				w.Parent = expander
+				expander.CFrame = part.CFrame
+				dd.clonedParts[pn] = expander
+			elseif dd.clonedParts[pn] then
+				dd.clonedParts[pn].Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+				dd.clonedParts[pn].Transparency = hitboxTransparency
+				dd.clonedParts[pn].Color = hitboxESPColor
+			end
+		end
+		
+	elseif method == "Clone Part" then
+		for _, pn in ipairs(targetParts) do
+			local part = p.Character:FindFirstChild(pn)
+			if part and part:IsA("BasePart") then
+				if not dd.clonedParts[pn] or not dd.clonedParts[pn].Parent then
+					local clone = part:Clone()
+					clone.Name = "CloneHitbox_" .. pn
+					clone.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+					clone.Transparency = hitboxTransparency
+					clone.CanCollide = false
+					clone.CanQuery = true
+					clone.Anchored = false
+					clone.Massless = true
+					clone.Material = Enum.Material.ForceField
+					clone.Color = hitboxESPColor
+					for _, child in ipairs(clone:GetChildren()) do
+						if not child:IsA("WeldConstraint") then child:Destroy() end
+					end
+					clone.Parent = p.Character
+					local w = Instance.new("WeldConstraint")
+					w.Part0 = part
+					w.Part1 = clone
+					w.Parent = clone
+					clone.CFrame = part.CFrame
+					part.CanQuery = false
+					dd.clonedParts[pn] = clone
+				else
+					dd.clonedParts[pn].Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+					dd.clonedParts[pn].Transparency = hitboxTransparency
+					dd.clonedParts[pn].Color = hitboxESPColor
+				end
+			end
+		end
+		
+	elseif method == "Transparency Trick" then
+		for _, pn in ipairs(targetParts) do
+			local part = p.Character:FindFirstChild(pn)
+			if part and part:IsA("BasePart") then
+				if not dd.expandedParts[pn] then
+					dd.expandedParts[pn] = {originalSize = part.Size, originalTransparency = part.Transparency}
+				end
+				pcall(function()
+					part.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+					part.Transparency = 0.99
+				end)
+			end
+		end
+	end
+	
+	-- Death connection
+	if not dd.deathConn then
+		dd.deathConn = hum.Died:Connect(function() 
+			task.wait(0.5) 
+			cleanHitboxForPlayer(p) 
+		end)
+	end
+end
+
+local function updateHitboxExpander()
+	if not hitboxEnabled then return end
+	
+	local method = hitboxMethod
+	if hitboxAutoDetect and hitboxMethod == "Auto" then
+		if not hitboxDetectedMethod then
+			hitboxDetectedMethod = autoDetectHitboxMethod()
+		end
+		method = hitboxDetectedMethod
+	end
+	
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+			local hum = p.Character:FindFirstChildOfClass("Humanoid")
+			if hrp and hum and hum.Health > 0 then
+				local dd = hitboxData[p]
+				if not dd or dd.trackedChar ~= p.Character then
+					cleanHitboxForPlayer(p)
+					applyHitboxMethod(p, method)
+				else
+					applyHitboxMethod(p, method)
+				end
+				
+				-- ESP Visual
+				if hitboxESPEnabled and dd and dd.overlayPart and dd.overlayPart.Parent then
+					if not dd.espVisual or not dd.espVisual.Parent then
+						local b = Instance.new("BoxHandleAdornment")
+						b.Adornee = dd.overlayPart
+						b.Size = dd.overlayPart.Size
+						b.Color3 = hitboxESPColor
+						b.Transparency = 0.5
+						b.AlwaysOnTop = true
+						b.ZIndex = 10
+						b.Parent = dd.overlayPart
+						dd.espVisual = b
+					else
+						dd.espVisual.Size = dd.overlayPart.Size
+						dd.espVisual.Color3 = hitboxESPColor
+					end
+				elseif dd and dd.espVisual then
+					pcall(function() dd.espVisual:Destroy() end)
+					dd.espVisual = nil
+				end
+			elseif hitboxData[p] then
+				cleanHitboxForPlayer(p)
+			end
+		end
+	end
+	
+	for p in pairs(hitboxData) do
+		if not p.Parent then
+			cleanHitboxForPlayer(p)
+		end
+	end
+end
+
+local function disableHitboxExpander()
+	for p in pairs(hitboxData) do
+		cleanHitboxForPlayer(p)
+	end
+	hitboxData = {}
+	hitboxDetectedMethod = nil
+end
+
+-- ==========================================
+-- DAMAGE BOOST SYSTEM
+-- ==========================================
+local damageMethods = {
+	"Value Override",
+	"Remote Intercept",
+	"Module Override",
+	"Attribute Override",
+	"Hybrid"
+}
+
+local function autoDetectDamageMethod()
+	local detectedMethods = {}
+	local tool = getEquippedTool()
+	
+	if tool then
+		-- Check for value instances
+		for _, desc in ipairs(tool:GetDescendants()) do
+			if desc:IsA("ValueBase") and containsKeyword(desc.Name, damageKeywords) then
+				table.insert(detectedMethods, "Value Override")
+				break
+			end
+		end
+		
+		-- Check for attributes
+		pcall(function()
+			for name, val in pairs(tool:GetAttributes()) do
+				if containsKeyword(name, damageKeywords) then
+					table.insert(detectedMethods, "Attribute Override")
+					break
+				end
+			end
+		end)
+		
+		-- Check for modules
+		for _, desc in ipairs(tool:GetDescendants()) do
+			if desc:IsA("ModuleScript") then
+				local n = desc.Name:lower()
+				if n:find("damage") or n:find("weapon") or n:find("gun") or n:find("config") then
+					table.insert(detectedMethods, "Module Override")
+					break
+				end
+			end
+		end
+	end
+	
+	-- Check ReplicatedStorage for remotes
+	pcall(function()
+		for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
+			if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
+				local n = remote.Name:lower()
+				if n:find("damage") or n:find("hit") or n:find("attack") then
+					table.insert(detectedMethods, "Remote Intercept")
+					break
+				end
+			end
+		end
+	end)
+	
+	if #detectedMethods > 1 then
+		damageDetectedMethod = "Hybrid"
+	elseif #detectedMethods == 1 then
+		damageDetectedMethod = detectedMethods[1]
+	else
+		damageDetectedMethod = "Remote Intercept"
+	end
+	
+	return damageDetectedMethod
+end
+
+local function overrideDamageValue(obj, multiplier)
+	if not isValidInstance(obj) or not obj:IsA("ValueBase") then return end
+	local key = tostring(obj)
+	if damageOverriddenValues[key] then return end
+	
+	local ok, val = pcall(function() return obj.Value end)
+	if not ok or typeof(val) ~= "number" then return end
+	
+	damageOverriddenValues[key] = {obj = obj, originalValue = val, type = "value"}
+	pcall(function() obj.Value = val * multiplier end)
+end
+
+local function overrideDamageAttribute(obj, attrName, multiplier)
+	if not isValidInstance(obj) then return end
+	local key = tostring(obj) .. "_attr_" .. attrName
+	if damageOverriddenValues[key] then return end
+	
+	local ok, val = pcall(function() return obj:GetAttribute(attrName) end)
+	if not ok or typeof(val) ~= "number" then return end
+	
+	damageOverriddenValues[key] = {obj = obj, attrName = attrName, originalValue = val, type = "attribute"}
+	pcall(function() obj:SetAttribute(attrName, val * multiplier) end)
+end
+
+local function overrideTableDamage(tbl, depth)
+	depth = depth or 0
+	if depth > 4 or typeof(tbl) ~= "table" then return end
+	
+	for key, val in pairs(tbl) do
+		if typeof(key) == "string" and typeof(val) == "number" then
+			if containsKeyword(key, damageKeywords) then
+				tbl[key] = val * damageMultiplier
+			end
+			if damageAutoHeadshot and containsKeyword(key, headshotKeywords) then
+				tbl[key] = val * damageHeadshotMultiplier
+			end
+		elseif typeof(val) == "table" then
+			overrideTableDamage(val, depth + 1)
+		end
+	end
+end
+
+local function scanToolForDamage(tool)
+	if not tool or not isValidInstance(tool) or not tool:IsA("Tool") then return end
+	local char = player.Character
+	if not char or tool.Parent ~= char then return end
+	
+	local mult = damageMultiplier
+	
+	-- Scan ValueBase instances
+	for _, desc in ipairs(tool:GetDescendants()) do
+		if not isValidInstance(desc) then continue end
+		if desc:IsA("ValueBase") then
+			if containsKeyword(desc.Name, damageKeywords) then
+				overrideDamageValue(desc, mult)
+			end
+			if damageAutoHeadshot and containsKeyword(desc.Name, headshotKeywords) then
+				overrideDamageValue(desc, damageHeadshotMultiplier)
+			end
+		end
+		
+		-- Scan attributes
+		pcall(function()
+			for an, av in pairs(desc:GetAttributes()) do
+				if typeof(av) == "number" then
+					if containsKeyword(an, damageKeywords) then
+						overrideDamageAttribute(desc, an, mult)
+					end
+					if damageAutoHeadshot and containsKeyword(an, headshotKeywords) then
+						overrideDamageAttribute(desc, an, damageHeadshotMultiplier)
+					end
+				end
+			end
+		end)
+	end
+	
+	-- Scan tool attributes
+	pcall(function()
+		for an, av in pairs(tool:GetAttributes()) do
+			if typeof(av) == "number" then
+				if containsKeyword(an, damageKeywords) then
+					overrideDamageAttribute(tool, an, mult)
+				end
+				if damageAutoHeadshot and containsKeyword(an, headshotKeywords) then
+					overrideDamageAttribute(tool, an, damageHeadshotMultiplier)
+				end
+			end
+		end
+	end)
+	
+	-- Scan modules
+	for _, desc in ipairs(tool:GetDescendants()) do
+		if desc:IsA("ModuleScript") then
+			local n = desc.Name:lower()
+			if n:find("damage") or n:find("weapon") or n:find("gun") or n:find("config") or n:find("stat") then
+				pcall(function()
+					local md = require(desc)
+					if typeof(md) == "table" then
+						overrideTableDamage(md)
+					end
+				end)
+			end
+		end
+	end
+end
+
+local function hookDamageRemotes()
+	if damageRemoteHooked then return end
+	damageRemoteHooked = true
+	
+	pcall(function()
+		local hf = hookfunction or replaceclosure
+		if not hf then return end
+		
+		local oldFS
+		oldFS = hf(Instance.new("RemoteEvent").FireServer, newcclosure(function(self, ...)
+			if not damageBoostEnabled then return oldFS(self, ...) end
+			
+			local ok, name = pcall(function() return self.Name:lower() end)
+			if not ok then return oldFS(self, ...) end
+			
+			local isDamageRemote = name:find("damage") or name:find("hit") or name:find("attack") or 
+				name:find("hurt") or name:find("harm") or name:find("deal") or name:find("apply")
+			
+			if not isDamageRemote then return oldFS(self, ...) end
+			
+			local args = {...}
+			for i, arg in ipairs(args) do
+				if typeof(arg) == "number" then
+					-- Check if it's likely a damage value (reasonable range)
+					if arg > 0 and arg < 10000 then
+						local newDmg = arg * damageMultiplier
+						
+						-- Critical hit
+						if damageCriticalEnabled and math.random(1, 100) <= damageCriticalChance then
+							newDmg = newDmg * damageCriticalMultiplier
+						end
+						
+						-- Instant kill
+						if damageInstantKill and math.random(1, 100) <= damageInstantKillChance then
+							newDmg = 99999
+						end
+						
+						args[i] = newDmg
+					end
+				elseif typeof(arg) == "table" then
+					for k, v in pairs(arg) do
+						if typeof(k) == "string" and typeof(v) == "number" then
+							if containsKeyword(k, damageKeywords) then
+								local newDmg = v * damageMultiplier
+								if damageCriticalEnabled and math.random(1, 100) <= damageCriticalChance then
+									newDmg = newDmg * damageCriticalMultiplier
+								end
+								if damageInstantKill and math.random(1, 100) <= damageInstantKillChance then
+									newDmg = 99999
+								end
+								arg[k] = newDmg
+							end
+							if damageAutoHeadshot and containsKeyword(k, headshotKeywords) then
+								arg[k] = v * damageHeadshotMultiplier
+							end
+						end
+					end
+				end
+			end
+			
+			return oldFS(self, unpack(args))
+		end))
+	end)
+end
+
+local function restoreAllDamageValues()
+	for _, d in pairs(damageOverriddenValues) do
+		pcall(function()
+			if d.type == "value" and isValidInstance(d.obj) then
+				d.obj.Value = d.originalValue
+			elseif d.type == "attribute" and isValidInstance(d.obj) then
+				d.obj:SetAttribute(d.attrName, d.originalValue)
+			end
+		end)
+	end
+	damageOverriddenValues = {}
+end
+
+local function refreshDamageOverrides()
+	if not damageBoostEnabled then return end
+	
+	for key, d in pairs(damageOverriddenValues) do
+		if not isValidInstance(d.obj) then
+			damageOverriddenValues[key] = nil
+			continue
+		end
+		
+		pcall(function()
+			if d.type == "value" then
+				local cv = d.obj.Value
+				if typeof(cv) == "number" then
+					local tv = d.originalValue * damageMultiplier
+					if math.abs(cv - tv) > 0.001 and math.abs(cv - d.originalValue) < 0.001 then
+						d.obj.Value = tv
+					end
+				end
+			elseif d.type == "attribute" then
+				local cv = d.obj:GetAttribute(d.attrName)
+				if typeof(cv) == "number" then
+					local tv = d.originalValue * damageMultiplier
+					if math.abs(cv - tv) > 0.001 and math.abs(cv - d.originalValue) < 0.001 then
+						d.obj:SetAttribute(d.attrName, tv)
+					end
+				end
+			end
+		end)
+	end
+end
+
+local function deepScanDamageModules()
+	if not damageBoostEnabled then return 0 end
+	
+	local places = {ReplicatedStorage}
+	pcall(function() table.insert(places, player.PlayerScripts) end)
+	
+	local count = 0
+	for _, place in ipairs(places) do
+		pcall(function()
+			for _, desc in ipairs(place:GetDescendants()) do
+				if desc:IsA("ModuleScript") then
+					local n = desc.Name:lower()
+					if n:find("damage") or n:find("weapon") or n:find("gun") or n:find("config") or n:find("combat") then
+						pcall(function()
+							local md = require(desc)
+							if typeof(md) == "table" then
+								overrideTableDamage(md)
+								count = count + 1
+							end
+						end)
+					end
+				end
+			end
+		end)
+	end
+	return count
+end
+
+-- ==========================================
+-- NO RECOIL (Same as before)
 -- ==========================================
 local function overrideSingleValue(obj, isSpread)
 	if not isValidInstance(obj) or not obj:IsA("ValueBase") then return end
@@ -286,6 +970,11 @@ local function scanEquippedTool(tool)
 			end
 		end
 	end
+	
+	-- Also scan for damage if enabled
+	if damageBoostEnabled then
+		scanToolForDamage(tool)
+	end
 end
 
 local function restoreAllRecoilValues()
@@ -362,15 +1051,29 @@ local function setupToolListener(char)
 	if not char then return end
 	if noRecoilToolConnection then pcall(function() noRecoilToolConnection:Disconnect() end) end
 	noRecoilToolConnection = char.ChildAdded:Connect(function(child)
-		if child:IsA("Tool") and (noRecoilEnabled or noSpreadEnabled) then
+		if child:IsA("Tool") then
 			task.wait(0.3)
-			if isValidInstance(child) and child.Parent == char then scanEquippedTool(child) end
+			if isValidInstance(child) and child.Parent == char then 
+				if noRecoilEnabled or noSpreadEnabled then
+					scanEquippedTool(child) 
+				end
+				if damageBoostEnabled then
+					scanToolForDamage(child)
+				end
+			end
 		end
 	end)
 	task.wait(0.5)
 	if not isValidInstance(char) then return end
 	for _, child in ipairs(char:GetChildren()) do
-		if child:IsA("Tool") and (noRecoilEnabled or noSpreadEnabled) then scanEquippedTool(child) end
+		if child:IsA("Tool") then 
+			if noRecoilEnabled or noSpreadEnabled then
+				scanEquippedTool(child) 
+			end
+			if damageBoostEnabled then
+				scanToolForDamage(child)
+			end
+		end
 	end
 end
 
@@ -438,7 +1141,7 @@ local function hookNoRecoilRemotes()
 end
 
 -- ==========================================
--- SILENT AIM
+-- SILENT AIM (Same as before, abbreviated)
 -- ==========================================
 local function canSeeTarget(fromPos, targetPart)
 	if not silentAimVisibleCheck then return true end
@@ -601,25 +1304,6 @@ local function hookSilentAim()
 			return oldFPR(self, ray, ignoreList, ...)
 		end))
 	end)
-
-	pcall(function()
-		local hf = hookfunction or replaceclosure
-		if not hf then return end
-		local oldFPR2 = workspace.FindPartOnRayWithIgnoreList
-		if not oldFPR2 then return end
-		hf(workspace.FindPartOnRayWithIgnoreList, newcclosure(function(self, ray, ignoreList, ...)
-			if not silentAimEnabled then return oldFPR2(self, ray, ignoreList, ...) end
-			local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-			if myHrp and (ray.Origin-myHrp.Position).Magnitude < 15 then
-				local t, tp = getSilentAimTarget()
-				if t and tp and math.random(1,100) <= silentAimHitChance then
-					local tPos = getPredictedPosition(tp, t.Character)
-					return oldFPR2(self, Ray.new(ray.Origin, (tPos-ray.Origin).Unit * ray.Direction.Magnitude), ignoreList, ...)
-				end
-			end
-			return oldFPR2(self, ray, ignoreList, ...)
-		end))
-	end)
 end
 
 local function hookBulletRedirect()
@@ -667,28 +1351,6 @@ local function hookBulletRedirect()
 				end
 			end
 			return oldFS(self, unpack(args))
-		end))
-	end)
-	pcall(function()
-		local hf = hookfunction or replaceclosure
-		if not hf then return end
-		local oldIS
-		oldIS = hf(Instance.new("RemoteFunction").InvokeServer, newcclosure(function(self, ...)
-			if not (silentAimEnabled or bulletRedirectEnabled) then return oldIS(self, ...) end
-			local ok, name = pcall(function() return self.Name:lower() end)
-			if not ok then return oldIS(self, ...) end
-			local isShoot = name:find("fire") or name:find("shoot") or name:find("attack") or name:find("bullet") or name:find("hit") or name:find("damage")
-			if not isShoot then return oldIS(self, ...) end
-			local t, tp = getSilentAimTarget()
-			if not t or not tp or math.random(1,100)>silentAimHitChance then return oldIS(self, ...) end
-			local tPos = getPredictedPosition(tp, t.Character)
-			local args = {...}
-			for i, arg in ipairs(args) do
-				if typeof(arg)=="Vector3" and arg.Unit:Dot(camera.CFrame.LookVector)>0.5 then args[i]=(tPos-camera.CFrame.Position).Unit*arg.Magnitude
-				elseif typeof(arg)=="CFrame" then args[i]=CFrame.new(arg.Position,tPos)
-				elseif typeof(arg)=="Instance" and arg:IsA("BasePart") then args[i]=tp end
-			end
-			return oldIS(self, unpack(args))
 		end))
 	end)
 end
@@ -745,76 +1407,8 @@ local function applyNoclip()
 end
 
 -- ==========================================
--- HITBOX
+-- ANTI HITBOX
 -- ==========================================
-local function cleanHitboxForPlayer(p)
-	local dd = hitboxData[p] if not dd then return end
-	if dd.overlayPart and dd.overlayPart.Parent then pcall(function() dd.overlayPart:Destroy() end) end
-	if dd.espVisual and dd.espVisual.Parent then pcall(function() dd.espVisual:Destroy() end) end
-	if dd.deathConn then pcall(function() dd.deathConn:Disconnect() end) end
-	if p.Character then local hrp = p.Character:FindFirstChild("HumanoidRootPart") if hrp then hrp.CanQuery = true end end
-	dd.overlayPart=nil dd.espVisual=nil dd.trackedChar=nil dd.deathConn=nil
-end
-
-local function createHitboxOverlay(p)
-	if not p.Character then return end
-	local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-	local hum = p.Character:FindFirstChildOfClass("Humanoid")
-	if not hrp or not hum or hum.Health <= 0 then return end
-	if not hitboxData[p] then hitboxData[p] = {} end
-	local dd = hitboxData[p]
-	if dd.overlayPart and dd.overlayPart.Parent then pcall(function() dd.overlayPart:Destroy() end) end
-	if dd.espVisual and dd.espVisual.Parent then pcall(function() dd.espVisual:Destroy() end) end
-	local ov = Instance.new("Part") ov.Name="HitboxOverlay"
-	ov.Size=Vector3.new(hitboxSize,hitboxSize,hitboxSize)
-	ov.Transparency=hitboxTransparency ov.CanCollide=false ov.CanQuery=true
-	ov.Anchored=false ov.Massless=true ov.Material=Enum.Material.ForceField
-	ov.Color=hitboxESPColor ov.Parent=p.Character
-	local w = Instance.new("WeldConstraint") w.Part0=hrp w.Part1=ov w.Parent=ov
-	ov.CFrame=hrp.CFrame hrp.CanQuery=false
-	dd.overlayPart=ov dd.trackedChar=p.Character
-	dd.deathConn = hum.Died:Connect(function() task.wait(0.5) cleanHitboxForPlayer(p) end)
-end
-
-local function updateHitboxExpander()
-	if not hitboxEnabled then return end
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= player and p.Character then
-			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-			local hum = p.Character:FindFirstChildOfClass("Humanoid")
-			if hrp and hum and hum.Health > 0 then
-				if not hitboxData[p] then hitboxData[p] = {} end
-				local dd = hitboxData[p]
-				if not dd.overlayPart or not dd.overlayPart.Parent or dd.trackedChar ~= p.Character then
-					if dd.deathConn then pcall(function() dd.deathConn:Disconnect() end) end
-					createHitboxOverlay(p)
-				else
-					dd.overlayPart.Size=Vector3.new(hitboxSize,hitboxSize,hitboxSize)
-					dd.overlayPart.Transparency=hitboxTransparency
-					dd.overlayPart.Color=hitboxESPColor
-					if hrp.CanQuery then hrp.CanQuery=false end
-				end
-				if hitboxESPEnabled and dd.overlayPart and dd.overlayPart.Parent then
-					if not dd.espVisual or not dd.espVisual.Parent then
-						local b = Instance.new("BoxHandleAdornment") b.Adornee=dd.overlayPart b.Size=dd.overlayPart.Size
-						b.Color3=hitboxESPColor b.Transparency=0.5 b.AlwaysOnTop=true b.ZIndex=10 b.Parent=dd.overlayPart
-						dd.espVisual=b
-					else dd.espVisual.Size=dd.overlayPart.Size dd.espVisual.Color3=hitboxESPColor end
-				elseif dd.espVisual then pcall(function() dd.espVisual:Destroy() end) dd.espVisual=nil end
-			elseif hitboxData[p] and hitboxData[p].overlayPart then cleanHitboxForPlayer(p) end
-		end
-	end
-	for p in pairs(hitboxData) do if not p.Parent then cleanHitboxForPlayer(p) hitboxData[p]=nil end end
-end
-
-local function disableHitboxExpander()
-	for p in pairs(hitboxData) do
-		if hitboxData[p].deathConn then pcall(function() hitboxData[p].deathConn:Disconnect() end) end
-		cleanHitboxForPlayer(p)
-	end
-	hitboxData = {}
-end
-
 local function updateAntiHitbox()
 	if not antiHitboxEnabled then return end
 	local mc = player.Character
@@ -982,7 +1576,6 @@ local function updatePlayerESP()
 			d.name.Size=14 d.name.Center=true d.name.Outline=true d.name.Font=2 d.name.Visible=false
 			d.distText.Size=12 d.distText.Center=true d.distText.Outline=true d.distText.Font=2 d.distText.Visible=false
 			d.healthText.Size=12 d.healthText.Center=true d.healthText.Outline=true d.healthText.Font=2 d.healthText.Visible=false
-			d.healthBar.Thickness=3 d.healthBar.Visible=false
 			d.healthBg.Thickness=5 d.healthBg.Visible=false d.healthBg.Color=Color3.fromRGB(40,40,40)
 		end
 		local d=espObjects[tp]
@@ -1059,10 +1652,10 @@ local function clearAllESP()
 end
 
 -- ==========================================
--- WINDOW
+-- WINDOW & TABS
 -- ==========================================
 local Window = Rayfield:CreateWindow({
-	Name = "RyuExploit v3.6",
+	Name = "RyuExploit v3.7",
 	LoadingTitle = "RyuExploit Loading",
 	LoadingSubtitle = "By NubyCode",
 	ConfigurationSaving = {Enabled = true, FolderName = "RyuExploit", FileName = "Config"},
@@ -1123,6 +1716,78 @@ silentAimFOVCircle.Visible=false silentAimFOVCircle.Transparency=0.6
 silentAimVisualLineObj = Drawing.new("Line")
 silentAimVisualLineObj.Color=Color3.fromRGB(255,0,255) silentAimVisualLineObj.Thickness=1
 silentAimVisualLineObj.Visible=false silentAimVisualLineObj.Transparency=0.5
+
+-- ==========================================
+-- TAB: Damage Boost (NEW!)
+-- ==========================================
+local DamageTab = Window:CreateTab("Damage Boost", 4483362458)
+DamageTab:CreateSection("Damage Multiplier")
+DamageTab:CreateToggle({Name="Enable Damage Boost",CurrentValue=false,Flag="DmgBoost",Callback=function(V)
+	damageBoostEnabled=V
+	if V then
+		local method = autoDetectDamageMethod()
+		hookDamageRemotes()
+		local tool = getEquippedTool()
+		if tool then scanToolForDamage(tool) end
+		Rayfield:Notify({Title="Damage Boost",Content="ON! Method: "..method.."\nDamage x"..damageMultiplier,Duration=4})
+	else
+		restoreAllDamageValues()
+	end
+end})
+DamageTab:CreateSlider({Name="Damage Multiplier",Range={1,10},Increment=0.5,Suffix="x",CurrentValue=2,Flag="DmgMult",Callback=function(V) 
+	damageMultiplier=V 
+	if damageBoostEnabled then
+		restoreAllDamageValues()
+		local tool = getEquippedTool()
+		if tool then scanToolForDamage(tool) end
+	end
+end})
+DamageTab:CreateDropdown({Name="Method",Options={"Auto","Value Override","Remote Intercept","Module Override","Hybrid"},CurrentOption={"Auto"},MultipleOptions=false,Flag="DmgMethod",Callback=function(O) 
+	damageMethod=O[1] or O 
+	if damageMethod ~= "Auto" then
+		damageDetectedMethod = damageMethod
+	end
+end})
+
+DamageTab:CreateSection("Headshot Boost")
+DamageTab:CreateToggle({Name="Auto Headshot Damage",CurrentValue=true,Flag="AutoHSDmg",Callback=function(V) damageAutoHeadshot=V end})
+DamageTab:CreateSlider({Name="Headshot Multiplier",Range={1,5},Increment=0.5,Suffix="x",CurrentValue=2.5,Flag="HSMult",Callback=function(V) damageHeadshotMultiplier=V end})
+
+DamageTab:CreateSection("Critical Hit")
+DamageTab:CreateToggle({Name="Enable Critical Hit",CurrentValue=false,Flag="CritEnable",Callback=function(V) damageCriticalEnabled=V end})
+DamageTab:CreateSlider({Name="Critical Chance",Range={1,100},Increment=5,Suffix="%",CurrentValue=30,Flag="CritChance",Callback=function(V) damageCriticalChance=V end})
+DamageTab:CreateSlider({Name="Critical Multiplier",Range={2,10},Increment=0.5,Suffix="x",CurrentValue=3,Flag="CritMult",Callback=function(V) damageCriticalMultiplier=V end})
+
+DamageTab:CreateSection("Instant Kill (USE WITH CAUTION)")
+DamageTab:CreateToggle({Name="Enable Instant Kill",CurrentValue=false,Flag="InstantKill",Callback=function(V) 
+	damageInstantKill=V 
+	if V then
+		Rayfield:Notify({Title="WARNING",Content="Instant Kill enabled!\nMay trigger anti-cheat!",Duration=5})
+	end
+end})
+DamageTab:CreateSlider({Name="Instant Kill Chance",Range={1,100},Increment=5,Suffix="%",CurrentValue=10,Flag="IKChance",Callback=function(V) damageInstantKillChance=V end})
+
+DamageTab:CreateSection("Actions")
+DamageTab:CreateButton({Name="Force Scan Weapon",Callback=function()
+	local tool = getEquippedTool()
+	if tool then
+		restoreAllDamageValues()
+		scanToolForDamage(tool)
+		local count = 0
+		for _ in pairs(damageOverriddenValues) do count=count+1 end
+		Rayfield:Notify({Title="Scan Complete",Content="Found & boosted "..count.." damage values on: "..tool.Name,Duration=4})
+	else
+		Rayfield:Notify({Title="Error",Content="Equip weapon first!",Duration=3})
+	end
+end})
+DamageTab:CreateButton({Name="Deep Scan Modules",Callback=function()
+	local count = deepScanDamageModules()
+	Rayfield:Notify({Title="Deep Scan",Content="Overrode "..count.." modules with damage boost",Duration=4})
+end})
+DamageTab:CreateButton({Name="Restore Original Damage",Callback=function()
+	restoreAllDamageValues()
+	Rayfield:Notify({Title="Restored",Content="All damage values restored",Duration=3})
+end})
 
 -- ==========================================
 -- TAB: No Recoil
@@ -1241,26 +1906,102 @@ ESPTab:CreateColorPicker({Name="Enemy Color",Color=Color3.fromRGB(255,0,0),Flag=
 ESPTab:CreateColorPicker({Name="Team Color",Color=Color3.fromRGB(0,255,0),Flag="ETeamC",Callback=function(V) espTeamColor=V end})
 
 -- ==========================================
--- TAB: Hitbox
+-- TAB: Hitbox (ENHANCED!)
 -- ==========================================
 local HitboxTab = Window:CreateTab("Hitbox", 4483362458)
-HitboxTab:CreateSection("Hitbox Expander")
-HitboxTab:CreateToggle({Name="Enable",CurrentValue=false,Flag="HB",Callback=function(V) hitboxEnabled=V if not V then disableHitboxExpander() end end})
-HitboxTab:CreateSlider({Name="Size",Range={3,50},Increment=1,Suffix=" Studs",CurrentValue=10,Flag="HBSize",Callback=function(V) hitboxSize=V end})
-HitboxTab:CreateSlider({Name="Transparency",Range={0,100},Increment=5,Suffix="%",CurrentValue=70,Flag="HBTr",Callback=function(V) hitboxTransparency=V/100 end})
-HitboxTab:CreateToggle({Name="Show ESP",CurrentValue=false,Flag="HBESP",Callback=function(V) hitboxESPEnabled=V if not V then for _,d in pairs(hitboxData) do if d.espVisual then pcall(function() d.espVisual:Destroy() end) d.espVisual=nil end end end end})
-HitboxTab:CreateColorPicker({Name="Color",Color=Color3.fromRGB(255,255,0),Flag="HBCol",Callback=function(V) hitboxESPColor=V end})
+HitboxTab:CreateSection("Hitbox Expander - All Methods")
+HitboxTab:CreateToggle({Name="Enable Hitbox Expander",CurrentValue=false,Flag="HB",Callback=function(V) 
+	hitboxEnabled=V 
+	if V then
+		if hitboxAutoDetect then
+			local detected = autoDetectHitboxMethod()
+			Rayfield:Notify({Title="Hitbox",Content="Auto-detected method: "..detected,Duration=4})
+		end
+	else 
+		disableHitboxExpander() 
+	end
+end})
 
-HitboxTab:CreateSection("Anti Hitbox (Self)")
-HitboxTab:CreateToggle({Name="Enable",CurrentValue=false,Flag="AntiHB",Callback=function(V)
+HitboxTab:CreateSection("Method Selection")
+HitboxTab:CreateToggle({Name="Auto Detect Best Method",CurrentValue=true,Flag="HBAutoDetect",Callback=function(V) 
+	hitboxAutoDetect=V 
+	if V and hitboxEnabled then
+		hitboxDetectedMethod = nil
+		local detected = autoDetectHitboxMethod()
+		Rayfield:Notify({Title="Hitbox",Content="Re-detected method: "..detected,Duration=3})
+	end
+end})
+HitboxTab:CreateDropdown({Name="Manual Method",Options={"Auto","Part Resize","Overlay Part","CanQuery Swap","Weld Expander","Clone Part","Transparency Trick"},CurrentOption={"Auto"},MultipleOptions=false,Flag="HBMethod",Callback=function(O) 
+	hitboxMethod=O[1] or O 
+	if hitboxMethod ~= "Auto" then
+		hitboxDetectedMethod = hitboxMethod
+		hitboxAutoDetect = false
+	end
+	if hitboxEnabled then
+		disableHitboxExpander()
+		hitboxEnabled = true
+	end
+end})
+
+HitboxTab:CreateSection("Size & Appearance")
+HitboxTab:CreateSlider({Name="Hitbox Size",Range={3,50},Increment=1,Suffix=" Studs",CurrentValue=10,Flag="HBSize",Callback=function(V) hitboxSize=V end})
+HitboxTab:CreateSlider({Name="Transparency",Range={0,100},Increment=5,Suffix="%",CurrentValue=70,Flag="HBTr",Callback=function(V) hitboxTransparency=V/100 end})
+HitboxTab:CreateColorPicker({Name="Hitbox Color",Color=Color3.fromRGB(255,255,0),Flag="HBCol",Callback=function(V) hitboxESPColor=V end})
+
+HitboxTab:CreateSection("Target Parts")
+HitboxTab:CreateToggle({Name="Head Only (Headshot Focus)",CurrentValue=false,Flag="HBHeadOnly",Callback=function(V) 
+	hitboxHeadOnly=V 
+	if V then hitboxAllParts=false end
+end})
+HitboxTab:CreateToggle({Name="All Body Parts",CurrentValue=false,Flag="HBAllParts",Callback=function(V) 
+	hitboxAllParts=V 
+	if V then hitboxHeadOnly=false end
+end})
+HitboxTab:CreateSlider({Name="Body Part Multiplier",Range={50,200},Increment=10,Suffix="%",CurrentValue=100,Flag="HBBodyMult",Callback=function(V) hitboxBodyMultiplier=V/100 end})
+
+HitboxTab:CreateSection("Visuals")
+HitboxTab:CreateToggle({Name="Show Hitbox ESP",CurrentValue=false,Flag="HBESP",Callback=function(V) hitboxESPEnabled=V if not V then for _,d in pairs(hitboxData) do if d.espVisual then pcall(function() d.espVisual:Destroy() end) d.espVisual=nil end end end end})
+
+HitboxTab:CreateSection("Actions")
+HitboxTab:CreateButton({Name="Test All Methods",Callback=function()
+	local results = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			for _, method in ipairs(hitboxMethods) do
+				local works = testHitboxMethod(method, p)
+				results[method] = works
+			end
+			break
+		end
+	end
+	local msg = "Method Test Results:\n"
+	for method, works in pairs(results) do
+		msg = msg .. method .. ": " .. (works and "✓ WORKS" or "✗ BLOCKED") .. "\n"
+	end
+	Rayfield:Notify({Title="Hitbox Test",Content=msg,Duration=8})
+end})
+HitboxTab:CreateButton({Name="Force Refresh Hitboxes",Callback=function()
+	disableHitboxExpander()
+	hitboxDetectedMethod = nil
+	if hitboxAutoDetect then
+		autoDetectHitboxMethod()
+	end
+	hitboxEnabled = true
+	Rayfield:Notify({Title="Hitbox",Content="Refreshed all hitboxes",Duration=3})
+end})
+
+HitboxTab:CreateSection("Anti Hitbox (Self Protection)")
+HitboxTab:CreateToggle({Name="Enable Anti Hitbox",CurrentValue=false,Flag="AntiHB",Callback=function(V)
 	antiHitboxEnabled=V
 	if not V then
 		for _,pd in pairs(antiHitboxParts) do pcall(function() pd.fakePart:Destroy() end) end
 		antiHitboxParts={}
 		local mc=player.Character if mc then for _,p in ipairs(mc:GetChildren()) do if p:IsA("BasePart") then p.CanQuery=true end end end
+	else
+		Rayfield:Notify({Title="Anti Hitbox",Content="Your hitbox is now smaller!",Duration=3})
 	end
 end})
-HitboxTab:CreateSlider({Name="Size",Range={1,30},Increment=1,Suffix=" (x0.1)",CurrentValue=10,Flag="AHBSize",Callback=function(V) antiHitboxSize=V/10 end})
+HitboxTab:CreateSlider({Name="Your Hitbox Size",Range={1,30},Increment=1,Suffix=" (x0.1)",CurrentValue=10,Flag="AHBSize",Callback=function(V) antiHitboxSize=V/10 end})
 
 -- ==========================================
 -- TAB: Movement
@@ -1306,7 +2047,7 @@ AntiKickTab:CreateButton({Name="Anti AFK",Callback=function()
 end})
 
 -- ==========================================
--- CORE MOVEMENT
+-- CORE MOVEMENT FUNCTIONS
 -- ==========================================
 local function getMoveDirection()
 	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
@@ -1393,7 +2134,7 @@ local function isTargetValid(t)
 end
 
 -- ==========================================
--- INPUT
+-- INPUT HANDLING
 -- ==========================================
 local aimlockHeld = false
 
@@ -1434,7 +2175,9 @@ player.CharacterAdded:Connect(function(char)
 	for _,pd in pairs(antiHitboxParts) do pcall(function() pd.fakePart:Destroy() end) end
 	antiHitboxParts={}
 	noRecoilOverriddenObjects={} noRecoilCurrentTool=nil noRecoilIsShooting=false noRecoilLockedCFrame=nil
-	if noRecoilEnabled or noSpreadEnabled then
+	damageOverriddenValues={}
+	
+	if noRecoilEnabled or noSpreadEnabled or damageBoostEnabled then
 		task.wait(0.5)
 		if char and char.Parent then setupToolListener(char) end
 	end
@@ -1474,11 +2217,17 @@ RunService.RenderStepped:Connect(function(dt)
 	if aimAssistFOVCircle then aimAssistFOVCircle.Position=Vector2.new(cx,cy) aimAssistFOVCircle.Radius=aimAssistFOV aimAssistFOVCircle.Visible=showAimAssistFOV and aimAssistEnabled end
 	if silentAimFOVCircle then silentAimFOVCircle.Position=Vector2.new(cx,cy) silentAimFOVCircle.Radius=silentAimFOV silentAimFOVCircle.Visible=silentAimShowFOV and silentAimEnabled end
 
-	-- No Recoil
+	-- No Recoil Updates
 	if now-lastNoRecoilUpdate >= NO_RECOIL_UPDATE_RATE then
 		lastNoRecoilUpdate=now
 		if (noRecoilEnabled or noSpreadEnabled) and noRecoilValueOverride then refreshRecoilOverrides() end
 		if noRecoilEnabled then overrideRecoilPhysics() end
+	end
+
+	-- Damage Updates
+	if now-lastDamageUpdate >= DAMAGE_UPDATE_RATE then
+		lastDamageUpdate=now
+		if damageBoostEnabled then refreshDamageOverrides() end
 	end
 
 	-- Silent Aim Visual
@@ -1528,12 +2277,17 @@ end)
 
 task.spawn(function()
 	task.wait(1)
-	if player.Character and (noRecoilEnabled or noSpreadEnabled) then setupToolListener(player.Character) end
+	if player.Character then
+		if noRecoilEnabled or noSpreadEnabled or damageBoostEnabled then 
+			setupToolListener(player.Character) 
+		end
+	end
 end)
 
 Rayfield:Notify({
-	Title = "RyuExploit v3.6",
-	Content = "Loaded!\n\nSilent Aim + No Recoil + Aim Assist\n= Peluru pasti kena!",
-	Duration = 5
+	Title = "RyuExploit v3.7",
+	Content = "Loaded!\n\n✓ Hitbox All Methods + Auto Detect\n✓ Damage Boost System\n✓ Silent Aim + No Recoil\n\n= MAXIMUM DAMAGE!",
+	Duration = 6
 })
 end
+			
