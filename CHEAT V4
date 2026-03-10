@@ -1643,7 +1643,7 @@ end
 		hitboxEnabled = V
 		if not V then disableHitboxExpander() end
 	end})
-	HitboxTab:CreateSlider({Name = "Size", Range = {3, 50}, Increment = 1, Suffix = " Studs", CurrentValue = 10, Flag = "HBSize", Callback = function(V) hitboxSize = V end})
+	HitboxTab:CreateSlider({Name = "Size", Range = {1, 500}, Increment = 1, Suffix = " Studs", CurrentValue = 10, Flag = "HBSize", Callback = function(V) hitboxSize = V end})
 	HitboxTab:CreateSlider({Name = "Transparency", Range = {0, 100}, Increment = 5, Suffix = "%", CurrentValue = 70, Flag = "HBTr", Callback = function(V) hitboxTransparency = V / 100 end})
 	HitboxTab:CreateToggle({Name = "Show ESP", CurrentValue = false, Flag = "HBESP", Callback = function(V)
 		hitboxESPEnabled = V
