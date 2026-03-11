@@ -1593,7 +1593,7 @@ SilentAimTab:CreateSlider({Name = "FOV Radius", Range = {50,800}, Increment = 10
 SilentAimTab:CreateSlider({Name = "Max Distance", Range = {50,2000}, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "SADist", Callback = function(V) silentAimDistance = V end})
 SilentAimTab:CreateSection("Prediction")
 SilentAimTab:CreateToggle({Name = "Movement Prediction", CurrentValue = true, Flag = "SAPred", Callback = function(V) silentAimPrediction = V end})
-SilentAimTab:CreateSlider({Name = "Prediction Amount", Range = {1,50}, Increment = 1, Suffix = "%", CurrentValue = 12, Flag = "SAPredAmt", Callback = function(V) silentAimPredictionAmount = V/100 end})
+SilentAimTab:CreateSlider({Name = "Prediction Amount", Range = {1,50}, Increment = 1, Suffix = "%", CurrentValue = 12, Flag = "SAPredAmt",  silentAimPredictionAmount = V/100 end})
 SilentAimTab:CreateSection("Safety")
 SilentAimTab:CreateToggle({Name = "Wall Check", CurrentValue = false, Flag = "SAWall", Callback = function(V) silentAimVisibleCheck = V end})
 SilentAimTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "SATeam", Callback = function(V) silentAimTeamCheck = V end})
@@ -1750,7 +1750,7 @@ ItemESPTab:CreateToggle({
 	Callback = function(V)
 		inventoryESPEnabled = V
 		if V then
-			setupInventoryListener()
+			setupInventoryConnections()
 			updateInventoryESP()
 			Rayfield:Notify({Title = "Inventory ESP", Content = "Enabled!", Duration = 2})
 		else
@@ -2183,14 +2183,16 @@ RunService.RenderStepped:Connect(function(dt)
 	if now - lastESPUpdate >= ESP_UPDATE_RATE then lastESPUpdate = now; if espEnabled then updatePlayerESP() end end
 
 	-- Hitbox
-	if now - lastHitboxUpdate >= HITBOX_UPDATE_RATE then
-		lastHitboxUpdate = now
-		if hitboxEnabled then updateHitboxExpander() end
-		if antiHitboxEnabled then updateAntiHitbox() end
-	end
-end)
-if inventoryESPEnabled and now - lastESPUpdate >= ESP_UPDATE_RATE then
-    updateInventoryESP()
+if now - lastHitboxUpdate >= HITBOX_UPDATE_RATE then
+    lastHitboxUpdate = now
+    if hitboxEnabled then updateHitboxExpander() end
+    if antiHitboxEnabled then updateAntiHitbox() end
+end
+
+-- Inventory ESP
+if now - lastInventoryUpdate >= INVENTORY_UPDATE_RATE then
+    lastInventoryUpdate = now
+    if inventoryESPEnabled then updateInventoryESP() end
 end
 -- ==========================================
 -- CLEANUP
