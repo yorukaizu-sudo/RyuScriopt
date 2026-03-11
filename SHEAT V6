@@ -784,36 +784,203 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	end
 
 	-- ==========================================
-	-- HITBOX SYSTEM v4.0 - WESTBOUND FIX
-	-- TIDAK PAUSE SAAT MOUNTED!
-	-- ==========================================
-	local function cleanHitboxForPlayer(p)
-		local dd = hitboxData[p]
-		if not dd then return end
+-- HITBOX SYSTEM v4.1 - WESTBOUND HORSE FIX
+-- TIDAK ANCHORED, WELDED KE HRP LANGSUNG
+-- ==========================================
 
-		-- Destroy hitbox part
-		if dd.hitboxPart and dd.hitboxPart.Parent then
-			pcall(function() dd.hitboxPart:Destroy() end)
+local function cleanHitboxForPlayer(p)
+	local dd = hitboxData[p]
+	if not dd then return end
+
+	-- Destroy hitbox part
+	if dd.hitboxPart and dd.hitboxPart.Parent then
+		pcall(function() dd.hitboxPart:Destroy() end)
+	end
+
+	-- Destroy ESP
+	if dd.espVisual and dd.espVisual.Parent then
+		pcall(function() dd.espVisual:Destroy() end)
+	end
+
+	-- Disconnect all connections
+	if dd.updateConn then
+		pcall(function() dd.updateConn:Disconnect() end)
+	end
+	if dd.deathConn then
+		pcall(function() dd.deathConn:Disconnect() end)
+	end
+	if dd.charRemoveConn then
+		pcall(function() dd.charRemoveConn:Disconnect() end)
+	end
+
+	-- Reset HRP size
+	if p and p.Parent and p.Character then
+		local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			pcall(function()
+				hrp.Size = Vector3.new(2, 2, 1)
+				hrp.Transparency = 1
+				hrp.CanCollide = false
+				hrp.CanTouch = true
+				hrp.CanQuery = true
+				hrp.Material = Enum.Material.SmoothPlastic
+			end)
+		end
+	end
+
+	hitboxData[p] = nil
+end
+
+local function createHitboxForPlayer(p)
+	if not p or not p.Character then return end
+	local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+	local hum = p.Character:FindFirstChildOfClass("Humanoid")
+	if not hrp or not hum or hum.Health <= 0 then return end
+
+	-- Clean existing
+	cleanHitboxForPlayer(p)
+
+	-- Init data
+	hitboxData[p] = {}
+	local dd = hitboxData[p]
+
+	-- METHOD BARU: HANYA EXPAND HRP LANGSUNG
+	-- Tidak perlu part tambahan yang bisa lag
+	pcall(function()
+		hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+		hrp.Transparency = hitboxTransparency
+		hrp.Material = Enum.Material.ForceField
+		hrp.Color = hitboxESPColor
+		hrp.CanCollide = false
+		hrp.CanTouch = true
+		hrp.CanQuery = true
+	end)
+
+	dd.trackedChar = p.Character
+	dd.trackedHRP = hrp
+
+	-- UPDATE LOOP - Update HRP properties setiap frame
+	dd.updateConn = RunService.Heartbeat:Connect(function()
+		-- Validate player
+		if not p or not p.Parent then
+			cleanHitboxForPlayer(p)
+			return
 		end
 
-		-- Destroy ESP
-		if dd.espVisual and dd.espVisual.Parent then
+		if not p.Character then
+			return
+		end
+
+		local targetHRP = p.Character:FindFirstChild("HumanoidRootPart")
+		local targetHum = p.Character:FindFirstChildOfClass("Humanoid")
+
+		if not targetHRP or not targetHum then
+			return
+		end
+
+		if targetHum.Health <= 0 then
+			-- Reset saat mati
+			pcall(function()
+				targetHRP.Size = Vector3.new(2, 2, 1)
+				targetHRP.Transparency = 1
+				targetHRP.Material = Enum.Material.SmoothPlastic
+			end)
+			return
+		end
+
+		-- Check mount status untuk warna
+		local isMounted = isOnMount(p)
+
+		-- LANGSUNG UPDATE HRP - Ini yang paling reliable
+		pcall(function()
+			targetHRP.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+			targetHRP.Transparency = hitboxTransparency
+			targetHRP.Color = isMounted and hitboxMountedColor or hitboxESPColor
+			targetHRP.Material = Enum.Material.ForceField
+			targetHRP.CanCollide = false
+			targetHRP.CanTouch = true
+			targetHRP.CanQuery = true
+		end)
+
+		-- ESP (opsional)
+		if hitboxESPEnabled then
+			if not dd.espVisual or not dd.espVisual.Parent then
+				local esp = Instance.new("SelectionBox")
+				esp.Name = "RyuHitboxESP"
+				esp.Adornee = targetHRP
+				esp.Color3 = isMounted and hitboxMountedColor or hitboxESPColor
+				esp.LineThickness = 0.05
+				esp.Transparency = 0.3
+				esp.Parent = targetHRP
+				dd.espVisual = esp
+			else
+				pcall(function()
+					dd.espVisual.Adornee = targetHRP
+					dd.espVisual.Color3 = isMounted and hitboxMountedColor or hitboxESPColor
+				end)
+			end
+		elseif dd.espVisual then
 			pcall(function() dd.espVisual:Destroy() end)
+			dd.espVisual = nil
 		end
+	end)
 
-		-- Disconnect all connections
-		if dd.updateConn then
-			pcall(function() dd.updateConn:Disconnect() end)
-		end
-		if dd.deathConn then
-			pcall(function() dd.deathConn:Disconnect() end)
-		end
-		if dd.charRemoveConn then
-			pcall(function() dd.charRemoveConn:Disconnect() end)
-		end
+	-- Death handler
+	dd.deathConn = hum.Died:Connect(function()
+		task.wait(0.3)
+		-- Reset HRP
+		pcall(function()
+			hrp.Size = Vector3.new(2, 2, 1)
+			hrp.Transparency = 1
+			hrp.Material = Enum.Material.SmoothPlastic
+		end)
+		cleanHitboxForPlayer(p)
+	end)
 
-		-- Reset HRP size
-		if p and p.Parent and p.Character then
+	-- Character removing handler
+	dd.charRemoveConn = p.CharacterRemoving:Connect(function()
+		cleanHitboxForPlayer(p)
+	end)
+end
+
+local function updateHitboxExpander()
+	if not hitboxEnabled then return end
+
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			local hum = p.Character:FindFirstChildOfClass("Humanoid")
+			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+
+			if hum and hrp and hum.Health > 0 then
+				local dd = hitboxData[p]
+
+				-- Create if not exists or character changed
+				if not dd or dd.trackedChar ~= p.Character then
+					createHitboxForPlayer(p)
+				end
+			elseif hitboxData[p] then
+				cleanHitboxForPlayer(p)
+			end
+		end
+	end
+
+	-- Cleanup removed players
+	for p, _ in pairs(hitboxData) do
+		if not p or not p.Parent then
+			cleanHitboxForPlayer(p)
+		end
+	end
+end
+
+local function disableHitboxExpander()
+	for p, _ in pairs(hitboxData) do
+		cleanHitboxForPlayer(p)
+	end
+	hitboxData = {}
+
+	-- Reset all player HRPs
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
 			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
 			if hrp then
 				pcall(function()
@@ -826,196 +993,8 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 				end)
 			end
 		end
-
-		hitboxData[p] = nil
 	end
-
-	local function createHitboxForPlayer(p)
-		if not p or not p.Character then return end
-		local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-		local hum = p.Character:FindFirstChildOfClass("Humanoid")
-		if not hrp or not hum or hum.Health <= 0 then return end
-
-		-- Clean existing
-		cleanHitboxForPlayer(p)
-
-		-- Init data
-		hitboxData[p] = {}
-		local dd = hitboxData[p]
-
-		-- Expand HRP langsung
-		pcall(function()
-			hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-			hrp.Transparency = hitboxTransparency
-			hrp.Material = Enum.Material.ForceField
-			hrp.Color = hitboxESPColor
-			hrp.CanCollide = false
-			hrp.CanTouch = true
-			hrp.CanQuery = true
-		end)
-
-		-- Create visual hitbox (Anchored - tidak fling)
-		local hitbox = Instance.new("Part")
-		hitbox.Name = "RyuHitbox_" .. p.Name
-		hitbox.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-		hitbox.Shape = Enum.PartType.Ball
-		hitbox.Transparency = hitboxTransparency
-		hitbox.Material = Enum.Material.ForceField
-		hitbox.Color = hitboxESPColor
-		hitbox.CanCollide = false
-		hitbox.CanTouch = true
-		hitbox.CanQuery = true
-		hitbox.Anchored = true -- PENTING: Anchored supaya tidak fling
-		hitbox.Massless = true
-		hitbox.CFrame = hrp.CFrame
-		hitbox.Parent = workspace -- Parent ke workspace
-
-		dd.hitboxPart = hitbox
-		dd.trackedChar = p.Character
-
-		-- UPDATE LOOP - SELALU MENGIKUTI HRP
-		dd.updateConn = RunService.Heartbeat:Connect(function()
-			-- Validate player
-			if not p or not p.Parent then
-				cleanHitboxForPlayer(p)
-				return
-			end
-
-			if not p.Character then
-				if hitbox and hitbox.Parent then
-					hitbox.Transparency = 1
-				end
-				return
-			end
-
-			local targetHRP = p.Character:FindFirstChild("HumanoidRootPart")
-			local targetHum = p.Character:FindFirstChildOfClass("Humanoid")
-
-			if not targetHRP or not targetHum then
-				if hitbox and hitbox.Parent then
-					hitbox.Transparency = 1
-				end
-				return
-			end
-
-			if targetHum.Health <= 0 then
-				if hitbox and hitbox.Parent then
-					hitbox.Transparency = 1
-				end
-				return
-			end
-
-			-- Check mount status
-			local isMounted = isOnMount(p)
-
-			-- SELALU UPDATE POSISI - TIDAK PEDULI MOUNTED ATAU TIDAK!
-			pcall(function()
-				hitbox.CFrame = targetHRP.CFrame
-				hitbox.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-				hitbox.Transparency = hitboxTransparency
-				-- Warna berbeda saat mounted (untuk debug)
-				hitbox.Color = isMounted and hitboxMountedColor or hitboxESPColor
-			end)
-
-			-- Update HRP juga
-			pcall(function()
-				targetHRP.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-				targetHRP.Transparency = hitboxTransparency
-				targetHRP.Color = isMounted and hitboxMountedColor or hitboxESPColor
-				targetHRP.Material = Enum.Material.ForceField
-				targetHRP.CanCollide = false
-				targetHRP.CanTouch = true
-				targetHRP.CanQuery = true
-			end)
-
-			-- ESP
-			if hitboxESPEnabled then
-				if not dd.espVisual or not dd.espVisual.Parent then
-					local esp = Instance.new("BoxHandleAdornment")
-					esp.Adornee = hitbox
-					esp.Size = hitbox.Size
-					esp.Color3 = hitbox.Color
-					esp.Transparency = 0.5
-					esp.AlwaysOnTop = true
-					esp.ZIndex = 10
-					esp.Parent = hitbox
-					dd.espVisual = esp
-				else
-					pcall(function()
-						dd.espVisual.Size = hitbox.Size
-						dd.espVisual.Color3 = hitbox.Color
-					end)
-				end
-			elseif dd.espVisual then
-				pcall(function() dd.espVisual:Destroy() end)
-				dd.espVisual = nil
-			end
-		end)
-
-		-- Death handler
-		dd.deathConn = hum.Died:Connect(function()
-			task.wait(0.5)
-			cleanHitboxForPlayer(p)
-		end)
-
-		-- Character removing handler
-		dd.charRemoveConn = p.CharacterRemoving:Connect(function()
-			cleanHitboxForPlayer(p)
-		end)
-	end
-
-	local function updateHitboxExpander()
-		if not hitboxEnabled then return end
-
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p ~= player and p.Character then
-				local hum = p.Character:FindFirstChildOfClass("Humanoid")
-				local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-
-				if hum and hrp and hum.Health > 0 then
-					local dd = hitboxData[p]
-
-					-- Create if not exists or character changed
-					if not dd or not dd.hitboxPart or not dd.hitboxPart.Parent or dd.trackedChar ~= p.Character then
-						createHitboxForPlayer(p)
-					end
-				elseif hitboxData[p] then
-					cleanHitboxForPlayer(p)
-				end
-			end
-		end
-
-		-- Cleanup removed players
-		for p, _ in pairs(hitboxData) do
-			if not p or not p.Parent then
-				cleanHitboxForPlayer(p)
-			end
-		end
-	end
-
-	local function disableHitboxExpander()
-		for p, _ in pairs(hitboxData) do
-			cleanHitboxForPlayer(p)
-		end
-		hitboxData = {}
-
-		-- Reset all player HRPs
-		for _, p in ipairs(Players:GetPlayers()) do
-			if p ~= player and p.Character then
-				local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-				if hrp then
-					pcall(function()
-						hrp.Size = Vector3.new(2, 2, 1)
-						hrp.Transparency = 1
-						hrp.CanCollide = false
-						hrp.CanTouch = true
-						hrp.CanQuery = true
-						hrp.Material = Enum.Material.SmoothPlastic
-					end)
-				end
-			end
-		end
-	end
+end
 
 	-- ==========================================
 	-- ANTI HITBOX SYSTEM
