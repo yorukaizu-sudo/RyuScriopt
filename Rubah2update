@@ -96,7 +96,17 @@ local espTeamColor = Color3.fromRGB(0, 255, 0)
 local espEnemyColor = Color3.fromRGB(255, 0, 0)
 local espObjects = {}
 local espLineSmoothing = 0.3
-
+-- ==========================================
+-- INVENTORY ESP VARS
+-- ==========================================
+local inventoryESPEnabled = false
+local inventoryESPColor = Color3.fromRGB(0, 255, 255)
+local inventoryESPFillTransparency = 0.5
+local inventoryESPOutlineTransparency = 0
+local inventoryESPHighlights = {}
+local inventoryFolderName = "Inventory"
+local lastInventoryUpdate = 0
+local INVENTORY_UPDATE_RATE = 0.5
 -- ==========================================
 -- HITBOX VARS
 -- ==========================================
@@ -1403,110 +1413,144 @@ end
 -- INVENTORY ESP SYSTEM
 -- ==========================================
 local function cleanInventoryESP()
-	for model, highlight in pairs(inventoryESPHighlights) do
+	for key, hl in pairs(inventoryESPHighlights) do
 		pcall(function() 
-			if highlight and highlight.Parent then 
-				highlight:Destroy() 
-			end 
+			if hl then hl:Destroy() end 
 		end)
 	end
 	inventoryESPHighlights = {}
 end
 
+local function applyHighlightToItem(item)
+	if not item then return end
+	if inventoryESPHighlights[item] and inventoryESPHighlights[item].Parent then return end
+	
+	-- Hapus highlight lama jika ada
+	for _, child in ipairs(item:GetChildren()) do
+		if child:IsA("Highlight") and child.Name == "InvESP" then
+			child:Destroy()
+		end
+	end
+	
+	local hl = Instance.new("Highlight")
+	hl.Name = "InvESP"
+	hl.FillColor = inventoryESPColor
+	hl.OutlineColor = Color3.fromRGB(255, 255, 255)
+	hl.FillTransparency = inventoryESPFillTransparency
+	hl.OutlineTransparency = inventoryESPOutlineTransparency
+	hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+	hl.Parent = item
+	
+	inventoryESPHighlights[item] = hl
+end
+
+local function findInventoryFolder()
+	-- Cari langsung
+	local folder = workspace:FindFirstChild(inventoryFolderName)
+	if folder then return folder end
+	
+	-- Cari case-insensitive
+	for _, child in ipairs(workspace:GetChildren()) do
+		if child.Name:lower() == inventoryFolderName:lower() then
+			return child
+		end
+	end
+	
+	-- Cari di descendants
+	for _, desc in ipairs(workspace:GetDescendants()) do
+		if (desc:IsA("Folder") or desc:IsA("Model")) and desc.Name:lower() == inventoryFolderName:lower() then
+			return desc
+		end
+	end
+	
+	return nil
+end
+
 local function updateInventoryESP()
-	if not inventoryESPEnabled then 
-		cleanInventoryESP()
-		return 
-	end
+	if not inventoryESPEnabled then return end
 	
-	-- Cari folder Inventory di workspace
-	local inventoryFolder = workspace:FindFirstChild(inventoryFolderName)
-	if not inventoryFolder then 
-		-- Coba cari di semua descendants
-		for _, child in ipairs(workspace:GetDescendants()) do
-			if child:IsA("Folder") and child.Name:lower():find("inventory") then
-				inventoryFolder = child
-				break
-			end
+	local folder = findInventoryFolder()
+	if not folder then return end
+	
+	-- Apply ke semua children
+	for _, item in ipairs(folder:GetChildren()) do
+		if item:IsA("Model") or item:IsA("BasePart") or item:IsA("MeshPart") or item:IsA("UnionOperation") then
+			applyHighlightToItem(item)
 		end
 	end
 	
-	if not inventoryFolder then return end
-	
-	-- Loop semua model di folder
-	for _, item in ipairs(inventoryFolder:GetChildren()) do
-		if item:IsA("Model") or item:IsA("BasePart") then
-			local key = item
-			
-			-- Cek apakah sudah ada highlight
-			if not inventoryESPHighlights[key] or not inventoryESPHighlights[key].Parent then
-				-- Buat highlight baru
-				local highlight = Instance.new("Highlight")
-				highlight.Name = "InventoryESP"
-				highlight.FillColor = inventoryESPColor
-				highlight.OutlineColor = Color3.new(1, 1, 1)
-				highlight.FillTransparency = inventoryESPFillTransparency
-				highlight.OutlineTransparency = inventoryESPOutlineTransparency
-				highlight.Adornee = item
-				highlight.Parent = item
-				
-				inventoryESPHighlights[key] = highlight
-			else
-				-- Update warna jika sudah ada
-				local highlight = inventoryESPHighlights[key]
-				pcall(function()
-					highlight.FillColor = inventoryESPColor
-					highlight.FillTransparency = inventoryESPFillTransparency
-					highlight.OutlineTransparency = inventoryESPOutlineTransparency
-				end)
-			end
+	-- Apply ke descendants juga
+	for _, item in ipairs(folder:GetDescendants()) do
+		if item:IsA("Model") then
+			applyHighlightToItem(item)
 		end
 	end
 	
-	-- Cleanup highlight yang itemnya sudah tidak ada
-	for model, highlight in pairs(inventoryESPHighlights) do
-		if not model or not model.Parent then
-			pcall(function() highlight:Destroy() end)
-			inventoryESPHighlights[model] = nil
+	-- Update warna existing highlights
+	for item, hl in pairs(inventoryESPHighlights) do
+		if hl and hl.Parent then
+			pcall(function()
+				hl.FillColor = inventoryESPColor
+				hl.FillTransparency = inventoryESPFillTransparency
+				hl.OutlineTransparency = inventoryESPOutlineTransparency
+			end)
+		end
+	end
+	
+	-- Cleanup invalid
+	for item, hl in pairs(inventoryESPHighlights) do
+		if not item or not item.Parent or not hl or not hl.Parent then
+			pcall(function() if hl then hl:Destroy() end end)
+			inventoryESPHighlights[item] = nil
 		end
 	end
 end
 
--- Listener untuk item baru yang ditambahkan
-local function setupInventoryListener()
-	local inventoryFolder = workspace:FindFirstChild(inventoryFolderName)
-	if not inventoryFolder then
-		for _, child in ipairs(workspace:GetDescendants()) do
-			if child:IsA("Folder") and child.Name:lower():find("inventory") then
-				inventoryFolder = child
-				break
+local function setupInventoryConnections()
+	local folder = findInventoryFolder()
+	if not folder then return end
+	
+	folder.ChildAdded:Connect(function(child)
+		if inventoryESPEnabled then
+			task.wait(0.1)
+			if child:IsA("Model") or child:IsA("BasePart") then
+				applyHighlightToItem(child)
+			end
+		end
+	end)
+	
+	folder.ChildRemoved:Connect(function(child)
+		if inventoryESPHighlights[child] then
+			pcall(function() inventoryESPHighlights[child]:Destroy() end)
+			inventoryESPHighlights[child] = nil
+		end
+	end)
+end
+
+local function scanAllWorkspaceItems()
+	if not inventoryESPEnabled then return 0 end
+	local count = 0
+	
+	-- Scan semua di workspace yang mungkin item
+	for _, item in ipairs(workspace:GetDescendants()) do
+		if item:IsA("Model") and item:FindFirstChild("Handle") then
+			applyHighlightToItem(item)
+			count = count + 1
+		end
+	end
+	
+	-- Scan folder spesifik
+	local folder = findInventoryFolder()
+	if folder then
+		for _, item in ipairs(folder:GetDescendants()) do
+			if item:IsA("Model") or item:IsA("BasePart") then
+				applyHighlightToItem(item)
+				count = count + 1
 			end
 		end
 	end
 	
-	if inventoryFolder then
-		inventoryFolder.ChildAdded:Connect(function(child)
-			if inventoryESPEnabled and (child:IsA("Model") or child:IsA("BasePart")) then
-				task.wait(0.1)
-				local highlight = Instance.new("Highlight")
-				highlight.Name = "InventoryESP"
-				highlight.FillColor = inventoryESPColor
-				highlight.OutlineColor = Color3.new(1, 1, 1)
-				highlight.FillTransparency = inventoryESPFillTransparency
-				highlight.OutlineTransparency = inventoryESPOutlineTransparency
-				highlight.Adornee = child
-				highlight.Parent = child
-				inventoryESPHighlights[child] = highlight
-			end
-		end)
-		
-		inventoryFolder.ChildRemoved:Connect(function(child)
-			if inventoryESPHighlights[child] then
-				pcall(function() inventoryESPHighlights[child]:Destroy() end)
-				inventoryESPHighlights[child] = nil
-			end
-		end)
-	end
+	return count
 end
 -- ==========================================
 -- UI WINDOW
