@@ -90,16 +90,16 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	local espLineSmoothing = 0.3
 
 	-- ==========================================
-	-- HITBOX VARS (UPDATED v3.8)
+	-- HITBOX VARS (FIXED - SINGLE DECLARATION)
 	-- ==========================================
 	local hitboxEnabled = false
 	local hitboxSize = 10
 	local hitboxTransparency = 0.7
 	local hitboxESPEnabled = false
 	local hitboxESPColor = Color3.fromRGB(255, 255, 0)
-	local hitboxMountedColor = Color3.fromRGB(0, 255, 255) -- Cyan saat mounted
+	local hitboxMountedColor = Color3.fromRGB(0, 255, 255)
 	local hitboxData = {}
-	local hitboxTargetMounted = true -- BARU: Target player yang naik kuda juga
+	local hitboxOriginalSizes = {} -- Store original HRP sizes
 
 	-- ==========================================
 	-- ANTI HITBOX VARS
@@ -229,18 +229,16 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	end
 
 	-- ==========================================
-	-- MOUNT DETECTION (WESTBOUND SPECIFIC)
+	-- MOUNT DETECTION (SINGLE DEFINITION)
 	-- ==========================================
 	local function getPlayerMountInfo(p)
 		if not p or not p.Character then return false, nil end
 		local hum = p.Character:FindFirstChildOfClass("Humanoid")
-		local hrp = p.Character:FindFirstChild("HumanoidRootPart")
 		if not hum then return false, nil end
 
 		local isMounted = false
 		local horseModel = nil
 
-		-- Method 1: Humanoid.Sit check (Westbound uses this)
 		if hum.Sit then
 			isMounted = true
 			pcall(function()
@@ -253,12 +251,10 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 			end)
 		end
 
-		-- Method 2: State check
 		if hum:GetState() == Enum.HumanoidStateType.Seated then
 			isMounted = true
 		end
 
-		-- Method 3: PlatformStand
 		if hum.PlatformStand then
 			isMounted = true
 		end
@@ -271,7 +267,6 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 		return mounted
 	end
 
-	-- Legacy function untuk compatibility
 	local function isInVehicle(p)
 		return isOnMount(p)
 	end
@@ -782,207 +777,252 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 			end
 		end
 	end
--- ==========================================
--- HITBOX SYSTEM v5.0 - WESTBOUND FINAL FIX
--- TIDAK ADA PART BARU - HANYA EXPAND HRP LANGSUNG
--- ==========================================
 
-local hitboxEnabled = false
-local hitboxSize = 10
-local hitboxTransparency = 0.7
-local hitboxESPEnabled = false
-local hitboxESPColor = Color3.fromRGB(255, 255, 0)
-local hitboxMountedColor = Color3.fromRGB(0, 255, 255)
-local hitboxData = {}
+	-- ==========================================
+	-- HITBOX SYSTEM v5.1 - DIRECT HRP EXPAND
+	-- NO NEW PARTS CREATED - ONLY MODIFY EXISTING HRP
+	-- ==========================================
 
-local function isOnMount(p)
-    if not p or not p.Character then return false end
-    local hum = p.Character:FindFirstChildOfClass("Humanoid")
-    if not hum then return false end
-    return hum.Sit == true
-end
+	local function cleanHitboxForPlayer(p)
+		local dd = hitboxData[p]
+		if not dd then return end
 
-local function cleanHitboxForPlayer(p)
-    local dd = hitboxData[p]
-    if not dd then return end
+		-- Destroy highlight
+		if dd.highlight and dd.highlight.Parent then
+			pcall(function() dd.highlight:Destroy() end)
+		end
 
-    -- Destroy highlight
-    if dd.highlight and dd.highlight.Parent then
-        pcall(function() dd.highlight:Destroy() end)
-    end
+		-- Disconnect all connections
+		if dd.updateConn then
+			pcall(function() dd.updateConn:Disconnect() end)
+		end
+		if dd.deathConn then
+			pcall(function() dd.deathConn:Disconnect() end)
+		end
+		if dd.charRemoveConn then
+			pcall(function() dd.charRemoveConn:Disconnect() end)
+		end
 
-    -- Disconnect
-    if dd.updateConn then
-        pcall(function() dd.updateConn:Disconnect() end)
-    end
-    if dd.deathConn then
-        pcall(function() dd.deathConn:Disconnect() end)
-    end
-    if dd.charRemoveConn then
-        pcall(function() dd.charRemoveConn:Disconnect() end)
-    end
+		-- Restore original HRP size
+		if p and p.Parent and p.Character then
+			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				pcall(function()
+					-- Restore to saved original or default
+					local origSize = hitboxOriginalSizes[p]
+					hrp.Size = origSize or Vector3.new(2, 2, 1)
+					hrp.Transparency = 1
+					hrp.CanCollide = false
+					hrp.Material = Enum.Material.SmoothPlastic
+				end)
+			end
+		end
 
-    -- Reset HRP
-    if p and p.Parent and p.Character then
-        local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-        if hrp then
-            pcall(function()
-                hrp.Size = Vector3.new(2, 2, 1)
-                hrp.Transparency = 1
-                hrp.CanCollide = false
-                hrp.Material = Enum.Material.SmoothPlastic
-            end)
-        end
-    end
+		hitboxOriginalSizes[p] = nil
+		hitboxData[p] = nil
+	end
 
-    hitboxData[p] = nil
-end
+	local function createHitboxForPlayer(p)
+		if not p or not p.Character then return end
+		local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+		local hum = p.Character:FindFirstChildOfClass("Humanoid")
+		if not hrp or not hum or hum.Health <= 0 then return end
 
-local function createHitboxForPlayer(p)
-    if not p or not p.Character then return end
-    local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-    local hum = p.Character:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum or hum.Health <= 0 then return end
+		-- Clean previous if exists
+		cleanHitboxForPlayer(p)
 
-    cleanHitboxForPlayer(p)
+		-- Save original HRP size BEFORE modifying
+		pcall(function()
+			hitboxOriginalSizes[p] = hrp.Size:lerp(hrp.Size, 1) -- clone the Vector3
+		end)
 
-    hitboxData[p] = {}
-    local dd = hitboxData[p]
-    dd.trackedChar = p.Character
+		hitboxData[p] = {}
+		local dd = hitboxData[p]
+		dd.trackedChar = p.Character
 
-    -- LANGSUNG EXPAND HRP - TIDAK BUAT PART BARU!
-    pcall(function()
-        hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-        hrp.Transparency = hitboxTransparency
-        hrp.Material = Enum.Material.ForceField
-        hrp.Color = hitboxESPColor
-        hrp.CanCollide = false
-    end)
+		-- Expand HRP directly
+		pcall(function()
+			hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+			hrp.Transparency = hitboxTransparency
+			hrp.Material = Enum.Material.ForceField
+			hrp.Color = hitboxESPColor
+			hrp.CanCollide = false
+		end)
 
-    -- Highlight untuk visual (otomatis ikut character)
-    if hitboxESPEnabled then
-        local hl = Instance.new("Highlight")
-        hl.Name = "RyuHitboxHL"
-        hl.Adornee = p.Character
-        hl.FillColor = hitboxESPColor
-        hl.OutlineColor = Color3.new(1,1,1)
-        hl.FillTransparency = 0.8
-        hl.OutlineTransparency = 0
-        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        hl.Parent = p.Character
-        dd.highlight = hl
-    end
+		-- Highlight for visual
+		if hitboxESPEnabled then
+			-- Remove old highlights first
+			for _, child in ipairs(p.Character:GetChildren()) do
+				if child:IsA("Highlight") and child.Name == "RyuHitboxHL" then
+					pcall(function() child:Destroy() end)
+				end
+			end
 
-    -- Update loop - HANYA UPDATE PROPERTIES HRP, TIDAK UPDATE POSISI
-    dd.updateConn = RunService.Heartbeat:Connect(function()
-        if not p or not p.Parent then
-            cleanHitboxForPlayer(p)
-            return
-        end
+			local hl = Instance.new("Highlight")
+			hl.Name = "RyuHitboxHL"
+			hl.Adornee = p.Character
+			hl.FillColor = hitboxESPColor
+			hl.OutlineColor = Color3.new(1, 1, 1)
+			hl.FillTransparency = 0.8
+			hl.OutlineTransparency = 0
+			hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+			hl.Parent = p.Character
+			dd.highlight = hl
+		end
 
-        if not p.Character then return end
+		-- Continuous update - only properties, HRP follows player automatically
+		dd.updateConn = RunService.Heartbeat:Connect(function()
+			-- Validate player still exists
+			if not p or not p.Parent then
+				cleanHitboxForPlayer(p)
+				return
+			end
 
-        local targetHRP = p.Character:FindFirstChild("HumanoidRootPart")
-        local targetHum = p.Character:FindFirstChildOfClass("Humanoid")
+			-- Validate character still exists
+			if not p.Character or p.Character ~= dd.trackedChar then
+				cleanHitboxForPlayer(p)
+				return
+			end
 
-        if not targetHRP or not targetHum then return end
+			local targetHRP = p.Character:FindFirstChild("HumanoidRootPart")
+			local targetHum = p.Character:FindFirstChildOfClass("Humanoid")
 
-        if targetHum.Health <= 0 then
-            pcall(function()
-                targetHRP.Size = Vector3.new(2, 2, 1)
-                targetHRP.Transparency = 1
-            end)
-            return
-        end
+			if not targetHRP or not targetHum then
+				cleanHitboxForPlayer(p)
+				return
+			end
 
-        local isMounted = targetHum.Sit
-        local color = isMounted and hitboxMountedColor or hitboxESPColor
+			-- If dead, reset and stop
+			if targetHum.Health <= 0 then
+				pcall(function()
+					local origSize = hitboxOriginalSizes[p]
+					targetHRP.Size = origSize or Vector3.new(2, 2, 1)
+					targetHRP.Transparency = 1
+					targetHRP.Material = Enum.Material.SmoothPlastic
+				end)
+				return
+			end
 
-        -- UPDATE HRP PROPERTIES SAJA
-        -- HRP SUDAH OTOMATIS IKUT KEMANA PUN PLAYER PERGI (termasuk di kuda)
-        pcall(function()
-            targetHRP.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-            targetHRP.Transparency = hitboxTransparency
-            targetHRP.Color = color
-            targetHRP.Material = Enum.Material.ForceField
-            targetHRP.CanCollide = false
-        end)
+			-- Detect mount state
+			local isMounted = false
+			pcall(function()
+				isMounted = targetHum.Sit == true or targetHum:GetState() == Enum.HumanoidStateType.Seated
+			end)
 
-        -- Update highlight
-        if hitboxESPEnabled then
-            if dd.highlight and dd.highlight.Parent then
-                dd.highlight.FillColor = color
-            elseif not dd.highlight then
-                local hl = Instance.new("Highlight")
-                hl.Name = "RyuHitboxHL"
-                hl.Adornee = p.Character
-                hl.FillColor = color
-                hl.OutlineColor = Color3.new(1,1,1)
-                hl.FillTransparency = 0.8
-                hl.OutlineTransparency = 0
-                hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                hl.Parent = p.Character
-                dd.highlight = hl
-            end
-        end
-    end)
+			local color = isMounted and hitboxMountedColor or hitboxESPColor
 
-    dd.deathConn = hum.Died:Connect(function()
-        task.wait(0.3)
-        cleanHitboxForPlayer(p)
-    end)
+			-- Update HRP properties only (position is automatic)
+			pcall(function()
+				targetHRP.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+				targetHRP.Transparency = hitboxTransparency
+				targetHRP.Color = color
+				targetHRP.Material = Enum.Material.ForceField
+				targetHRP.CanCollide = false
+			end)
 
-    dd.charRemoveConn = p.CharacterRemoving:Connect(function()
-        cleanHitboxForPlayer(p)
-    end)
-end
+			-- Update or create highlight
+			if hitboxESPEnabled then
+				if dd.highlight and dd.highlight.Parent then
+					pcall(function() dd.highlight.FillColor = color end)
+				else
+					-- Recreate if destroyed
+					pcall(function()
+						local hl = Instance.new("Highlight")
+						hl.Name = "RyuHitboxHL"
+						hl.Adornee = p.Character
+						hl.FillColor = color
+						hl.OutlineColor = Color3.new(1, 1, 1)
+						hl.FillTransparency = 0.8
+						hl.OutlineTransparency = 0
+						hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+						hl.Parent = p.Character
+						dd.highlight = hl
+					end)
+				end
+			else
+				-- ESP disabled, remove highlight
+				if dd.highlight and dd.highlight.Parent then
+					pcall(function() dd.highlight:Destroy() end)
+					dd.highlight = nil
+				end
+			end
+		end)
 
-local function updateHitboxExpander()
-    if not hitboxEnabled then return end
+		-- Death cleanup
+		dd.deathConn = hum.Died:Connect(function()
+			task.wait(0.3)
+			cleanHitboxForPlayer(p)
+		end)
 
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            local hum = p.Character:FindFirstChildOfClass("Humanoid")
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+		-- Character removing cleanup
+		dd.charRemoveConn = p.CharacterRemoving:Connect(function()
+			cleanHitboxForPlayer(p)
+		end)
+	end
 
-            if hum and hrp and hum.Health > 0 then
-                local dd = hitboxData[p]
-                if not dd or dd.trackedChar ~= p.Character then
-                    createHitboxForPlayer(p)
-                end
-            elseif hitboxData[p] then
-                cleanHitboxForPlayer(p)
-            end
-        end
-    end
+	local function updateHitboxExpander()
+		if not hitboxEnabled then return end
 
-    for p, _ in pairs(hitboxData) do
-        if not p or not p.Parent then
-            cleanHitboxForPlayer(p)
-        end
-    end
-end
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= player and p.Character then
+				local hum = p.Character:FindFirstChildOfClass("Humanoid")
+				local hrp = p.Character:FindFirstChild("HumanoidRootPart")
 
-local function disableHitboxExpander()
-    for p, _ in pairs(hitboxData) do
-        cleanHitboxForPlayer(p)
-    end
-    hitboxData = {}
+				if hum and hrp and hum.Health > 0 then
+					local dd = hitboxData[p]
+					-- Create if not exists or character changed (respawn)
+					if not dd or dd.trackedChar ~= p.Character then
+						createHitboxForPlayer(p)
+					end
+				elseif hitboxData[p] then
+					cleanHitboxForPlayer(p)
+				end
+			end
+		end
 
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= player and p.Character then
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                pcall(function()
-                    hrp.Size = Vector3.new(2, 2, 1)
-                    hrp.Transparency = 1
-                    hrp.CanCollide = false
-                    hrp.Material = Enum.Material.SmoothPlastic
-                end)
-            end
-        end
-    end
-end
+		-- Clean up players who left
+		for p, _ in pairs(hitboxData) do
+			if not p or not p.Parent or not Players:FindFirstChild(p.Name) then
+				cleanHitboxForPlayer(p)
+			end
+		end
+	end
+
+	local function disableHitboxExpander()
+		-- Clean all tracked data
+		local playersToClean = {}
+		for p, _ in pairs(hitboxData) do
+			table.insert(playersToClean, p)
+		end
+		for _, p in ipairs(playersToClean) do
+			cleanHitboxForPlayer(p)
+		end
+		hitboxData = {}
+
+		-- Force reset ALL player HRPs as safety net
+		for _, p in ipairs(Players:GetPlayers()) do
+			if p ~= player and p.Character then
+				local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+				if hrp then
+					pcall(function()
+						hrp.Size = Vector3.new(2, 2, 1)
+						hrp.Transparency = 1
+						hrp.CanCollide = false
+						hrp.Material = Enum.Material.SmoothPlastic
+					end)
+				end
+				-- Remove any leftover highlights
+				for _, child in ipairs(p.Character:GetChildren()) do
+					if child:IsA("Highlight") and child.Name == "RyuHitboxHL" then
+						pcall(function() child:Destroy() end)
+					end
+				end
+			end
+		end
+
+		hitboxOriginalSizes = {}
+	end
+
 	-- ==========================================
 	-- ANTI HITBOX SYSTEM
 	-- ==========================================
@@ -1281,7 +1321,7 @@ end
 	-- UI WINDOW
 	-- ==========================================
 	local Window = Rayfield:CreateWindow({
-		Name = "RyuExploit v3.8 - Westbound Fix",
+		Name = "RyuExploit v5.1 - Westbound Fixed",
 		LoadingTitle = "RyuExploit Loading",
 		LoadingSubtitle = "By NubyCode",
 		ConfigurationSaving = {Enabled = true, FolderName = "RyuExploit", FileName = "Config"},
@@ -1368,7 +1408,7 @@ end
 	NoRecoilTab:CreateToggle({Name = "Value Override", CurrentValue = true, Flag = "ValOver", Callback = function(V) noRecoilValueOverride = V; if V then local t = getEquippedTool(); if t then scanEquippedTool(t) end end end})
 	NoRecoilTab:CreateToggle({Name = "Remote Intercept", CurrentValue = false, Flag = "RemInt", Callback = function(V) noRecoilRemoteIntercept = V; if V then hookNoRecoilRemotes() end end})
 	NoRecoilTab:CreateSection("Actions")
-		NoRecoilTab:CreateButton({Name = "Force Scan Weapon", Callback = function()
+	NoRecoilTab:CreateButton({Name = "Force Scan Weapon", Callback = function()
 		local t = getEquippedTool()
 		if t then noRecoilOverriddenObjects = {}; scanEquippedTool(t)
 			local c = 0; for _ in pairs(noRecoilOverriddenObjects) do c = c + 1 end
@@ -1465,25 +1505,28 @@ end
 	ESPTab:CreateColorPicker({Name = "Team Color", Color = Color3.fromRGB(0, 255, 0), Flag = "ETeamC", Callback = function(V) espTeamColor = V end})
 
 	-- ==========================================
-	-- TAB: Hitbox (UPDATED v3.8)
+	-- TAB: Hitbox (FIXED v5.1 - NO NEW PARTS)
 	-- ==========================================
 	local HitboxTab = Window:CreateTab("Hitbox", 4483362458)
-	HitboxTab:CreateSection("Hitbox Expander (Mount Support)")
+	HitboxTab:CreateSection("Hitbox Expander (Direct HRP)")
 	HitboxTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "HB", Callback = function(V)
 		hitboxEnabled = V
 		if not V then disableHitboxExpander() end
 		if V then
-			Rayfield:Notify({Title = "Hitbox", Content = "ON! Works on mounted players too!", Duration = 3})
+			Rayfield:Notify({Title = "Hitbox", Content = "ON! Direct HRP expand - works on mounted players!", Duration = 3})
 		end
 	end})
 	HitboxTab:CreateSlider({Name = "Size", Range = {1,500}, Increment = 1, Suffix = " Studs", CurrentValue = 10, Flag = "HBSize", Callback = function(V) hitboxSize = V end})
 	HitboxTab:CreateSlider({Name = "Transparency", Range = {0,100}, Increment = 5, Suffix = "%", CurrentValue = 70, Flag = "HBTr", Callback = function(V) hitboxTransparency = V/100 end})
-	HitboxTab:CreateToggle({Name = "Show ESP", CurrentValue = false, Flag = "HBESP", Callback = function(V)
+	HitboxTab:CreateToggle({Name = "Show ESP Highlight", CurrentValue = false, Flag = "HBESP", Callback = function(V)
 		hitboxESPEnabled = V
-		if not V then 
-			for _, d in pairs(hitboxData) do 
-				if d.espVisual then pcall(function() d.espVisual:Destroy() end); d.espVisual = nil end 
-			end 
+		if not V then
+			for _, d in pairs(hitboxData) do
+				if d.highlight and d.highlight.Parent then
+					pcall(function() d.highlight:Destroy() end)
+				end
+				d.highlight = nil
+			end
 		end
 	end})
 	HitboxTab:CreateColorPicker({Name = "Normal Color", Color = Color3.fromRGB(255, 255, 0), Flag = "HBCol", Callback = function(V) hitboxESPColor = V end})
@@ -1783,7 +1826,7 @@ end
 		-- ESP
 		if now - lastESPUpdate >= ESP_UPDATE_RATE then lastESPUpdate = now; if espEnabled then updatePlayerESP() end end
 
-		-- Hitbox (UPDATED - faster update rate)
+		-- Hitbox
 		if now - lastHitboxUpdate >= HITBOX_UPDATE_RATE then
 			lastHitboxUpdate = now
 			if hitboxEnabled then updateHitboxExpander() end
@@ -1804,8 +1847,36 @@ end
 			if d.highlight then pcall(function() d.highlight:Destroy() end) end
 			espObjects[p] = nil
 		end
-		if hitboxData[p] then cleanHitboxForPlayer(p); hitboxData[p] = nil end
+		if hitboxData[p] then cleanHitboxForPlayer(p) end
+		hitboxOriginalSizes[p] = nil
 	end)
+
+	-- ==========================================
+	-- NEW PLAYER JOINED - AUTO APPLY HITBOX
+	-- ==========================================
+	Players.PlayerAdded:Connect(function(p)
+		if not hitboxEnabled then return end
+		p.CharacterAdded:Connect(function(char)
+			if not hitboxEnabled then return end
+			task.wait(1) -- Wait for character to fully load
+			if p.Character and hitboxEnabled then
+				createHitboxForPlayer(p)
+			end
+		end)
+	end)
+
+	-- Also handle existing players' future respawns
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player then
+			p.CharacterAdded:Connect(function(char)
+				if not hitboxEnabled then return end
+				task.wait(1)
+				if p.Character and hitboxEnabled then
+					createHitboxForPlayer(p)
+				end
+			end)
+		end
+	end
 
 	-- ==========================================
 	-- INITIAL SETUP
@@ -1816,8 +1887,8 @@ end
 	end)
 
 	Rayfield:Notify({
-		Title = "RyuExploit v3.8",
-		Content = "Loaded!\n✅ Hitbox works on MOUNTED players!\n✅ Cyan = Player on Horse\n✅ Yellow = Normal Player",
+		Title = "RyuExploit v5.1",
+		Content = "Loaded!\n✅ Hitbox: Direct HRP expand (no new parts)\n✅ Works on mounted/horse players\n✅ Cyan = Mounted | Yellow = Normal",
 		Duration = 6
 	})
 end
