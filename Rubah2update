@@ -97,16 +97,17 @@ local espEnemyColor = Color3.fromRGB(255, 0, 0)
 local espObjects = {}
 local espLineSmoothing = 0.3
 -- ==========================================
--- INVENTORY ESP VARS
+-- ITEM ESP VARS
 -- ==========================================
-local inventoryESPEnabled = false
-local inventoryESPColor = Color3.fromRGB(0, 255, 255)
-local inventoryESPFillTransparency = 0.5
-local inventoryESPOutlineTransparency = 0
-local inventoryESPHighlights = {}
-local inventoryFolderName = "Inventory"
-local lastInventoryUpdate = 0
-local INVENTORY_UPDATE_RATE = 0.5
+local itemESPEnabled = false
+local itemESPColor = Color3.fromRGB(0, 255, 255)
+local itemESPFillTransparency = 0.5
+local itemESPOutlineTransparency = 0
+local itemESPHighlights = {}
+local itemESPFolderName = "Inventory"
+local lastItemESPUpdate = 0
+local ITEM_ESP_UPDATE_RATE = 0.5
+local itemESPConnections = {}
 -- ==========================================
 -- HITBOX VARS
 -- ==========================================
@@ -1408,57 +1409,63 @@ local function restoreBrightness()
 	if originalOutdoorAmbient then Lighting.OutdoorAmbient = originalOutdoorAmbient end
 	if originalExposureCompensation then Lighting.ExposureCompensation = originalExposureCompensation end
 end
-
 -- ==========================================
--- INVENTORY ESP SYSTEM
+-- ITEM ESP SYSTEM
 -- ==========================================
-local function cleanInventoryESP()
-	for key, hl in pairs(inventoryESPHighlights) do
+local function cleanItemESP()
+	for _, conn in pairs(itemESPConnections) do
+		pcall(function() conn:Disconnect() end)
+	end
+	itemESPConnections = {}
+	
+	for item, hl in pairs(itemESPHighlights) do
 		pcall(function() 
-			if hl then hl:Destroy() end 
+			if hl and hl.Parent then hl:Destroy() end 
 		end)
 	end
-	inventoryESPHighlights = {}
+	itemESPHighlights = {}
 end
 
-local function applyHighlightToItem(item)
-	if not item then return end
-	if inventoryESPHighlights[item] and inventoryESPHighlights[item].Parent then return end
+local function applyItemHighlight(item)
+	if not item or not item.Parent then return end
+	if itemESPHighlights[item] and itemESPHighlights[item].Parent then return end
 	
-	-- Hapus highlight lama jika ada
-	for _, child in ipairs(item:GetChildren()) do
-		if child:IsA("Highlight") and child.Name == "InvESP" then
-			child:Destroy()
+	-- Hapus highlight lama
+	pcall(function()
+		for _, child in ipairs(item:GetChildren()) do
+			if child:IsA("Highlight") and child.Name == "ItemESP" then
+				child:Destroy()
+			end
 		end
-	end
+	end)
 	
 	local hl = Instance.new("Highlight")
-	hl.Name = "InvESP"
-	hl.FillColor = inventoryESPColor
+	hl.Name = "ItemESP"
+	hl.FillColor = itemESPColor
 	hl.OutlineColor = Color3.fromRGB(255, 255, 255)
-	hl.FillTransparency = inventoryESPFillTransparency
-	hl.OutlineTransparency = inventoryESPOutlineTransparency
+	hl.FillTransparency = itemESPFillTransparency
+	hl.OutlineTransparency = itemESPOutlineTransparency
 	hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 	hl.Parent = item
 	
-	inventoryESPHighlights[item] = hl
+	itemESPHighlights[item] = hl
 end
 
-local function findInventoryFolder()
-	-- Cari langsung
-	local folder = workspace:FindFirstChild(inventoryFolderName)
+local function findItemFolder()
+	-- Cari langsung di workspace
+	local folder = workspace:FindFirstChild(itemESPFolderName)
 	if folder then return folder end
 	
-	-- Cari case-insensitive
+	-- Cari case-insensitive di workspace children
 	for _, child in ipairs(workspace:GetChildren()) do
-		if child.Name:lower() == inventoryFolderName:lower() then
+		if child.Name:lower() == itemESPFolderName:lower() then
 			return child
 		end
 	end
 	
-	-- Cari di descendants
+	-- Cari di semua descendants
 	for _, desc in ipairs(workspace:GetDescendants()) do
-		if (desc:IsA("Folder") or desc:IsA("Model")) and desc.Name:lower() == inventoryFolderName:lower() then
+		if (desc:IsA("Folder") or desc:IsA("Model")) and desc.Name:lower() == itemESPFolderName:lower() then
 			return desc
 		end
 	end
@@ -1466,85 +1473,122 @@ local function findInventoryFolder()
 	return nil
 end
 
-local function updateInventoryESP()
-	if not inventoryESPEnabled then return end
+local function updateItemESP()
+	if not itemESPEnabled then return end
 	
-	local folder = findInventoryFolder()
-	if not folder then return end
-	
-	-- Apply ke semua children
-	for _, item in ipairs(folder:GetChildren()) do
-		if item:IsA("Model") or item:IsA("BasePart") or item:IsA("MeshPart") or item:IsA("UnionOperation") then
-			applyHighlightToItem(item)
+	local folder = findItemFolder()
+	if folder then
+		-- Apply ke children langsung
+		for _, item in ipairs(folder:GetChildren()) do
+			if item:IsA("Model") or item:IsA("BasePart") or item:IsA("MeshPart") or item:IsA("UnionOperation") then
+				applyItemHighlight(item)
+			end
+		end
+		
+		-- Apply ke descendants (untuk nested items)
+		for _, item in ipairs(folder:GetDescendants()) do
+			if item:IsA("Model") and not itemESPHighlights[item] then
+				applyItemHighlight(item)
+			end
 		end
 	end
 	
-	-- Apply ke descendants juga
-	for _, item in ipairs(folder:GetDescendants()) do
-		if item:IsA("Model") then
-			applyHighlightToItem(item)
+	-- Scan workspace untuk items dengan Handle (tools/items umum)
+	for _, item in ipairs(workspace:GetDescendants()) do
+		if item:IsA("Model") and item:FindFirstChild("Handle") and not item:FindFirstChildOfClass("Humanoid") then
+			applyItemHighlight(item)
 		end
 	end
 	
 	-- Update warna existing highlights
-	for item, hl in pairs(inventoryESPHighlights) do
+	for item, hl in pairs(itemESPHighlights) do
 		if hl and hl.Parent then
 			pcall(function()
-				hl.FillColor = inventoryESPColor
-				hl.FillTransparency = inventoryESPFillTransparency
-				hl.OutlineTransparency = inventoryESPOutlineTransparency
+				hl.FillColor = itemESPColor
+				hl.FillTransparency = itemESPFillTransparency
+				hl.OutlineTransparency = itemESPOutlineTransparency
 			end)
 		end
 	end
 	
-	-- Cleanup invalid
-	for item, hl in pairs(inventoryESPHighlights) do
+	-- Cleanup invalid highlights
+	for item, hl in pairs(itemESPHighlights) do
 		if not item or not item.Parent or not hl or not hl.Parent then
 			pcall(function() if hl then hl:Destroy() end end)
-			inventoryESPHighlights[item] = nil
+			itemESPHighlights[item] = nil
 		end
 	end
 end
 
-local function setupInventoryConnections()
-	local folder = findInventoryFolder()
-	if not folder then return end
+local function setupItemESPConnections()
+	-- Cleanup old connections
+	for _, conn in pairs(itemESPConnections) do
+		pcall(function() conn:Disconnect() end)
+	end
+	itemESPConnections = {}
 	
-	folder.ChildAdded:Connect(function(child)
-		if inventoryESPEnabled then
-			task.wait(0.1)
-			if child:IsA("Model") or child:IsA("BasePart") then
-				applyHighlightToItem(child)
+	local folder = findItemFolder()
+	if folder then
+		-- Listen untuk item baru
+		local addConn = folder.ChildAdded:Connect(function(child)
+			if itemESPEnabled then
+				task.wait(0.1)
+				if child:IsA("Model") or child:IsA("BasePart") then
+					applyItemHighlight(child)
+				end
 			end
-		end
-	end)
+		end)
+		table.insert(itemESPConnections, addConn)
+		
+		-- Listen untuk item dihapus
+		local remConn = folder.ChildRemoved:Connect(function(child)
+			if itemESPHighlights[child] then
+				pcall(function() itemESPHighlights[child]:Destroy() end)
+				itemESPHighlights[child] = nil
+			end
+		end)
+		table.insert(itemESPConnections, remConn)
+		
+		-- Listen untuk descendants
+		local descConn = folder.DescendantAdded:Connect(function(desc)
+			if itemESPEnabled and desc:IsA("Model") then
+				task.wait(0.1)
+				applyItemHighlight(desc)
+			end
+		end)
+		table.insert(itemESPConnections, descConn)
+	end
 	
-	folder.ChildRemoved:Connect(function(child)
-		if inventoryESPHighlights[child] then
-			pcall(function() inventoryESPHighlights[child]:Destroy() end)
-			inventoryESPHighlights[child] = nil
+	-- Global workspace listener untuk items dengan Handle
+	local wsConn = workspace.DescendantAdded:Connect(function(desc)
+		if itemESPEnabled and desc:IsA("Model") and desc:FindFirstChild("Handle") and not desc:FindFirstChildOfClass("Humanoid") then
+			task.wait(0.1)
+			applyItemHighlight(desc)
 		end
 	end)
+	table.insert(itemESPConnections, wsConn)
 end
 
-local function scanAllWorkspaceItems()
-	if not inventoryESPEnabled then return 0 end
+local function scanAllItems()
+	if not itemESPEnabled then return 0 end
 	local count = 0
 	
-	-- Scan semua di workspace yang mungkin item
-	for _, item in ipairs(workspace:GetDescendants()) do
-		if item:IsA("Model") and item:FindFirstChild("Handle") then
-			applyHighlightToItem(item)
-			count = count + 1
-		end
-	end
-	
 	-- Scan folder spesifik
-	local folder = findInventoryFolder()
+	local folder = findItemFolder()
 	if folder then
 		for _, item in ipairs(folder:GetDescendants()) do
 			if item:IsA("Model") or item:IsA("BasePart") then
-				applyHighlightToItem(item)
+				applyItemHighlight(item)
+				count = count + 1
+			end
+		end
+	end
+	
+	-- Scan semua di workspace dengan Handle
+	for _, item in ipairs(workspace:GetDescendants()) do
+		if item:IsA("Model") and item:FindFirstChild("Handle") and not item:FindFirstChildOfClass("Humanoid") then
+			if not itemESPHighlights[item] then
+				applyItemHighlight(item)
 				count = count + 1
 			end
 		end
@@ -1593,7 +1637,7 @@ SilentAimTab:CreateSlider({Name = "FOV Radius", Range = {50,800}, Increment = 10
 SilentAimTab:CreateSlider({Name = "Max Distance", Range = {50,2000}, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "SADist", Callback = function(V) silentAimDistance = V end})
 SilentAimTab:CreateSection("Prediction")
 SilentAimTab:CreateToggle({Name = "Movement Prediction", CurrentValue = true, Flag = "SAPred", Callback = function(V) silentAimPrediction = V end})
-SilentAimTab:CreateSlider({Name = "Prediction Amount", Range = {1,50}, Increment = 1, Suffix = "%", CurrentValue = 12, Flag = "SAPredAmt",  silentAimPredictionAmount = V/100 end})
+SilentAimTab:CreateSlider({Name = "Prediction Amount", Range = {1,50}, Increment = 1, Suffix = "%", CurrentValue = 12, Flag = "SAPredAmt", Callback = function(V) silentAimPredictionAmount = V/100 end})
 SilentAimTab:CreateSection("Safety")
 SilentAimTab:CreateToggle({Name = "Wall Check", CurrentValue = false, Flag = "SAWall", Callback = function(V) silentAimVisibleCheck = V end})
 SilentAimTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "SATeam", Callback = function(V) silentAimTeamCheck = V end})
@@ -1742,30 +1786,31 @@ ESPTab:CreateColorPicker({Name = "Team Color", Color = Color3.fromRGB(0, 255, 0)
 -- TAB: Item ESP
 -- ==========================================
 local ItemESPTab = Window:CreateTab("Item ESP", 4483362458)
-ItemESPTab:CreateSection("Inventory ESP")
+ItemESPTab:CreateSection("Item/Inventory ESP")
 ItemESPTab:CreateToggle({
-	Name = "Enable Inventory ESP", 
+	Name = "Enable Item ESP", 
 	CurrentValue = false, 
-	Flag = "InvESP", 
+	Flag = "ItemESP", 
 	Callback = function(V)
-		inventoryESPEnabled = V
+		itemESPEnabled = V
 		if V then
-			setupInventoryConnections()
-			updateInventoryESP()
-			Rayfield:Notify({Title = "Inventory ESP", Content = "Enabled!", Duration = 2})
+			setupItemESPConnections()
+			local count = scanAllItems()
+			updateItemESP()
+			Rayfield:Notify({Title = "Item ESP", Content = "ON! Found "..count.." items", Duration = 3})
 		else
-			cleanInventoryESP()
-			Rayfield:Notify({Title = "Inventory ESP", Content = "Disabled!", Duration = 2})
+			cleanItemESP()
+			Rayfield:Notify({Title = "Item ESP", Content = "OFF!", Duration = 2})
 		end
 	end
 })
 ItemESPTab:CreateColorPicker({
 	Name = "Highlight Color", 
 	Color = Color3.fromRGB(0, 255, 255), 
-	Flag = "InvESPColor", 
+	Flag = "ItemCol", 
 	Callback = function(V) 
-		inventoryESPColor = V
-		if inventoryESPEnabled then updateInventoryESP() end
+		itemESPColor = V
+		if itemESPEnabled then updateItemESP() end
 	end
 })
 ItemESPTab:CreateSlider({
@@ -1773,11 +1818,11 @@ ItemESPTab:CreateSlider({
 	Range = {0, 100}, 
 	Increment = 5, 
 	Suffix = "%", 
-	CurrentValue = 70, 
-	Flag = "InvESPFill", 
+	CurrentValue = 50, 
+	Flag = "ItemFill", 
 	Callback = function(V) 
-		inventoryESPFillTransparency = V/100
-		if inventoryESPEnabled then updateInventoryESP() end
+		itemESPFillTransparency = V/100
+		if itemESPEnabled then updateItemESP() end
 	end
 })
 ItemESPTab:CreateSlider({
@@ -1785,11 +1830,11 @@ ItemESPTab:CreateSlider({
 	Range = {0, 100}, 
 	Increment = 5, 
 	Suffix = "%", 
-	CurrentValue = 30, 
-	Flag = "InvESPOutline", 
+	CurrentValue = 0, 
+	Flag = "ItemOut", 
 	Callback = function(V) 
-		inventoryESPOutlineTransparency = V/100
-		if inventoryESPEnabled then updateInventoryESP() end
+		itemESPOutlineTransparency = V/100
+		if itemESPEnabled then updateItemESP() end
 	end
 })
 ItemESPTab:CreateInput({
@@ -1797,37 +1842,49 @@ ItemESPTab:CreateInput({
 	PlaceholderText = "Inventory",
 	RemoveTextAfterFocusLost = false,
 	Callback = function(Text)
-		inventoryFolderName = Text
-		if inventoryESPEnabled then
-			cleanInventoryESP()
-			setupInventoryListener()
-			updateInventoryESP()
+		if Text and Text ~= "" then
+			itemESPFolderName = Text
+			if itemESPEnabled then
+				cleanItemESP()
+				setupItemESPConnections()
+				local count = scanAllItems()
+				updateItemESP()
+				Rayfield:Notify({Title = "Updated", Content = "Scanning: "..Text.." ("..count.." items)", Duration = 3})
+			end
 		end
-		Rayfield:Notify({Title = "Folder Updated", Content = "Now scanning: " .. Text, Duration = 2})
 	end
 })
 ItemESPTab:CreateButton({
-	Name = "Refresh ESP", 
+	Name = "Scan All Items", 
 	Callback = function()
-		cleanInventoryESP()
-		if inventoryESPEnabled then
-			setupInventoryListener()
-			updateInventoryESP()
-		end
-		Rayfield:Notify({Title = "Refreshed", Content = "Inventory ESP refreshed!", Duration = 2})
+		local count = scanAllItems()
+		updateItemESP()
+		Rayfield:Notify({Title = "Scan Complete", Content = "Found "..count.." items!", Duration = 3})
 	end
 })
 ItemESPTab:CreateButton({
-	Name = "List All Folders", 
+	Name = "List Workspace Folders", 
 	Callback = function()
 		local folders = {}
 		for _, child in ipairs(workspace:GetChildren()) do
 			if child:IsA("Folder") then
-				table.insert(folders, child.Name)
+				local itemCount = #child:GetChildren()
+				table.insert(folders, child.Name.." ("..itemCount..")")
 			end
 		end
+		print("=== WORKSPACE FOLDERS ===")
+		for _, name in ipairs(folders) do
+			print(name)
+		end
 		local msg = #folders > 0 and table.concat(folders, ", ") or "No folders found"
-		Rayfield:Notify({Title = "Workspace Folders", Content = msg, Duration = 5})
+		Rayfield:Notify({Title = "Folders Found", Content = msg, Duration = 6})
+	end
+})
+ItemESPTab:CreateButton({
+	Name = "Clear All ESP", 
+	Callback = function()
+		cleanItemESP()
+		Rayfield:Notify({Title = "Cleared", Content = "All item highlights removed", Duration = 2})
 	end
 })
 -- ==========================================
@@ -2183,16 +2240,16 @@ RunService.RenderStepped:Connect(function(dt)
 	if now - lastESPUpdate >= ESP_UPDATE_RATE then lastESPUpdate = now; if espEnabled then updatePlayerESP() end end
 
 	-- Hitbox
-if now - lastHitboxUpdate >= HITBOX_UPDATE_RATE then
-    lastHitboxUpdate = now
-    if hitboxEnabled then updateHitboxExpander() end
-    if antiHitboxEnabled then updateAntiHitbox() end
-end
-
--- Inventory ESP
-if now - lastInventoryUpdate >= INVENTORY_UPDATE_RATE then
-    lastInventoryUpdate = now
-    if inventoryESPEnabled then updateInventoryESP() end
+	if now - lastHitboxUpdate >= HITBOX_UPDATE_RATE then
+		lastHitboxUpdate = now
+		if hitboxEnabled then updateHitboxExpander() end
+		if antiHitboxEnabled then updateAntiHitbox() end
+	end
+end)
+-- Item ESP
+if now - lastItemESPUpdate >= ITEM_ESP_UPDATE_RATE then
+    lastItemESPUpdate = now
+    if itemESPEnabled then updateItemESP() end
 end
 -- ==========================================
 -- CLEANUP
