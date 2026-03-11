@@ -33,7 +33,6 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Lighting = game:GetService("Lighting")
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local mouse = player:GetMouse()
@@ -74,32 +73,6 @@ local antiKickEnabled = false
 local antiKickHooked = false
 
 -- ==========================================
--- BRIGHTNESS / VISUALS VARS
--- ==========================================
-local brightnessEnabled = false
-local brightnessValue = 2
-local ambientColor = Color3.fromRGB(178, 178, 178)
-local outdoorAmbientColor = Color3.fromRGB(178, 178, 178)
-local fogEnabled = false
-local fogEndDistance = 100000
-local fullbrightEnabled = false
-local nightVisionEnabled = false
-local originalLighting = {}
-local removeShadows = false
-local customTimeEnabled = false
-local customTimeValue = 14
-local colorCorrectionEffect = nil
-local colorCorrectionEnabled = false
-local ccBrightness = 0.1
-local ccContrast = 0.1
-local ccSaturation = 0.2
-local bloomEnabled = false
-local bloomEffect = nil
-local bloomIntensity = 0
-local bloomSize = 0
-local bloomThreshold = 1
-
--- ==========================================
 -- ESP VARS
 -- ==========================================
 local espEnabled = false
@@ -133,6 +106,26 @@ local hitboxCollisionGroupCreated = false
 local antiHitboxEnabled = false
 local antiHitboxSize = 1
 local antiHitboxParts = {}
+
+-- ==========================================
+-- BRIGHTNESS VARS
+-- ==========================================
+local brightnessEnabled = false
+local brightnessValue = 2
+local originalLighting = {}
+local originalAmbient = nil
+local originalBrightness = nil
+local originalOutdoorAmbient = nil
+local originalFogEnd = nil
+local originalFogStart = nil
+local originalGlobalShadows = nil
+local originalClockTime = nil
+local fullbrightMode = "Standard"
+local removeAtmosphere = false
+local removeFog = true
+local removeShadows = true
+local customTimeEnabled = false
+local customTimeValue = 14
 
 -- ==========================================
 -- AIMLOCK VARS
@@ -266,154 +259,6 @@ end
 
 local function isLocalPlayerInVehicle()
 	return isInVehicle(player)
-end
-
--- ==========================================
--- BRIGHTNESS / VISUALS FUNCTIONS
--- ==========================================
-local function saveOriginalLighting()
-	if originalLighting.saved then return end
-	originalLighting = {
-		saved = true,
-		Brightness = Lighting.Brightness,
-		Ambient = Lighting.Ambient,
-		OutdoorAmbient = Lighting.OutdoorAmbient,
-		FogEnd = Lighting.FogEnd,
-		FogStart = Lighting.FogStart,
-		FogColor = Lighting.FogColor,
-		ClockTime = Lighting.ClockTime,
-		GlobalShadows = Lighting.GlobalShadows,
-		EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale,
-		EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
-	}
-end
-
-local function applyBrightness()
-	if not brightnessEnabled then return end
-	saveOriginalLighting()
-	Lighting.Brightness = brightnessValue
-	Lighting.Ambient = ambientColor
-	Lighting.OutdoorAmbient = outdoorAmbientColor
-end
-
-local function applyFullbright()
-	if not fullbrightEnabled then return end
-	saveOriginalLighting()
-	Lighting.Brightness = 3
-	Lighting.Ambient = Color3.fromRGB(255, 255, 255)
-	Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
-	Lighting.FogEnd = 100000
-	Lighting.FogStart = 100000
-	Lighting.GlobalShadows = false
-	Lighting.EnvironmentDiffuseScale = 1
-	Lighting.EnvironmentSpecularScale = 1
-end
-
-local function applyNightVision()
-	if not nightVisionEnabled then return end
-	saveOriginalLighting()
-	Lighting.Brightness = 4
-	Lighting.Ambient = Color3.fromRGB(180, 255, 180)
-	Lighting.OutdoorAmbient = Color3.fromRGB(180, 255, 180)
-	Lighting.FogEnd = 100000
-	Lighting.GlobalShadows = false
-	
-	if not colorCorrectionEffect then
-		colorCorrectionEffect = Instance.new("ColorCorrectionEffect")
-		colorCorrectionEffect.Name = "RyuNightVision"
-		colorCorrectionEffect.Parent = Lighting
-	end
-	colorCorrectionEffect.Brightness = 0.15
-	colorCorrectionEffect.Contrast = 0.3
-	colorCorrectionEffect.Saturation = -0.5
-	colorCorrectionEffect.TintColor = Color3.fromRGB(150, 255, 150)
-	colorCorrectionEffect.Enabled = true
-end
-
-local function applyFog()
-	saveOriginalLighting()
-	if fogEnabled then
-		Lighting.FogEnd = fogEndDistance
-		Lighting.FogStart = 0
-	else
-		if originalLighting.saved then
-			Lighting.FogEnd = originalLighting.FogEnd
-			Lighting.FogStart = originalLighting.FogStart
-		end
-	end
-end
-
-local function applyShadows()
-	saveOriginalLighting()
-	Lighting.GlobalShadows = not removeShadows
-end
-
-local function applyCustomTime()
-	if customTimeEnabled then
-		saveOriginalLighting()
-		Lighting.ClockTime = customTimeValue
-	end
-end
-
-local function applyColorCorrection()
-	if colorCorrectionEnabled then
-		if not colorCorrectionEffect then
-			colorCorrectionEffect = Instance.new("ColorCorrectionEffect")
-			colorCorrectionEffect.Name = "RyuColorCorrection"
-			colorCorrectionEffect.Parent = Lighting
-		end
-		colorCorrectionEffect.Brightness = ccBrightness
-		colorCorrectionEffect.Contrast = ccContrast
-		colorCorrectionEffect.Saturation = ccSaturation
-		colorCorrectionEffect.TintColor = Color3.fromRGB(255, 255, 255)
-		colorCorrectionEffect.Enabled = true
-	else
-		if colorCorrectionEffect and not nightVisionEnabled then
-			colorCorrectionEffect.Enabled = false
-		end
-	end
-end
-
-local function applyBloom()
-	if bloomEnabled then
-		if not bloomEffect then
-			bloomEffect = Instance.new("BloomEffect")
-			bloomEffect.Name = "RyuBloom"
-			bloomEffect.Parent = Lighting
-		end
-		bloomEffect.Intensity = bloomIntensity
-		bloomEffect.Size = bloomSize
-		bloomEffect.Threshold = bloomThreshold
-		bloomEffect.Enabled = true
-	else
-		if bloomEffect then
-			bloomEffect.Enabled = false
-		end
-	end
-end
-
-local function restoreLighting()
-	if not originalLighting.saved then return end
-	pcall(function()
-		Lighting.Brightness = originalLighting.Brightness
-		Lighting.Ambient = originalLighting.Ambient
-		Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient
-		Lighting.FogEnd = originalLighting.FogEnd
-		Lighting.FogStart = originalLighting.FogStart
-		Lighting.FogColor = originalLighting.FogColor
-		Lighting.ClockTime = originalLighting.ClockTime
-		Lighting.GlobalShadows = originalLighting.GlobalShadows
-		Lighting.EnvironmentDiffuseScale = originalLighting.EnvironmentDiffuseScale
-		Lighting.EnvironmentSpecularScale = originalLighting.EnvironmentSpecularScale
-	end)
-	if colorCorrectionEffect then
-		pcall(function() colorCorrectionEffect:Destroy() end)
-		colorCorrectionEffect = nil
-	end
-	if bloomEffect then
-		pcall(function() bloomEffect:Destroy() end)
-		bloomEffect = nil
-	end
 end
 
 -- ==========================================
@@ -938,7 +783,107 @@ local function enableAntiKick()
 	end)
 	pcall(function() player.Kick = function(s, ...) if s == player then return nil end end end)
 end
+-- ==========================================
+-- TAB: Brightness
+-- ==========================================
+local BrightnessTab = Window:CreateTab("Brightness", 4483362458)
+BrightnessTab:CreateSection("Fullbright")
+BrightnessTab:CreateToggle({Name = "Enable Fullbright", CurrentValue = false, Flag = "Fullbright", Callback = function(V)
+	brightnessEnabled = V
+	if V then
+		applyBrightness()
+		lightingLockConnection = lockLighting()
+		Rayfield:Notify({Title = "Brightness", Content = "Fullbright ON!", Duration = 3})
+	else
+		if lightingLockConnection then
+			pcall(function() lightingLockConnection:Disconnect() end)
+			lightingLockConnection = nil
+		end
+		restoreLighting()
+		Rayfield:Notify({Title = "Brightness", Content = "Fullbright OFF - Restored", Duration = 3})
+	end
+end})
 
+BrightnessTab:CreateDropdown({Name = "Mode", Options = {"Standard","Maximum","Natural","Night Vision"}, CurrentOption = {"Standard"}, MultipleOptions = false, Flag = "BrightMode", Callback = function(O)
+	fullbrightMode = O[1] or O
+	if brightnessEnabled then applyBrightness() end
+end})
+
+BrightnessTab:CreateSlider({Name = "Brightness Level", Range = {1,5}, Increment = 0.5, Suffix = "x", CurrentValue = 2, Flag = "BrightLevel", Callback = function(V)
+	brightnessValue = V
+	if brightnessEnabled then applyBrightness() end
+end})
+
+BrightnessTab:CreateSection("Effects")
+BrightnessTab:CreateToggle({Name = "Remove Fog", CurrentValue = true, Flag = "RemoveFog", Callback = function(V)
+	removeFog = V
+	if brightnessEnabled then applyBrightness()
+	elseif not V and originalFogEnd then
+		pcall(function() Lighting.FogEnd = originalFogEnd; Lighting.FogStart = originalFogStart end)
+	end
+end})
+
+BrightnessTab:CreateToggle({Name = "Remove Shadows", CurrentValue = true, Flag = "RemoveShadows", Callback = function(V)
+	removeShadows = V
+	if brightnessEnabled then applyBrightness()
+	elseif not V and originalGlobalShadows ~= nil then
+		pcall(function() Lighting.GlobalShadows = originalGlobalShadows end)
+	end
+end})
+
+BrightnessTab:CreateToggle({Name = "Remove Atmosphere", CurrentValue = false, Flag = "RemoveAtmo", Callback = function(V)
+	removeAtmosphere = V
+	if brightnessEnabled then applyBrightness() end
+end})
+
+BrightnessTab:CreateSection("Custom Time")
+BrightnessTab:CreateToggle({Name = "Custom Time of Day", CurrentValue = false, Flag = "CustomTime", Callback = function(V)
+	customTimeEnabled = V
+	if brightnessEnabled then applyBrightness()
+	elseif not V and originalClockTime then
+		pcall(function() Lighting.ClockTime = originalClockTime end)
+	end
+end})
+
+BrightnessTab:CreateSlider({Name = "Time (Hour)", Range = {0,24}, Increment = 0.5, Suffix = "h", CurrentValue = 14, Flag = "TimeValue", Callback = function(V)
+	customTimeValue = V
+	if brightnessEnabled and customTimeEnabled then
+		pcall(function() Lighting.ClockTime = V end)
+	end
+end})
+
+BrightnessTab:CreateSection("Quick Presets")
+BrightnessTab:CreateButton({Name = "Daylight (12:00)", Callback = function()
+	customTimeEnabled = true
+	customTimeValue = 12
+	if brightnessEnabled then applyBrightness() end
+	Rayfield:Notify({Title = "Preset", Content = "Daylight applied", Duration = 2})
+end})
+
+BrightnessTab:CreateButton({Name = "Sunset (18:00)", Callback = function()
+	customTimeEnabled = true
+	customTimeValue = 18
+	if brightnessEnabled then applyBrightness() end
+	Rayfield:Notify({Title = "Preset", Content = "Sunset applied", Duration = 2})
+end})
+
+BrightnessTab:CreateButton({Name = "Midnight (0:00)", Callback = function()
+	customTimeEnabled = true
+	customTimeValue = 0
+	fullbrightMode = "Night Vision"
+	if brightnessEnabled then applyBrightness() end
+	Rayfield:Notify({Title = "Preset", Content = "Midnight + Night Vision", Duration = 2})
+end})
+
+BrightnessTab:CreateButton({Name = "Reset All Lighting", Callback = function()
+	brightnessEnabled = false
+	if lightingLockConnection then
+		pcall(function() lightingLockConnection:Disconnect() end)
+		lightingLockConnection = nil
+	end
+	restoreLighting()
+	Rayfield:Notify({Title = "Reset", Content = "Lighting restored to original", Duration = 3})
+end})
 -- ==========================================
 -- NOCLIP SYSTEM
 -- ==========================================
@@ -1072,6 +1017,7 @@ local function createHitboxOverlay(p)
 	if not hitboxData[p] then hitboxData[p] = {} end
 	local dd = hitboxData[p]
 
+	-- Clean old
 	if dd.overlayPart and dd.overlayPart.Parent then pcall(function() dd.overlayPart:Destroy() end) end
 	if dd.espVisual and dd.espVisual.Parent then pcall(function() dd.espVisual:Destroy() end) end
 	if dd.deathConn then pcall(function() dd.deathConn:Disconnect() end) end
@@ -1081,6 +1027,7 @@ local function createHitboxOverlay(p)
 
 	setupHitboxCollisionGroup()
 
+	-- Expand HRP
 	pcall(function()
 		hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
 		hrp.Transparency = hitboxTransparency
@@ -1090,6 +1037,7 @@ local function createHitboxOverlay(p)
 		hrp.CanTouch = false
 	end)
 
+	-- Visual overlay (no physics)
 	local ov = Instance.new("Part")
 	ov.Name = "HitboxVisual"
 	ov.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
@@ -1112,6 +1060,7 @@ local function createHitboxOverlay(p)
 	weld.Parent = ov
 	ov.CFrame = hrp.CFrame
 
+	-- Vehicle listener
 	dd.seatConn = hum:GetPropertyChangedSignal("Sit"):Connect(function()
 		if not hitboxData[p] then return end
 		if hum.Sit then
@@ -1124,6 +1073,7 @@ local function createHitboxOverlay(p)
 		end
 	end)
 
+	-- Frame update
 	dd.updateConn = RunService.Heartbeat:Connect(function()
 		if not ov or not ov.Parent then
 			if dd.updateConn then pcall(function() dd.updateConn:Disconnect() end); dd.updateConn = nil end
@@ -1533,11 +1483,178 @@ local function clearAllESP()
 	espObjects = {}
 end
 
+
+-- ==========================================
+-- BRIGHTNESS SYSTEM
+-- ==========================================
+local Lighting = game:GetService("Lighting")
+
+local function saveLightingSettings()
+	if originalAmbient then return end -- Already saved
+	originalAmbient = Lighting.Ambient
+	originalBrightness = Lighting.Brightness
+	originalOutdoorAmbient = Lighting.OutdoorAmbient
+	originalFogEnd = Lighting.FogEnd
+	originalFogStart = Lighting.FogStart
+	originalGlobalShadows = Lighting.GlobalShadows
+	originalClockTime = Lighting.ClockTime
+	
+	-- Save post-processing effects
+	for _, effect in ipairs(Lighting:GetChildren()) do
+		if effect:IsA("PostEffect") or effect:IsA("Atmosphere") or effect:IsA("Sky") or effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("SunRaysEffect") then
+			originalLighting[effect] = {
+				Enabled = effect:IsA("PostEffect") and effect.Enabled or nil,
+				Parent = effect.Parent
+			}
+		end
+	end
+end
+
+local function applyBrightness()
+	if not brightnessEnabled then return end
+	
+	saveLightingSettings()
+	
+	if fullbrightMode == "Standard" then
+		Lighting.Brightness = brightnessValue
+		Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+		Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+	elseif fullbrightMode == "Maximum" then
+		Lighting.Brightness = 3
+		Lighting.Ambient = Color3.fromRGB(255, 255, 255)
+		Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255)
+		Lighting.EnvironmentDiffuseScale = 1
+		Lighting.EnvironmentSpecularScale = 1
+	elseif fullbrightMode == "Natural" then
+		Lighting.Brightness = brightnessValue * 0.8
+		Lighting.Ambient = Color3.fromRGB(200, 200, 200)
+		Lighting.OutdoorAmbient = Color3.fromRGB(220, 220, 220)
+	elseif fullbrightMode == "Night Vision" then
+		Lighting.Brightness = 0.5
+		Lighting.Ambient = Color3.fromRGB(150, 255, 150)
+		Lighting.OutdoorAmbient = Color3.fromRGB(100, 200, 100)
+	end
+	
+	if removeFog then
+		Lighting.FogEnd = 100000
+		Lighting.FogStart = 100000
+	end
+	
+	if removeShadows then
+		Lighting.GlobalShadows = false
+	end
+	
+	if customTimeEnabled then
+		Lighting.ClockTime = customTimeValue
+	end
+	
+	-- Handle atmosphere and effects
+	for _, effect in ipairs(Lighting:GetChildren()) do
+		if effect:IsA("Atmosphere") and removeAtmosphere then
+			pcall(function() effect.Density = 0 end)
+		end
+		if effect:IsA("BloomEffect") then
+			pcall(function() effect.Enabled = false end)
+		end
+		if effect:IsA("BlurEffect") then
+			pcall(function() effect.Enabled = false end)
+		end
+		if effect:IsA("DepthOfFieldEffect") then
+			pcall(function() effect.Enabled = false end)
+		end
+		if effect:IsA("ColorCorrectionEffect") then
+			pcall(function()
+				if fullbrightMode == "Night Vision" then
+					effect.TintColor = Color3.fromRGB(150, 255, 150)
+					effect.Brightness = 0.2
+					effect.Contrast = 0.3
+				else
+					effect.Brightness = 0.1
+					effect.Contrast = 0.1
+				end
+			end)
+		end
+	end
+end
+
+local function restoreLighting()
+	if originalAmbient then
+		pcall(function() Lighting.Ambient = originalAmbient end)
+	end
+	if originalBrightness then
+		pcall(function() Lighting.Brightness = originalBrightness end)
+	end
+	if originalOutdoorAmbient then
+		pcall(function() Lighting.OutdoorAmbient = originalOutdoorAmbient end)
+	end
+	if originalFogEnd then
+		pcall(function() Lighting.FogEnd = originalFogEnd end)
+	end
+	if originalFogStart then
+		pcall(function() Lighting.FogStart = originalFogStart end)
+	end
+	if originalGlobalShadows ~= nil then
+		pcall(function() Lighting.GlobalShadows = originalGlobalShadows end)
+	end
+	if originalClockTime then
+		pcall(function() Lighting.ClockTime = originalClockTime end)
+	end
+	
+	-- Restore effects
+	for effect, data in pairs(originalLighting) do
+		if effect and effect.Parent then
+			if data.Enabled ~= nil then
+				pcall(function() effect.Enabled = data.Enabled end)
+			end
+		end
+	end
+	
+	-- Restore atmosphere
+	for _, effect in ipairs(Lighting:GetChildren()) do
+		if effect:IsA("Atmosphere") then
+			pcall(function() effect.Density = 0.395 end) -- Default density
+		end
+		if effect:IsA("ColorCorrectionEffect") then
+			pcall(function()
+				effect.Brightness = 0
+				effect.Contrast = 0
+				effect.TintColor = Color3.fromRGB(255, 255, 255)
+			end)
+		end
+	end
+end
+
+local function updateBrightness()
+	if brightnessEnabled then
+		applyBrightness()
+	end
+end
+
+-- Prevent lighting changes from overriding our settings
+local function lockLighting()
+	if not brightnessEnabled then return end
+	
+	local connection
+	connection = Lighting:GetPropertyChangedSignal("Brightness"):Connect(function()
+		if brightnessEnabled then
+			task.defer(function()
+				if brightnessEnabled then
+					applyBrightness()
+				end
+			end)
+		end
+	end)
+	
+	return connection
+end
+
+local lightingLockConnection = nil
+
 -- ==========================================
 -- UI WINDOW
 -- ==========================================
 local Window = Rayfield:CreateWindow({
-	Name = "RyuExploit v3.8",
+	Name = "RyuExploit v3.7",
 	LoadingTitle = "RyuExploit Loading",
 	LoadingSubtitle = "By NubyCode",
 	ConfigurationSaving = {Enabled = true, FolderName = "RyuExploit", FileName = "Config"},
@@ -1746,143 +1863,6 @@ HitboxTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "AntiHB", 
 	end
 end})
 HitboxTab:CreateSlider({Name = "Size", Range = {1,30}, Increment = 1, Suffix = " (x0.1)", CurrentValue = 10, Flag = "AHBSize", Callback = function(V) antiHitboxSize = V/10 end})
-
--- ==========================================
--- TAB: Brightness & Visuals (NEW)
--- ==========================================
-local BrightnessTab = Window:CreateTab("Brightness", 4483362458)
-
-BrightnessTab:CreateSection("Quick Presets")
-BrightnessTab:CreateButton({Name = "Fullbright", Callback = function()
-	fullbrightEnabled = true
-	nightVisionEnabled = false
-	brightnessEnabled = false
-	applyFullbright()
-	Rayfield:Notify({Title = "Brightness", Content = "Fullbright enabled!", Duration = 3})
-end})
-BrightnessTab:CreateButton({Name = "Night Vision", Callback = function()
-	nightVisionEnabled = true
-	fullbrightEnabled = false
-	brightnessEnabled = false
-	applyNightVision()
-	Rayfield:Notify({Title = "Brightness", Content = "Night Vision enabled!", Duration = 3})
-end})
-BrightnessTab:CreateButton({Name = "Reset to Default", Callback = function()
-	brightnessEnabled = false
-	fullbrightEnabled = false
-	nightVisionEnabled = false
-	colorCorrectionEnabled = false
-	bloomEnabled = false
-	customTimeEnabled = false
-	removeShadows = false
-	fogEnabled = false
-	restoreLighting()
-	Rayfield:Notify({Title = "Brightness", Content = "Restored to default!", Duration = 3})
-end})
-
-BrightnessTab:CreateSection("Manual Brightness")
-BrightnessTab:CreateToggle({Name = "Enable Custom Brightness", CurrentValue = false, Flag = "BrightEn", Callback = function(V)
-	brightnessEnabled = V
-	if V then
-		fullbrightEnabled = false
-		nightVisionEnabled = false
-		applyBrightness()
-	else
-		if not fullbrightEnabled and not nightVisionEnabled then restoreLighting() end
-	end
-end})
-BrightnessTab:CreateSlider({Name = "Brightness Level", Range = {0,10}, Increment = 1, Suffix = "", CurrentValue = 2, Flag = "BrightVal", Callback = function(V)
-	brightnessValue = V
-	if brightnessEnabled then
-		saveOriginalLighting()
-		Lighting.Brightness = V
-	end
-end})
-BrightnessTab:CreateColorPicker({Name = "Ambient Color", Color = Color3.fromRGB(178, 178, 178), Flag = "AmbCol", Callback = function(V)
-	ambientColor = V
-	if brightnessEnabled then
-		saveOriginalLighting()
-		Lighting.Ambient = V
-	end
-end})
-BrightnessTab:CreateColorPicker({Name = "Outdoor Ambient", Color = Color3.fromRGB(178, 178, 178), Flag = "OutAmbCol", Callback = function(V)
-	outdoorAmbientColor = V
-	if brightnessEnabled then
-		saveOriginalLighting()
-		Lighting.OutdoorAmbient = V
-	end
-end})
-
-BrightnessTab:CreateSection("Time of Day")
-BrightnessTab:CreateToggle({Name = "Custom Time", CurrentValue = false, Flag = "CustTime", Callback = function(V)
-	customTimeEnabled = V
-	if V then applyCustomTime()
-	else
-		if originalLighting.saved then Lighting.ClockTime = originalLighting.ClockTime end
-	end
-end})
-BrightnessTab:CreateSlider({Name = "Clock Time", Range = {0,24}, Increment = 1, Suffix = "h", CurrentValue = 14, Flag = "TimeVal", Callback = function(V)
-	customTimeValue = V
-	if customTimeEnabled then
-		saveOriginalLighting()
-		Lighting.ClockTime = V
-	end
-end})
-
-BrightnessTab:CreateSection("Fog Control")
-BrightnessTab:CreateToggle({Name = "Remove Fog", CurrentValue = false, Flag = "FogEn", Callback = function(V)
-	fogEnabled = V
-	applyFog()
-end})
-BrightnessTab:CreateSlider({Name = "Fog Distance", Range = {100,100000}, Increment = 500, Suffix = " studs", CurrentValue = 100000, Flag = "FogDist", Callback = function(V)
-	fogEndDistance = V
-	if fogEnabled then
-		saveOriginalLighting()
-		Lighting.FogEnd = V
-	end
-end})
-
-BrightnessTab:CreateSection("Shadows")
-BrightnessTab:CreateToggle({Name = "Remove Shadows", CurrentValue = false, Flag = "NoShadow", Callback = function(V)
-	removeShadows = V
-	applyShadows()
-end})
-
-BrightnessTab:CreateSection("Color Correction")
-BrightnessTab:CreateToggle({Name = "Enable Color Correction", CurrentValue = false, Flag = "CCEn", Callback = function(V)
-	colorCorrectionEnabled = V
-	applyColorCorrection()
-end})
-BrightnessTab:CreateSlider({Name = "CC Brightness", Range = {-100,100}, Increment = 5, Suffix = "%", CurrentValue = 10, Flag = "CCBright", Callback = function(V)
-	ccBrightness = V / 100
-	if colorCorrectionEnabled then applyColorCorrection() end
-end})
-BrightnessTab:CreateSlider({Name = "CC Contrast", Range = {-100,100}, Increment = 5, Suffix = "%", CurrentValue = 10, Flag = "CCContrast", Callback = function(V)
-	ccContrast = V / 100
-	if colorCorrectionEnabled then applyColorCorrection() end
-end})
-BrightnessTab:CreateSlider({Name = "CC Saturation", Range = {-100,100}, Increment = 5, Suffix = "%", CurrentValue = 20, Flag = "CCSat", Callback = function(V)
-	ccSaturation = V / 100
-	if colorCorrectionEnabled then applyColorCorrection() end
-end})
-
-BrightnessTab:CreateSection("Bloom Effect")
-BrightnessTab:CreateToggle({Name = "Enable Bloom", CurrentValue = false, Flag = "BloomEn", Callback = function(V)
-	bloomEnabled = V
-	applyBloom()
-end})
-BrightnessTab:CreateSlider({Name = "Bloom Intensity", Range = {0,100}, Increment = 5, Suffix = "%", CurrentValue = 0, Flag = "BloomInt", Callback = function(V)
-	bloomIntensity = V / 100
-	if bloomEnabled then applyBloom() end
-end})
-BrightnessTab:CreateSlider({Name = "Bloom Size", Range = {0,100}, Increment = 5, Suffix = "", CurrentValue = 0, Flag = "BloomSize", Callback = function(V)
-	bloomSize = V
-	if bloomEnabled then applyBloom() end
-end})
-BrightnessTab:CreateSlider({Name = "Bloom Threshold", Range = {0,100}, Increment = 5, Suffix = "%", CurrentValue = 100, Flag = "BloomThresh", Callback = function(V)
-	bloomThreshold = V / 100
-	if bloomEnabled then applyBloom() end
-end})
 
 -- ==========================================
 -- TAB: Movement
@@ -2100,52 +2080,7 @@ player.CharacterAdded:Connect(function(char)
 	if noRecoilEnabled or noSpreadEnabled then
 		task.wait(0.5); if char and char.Parent then setupToolListener(char) end
 	end
-	-- Re-apply brightness settings after respawn
-	task.wait(0.5)
-	if brightnessEnabled then applyBrightness()
-	elseif fullbrightEnabled then applyFullbright()
-	elseif nightVisionEnabled then applyNightVision() end
-	if fogEnabled then applyFog() end
-	if removeShadows then applyShadows() end
-	if customTimeEnabled then applyCustomTime() end
-	if colorCorrectionEnabled then applyColorCorrection() end
-	if bloomEnabled then applyBloom() end
 end)
-
--- ==========================================
--- LIGHTING CHANGE PROTECTION
--- ==========================================
-local lightingProtectionEnabled = false
-local lightingProtectionConn = nil
-
-local function enableLightingProtection()
-	if lightingProtectionConn then return end
-	lightingProtectionEnabled = true
-	lightingProtectionConn = Lighting.Changed:Connect(function(prop)
-		if not lightingProtectionEnabled then return end
-		if brightnessEnabled then
-			if prop == "Brightness" and Lighting.Brightness ~= brightnessValue then Lighting.Brightness = brightnessValue end
-			if prop == "Ambient" and Lighting.Ambient ~= ambientColor then Lighting.Ambient = ambientColor end
-			if prop == "OutdoorAmbient" and Lighting.OutdoorAmbient ~= outdoorAmbientColor then Lighting.OutdoorAmbient = outdoorAmbientColor end
-		end
-		if fullbrightEnabled then
-			if prop == "Brightness" and Lighting.Brightness ~= 3 then Lighting.Brightness = 3 end
-			if prop == "Ambient" then Lighting.Ambient = Color3.fromRGB(255, 255, 255) end
-			if prop == "OutdoorAmbient" then Lighting.OutdoorAmbient = Color3.fromRGB(255, 255, 255) end
-		end
-		if customTimeEnabled and prop == "ClockTime" then
-			if Lighting.ClockTime ~= customTimeValue then Lighting.ClockTime = customTimeValue end
-		end
-		if fogEnabled and (prop == "FogEnd" or prop == "FogStart") then
-			Lighting.FogEnd = fogEndDistance; Lighting.FogStart = 0
-		end
-		if removeShadows and prop == "GlobalShadows" then
-			Lighting.GlobalShadows = false
-		end
-	end)
-end
-
-enableLightingProtection()
 
 -- ==========================================
 -- MAIN RENDER LOOP
@@ -2245,8 +2180,8 @@ task.spawn(function()
 end)
 
 Rayfield:Notify({
-	Title = "RyuExploit v3.8",
-	Content = "Loaded!\nNew: Brightness & Visuals Tab\nFullbright, Night Vision, Color Correction, Bloom, Fog, Time Control",
-	Duration = 6
+	Title = "RyuExploit v3.7",
+	Content = "Loaded!\nHitbox Fixed (No Stuck/Fling/Vehicle Bug)\nSilent Aim + No Recoil + Aim Assist",
+	Duration = 5
 })
 end
