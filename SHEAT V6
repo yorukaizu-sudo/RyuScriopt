@@ -33,6 +33,7 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	local UserInputService = game:GetService("UserInputService")
 	local Players = game:GetService("Players")
 	local ReplicatedStorage = game:GetService("ReplicatedStorage")
+	local Lighting = game:GetService("Lighting")
 	local player = Players.LocalPlayer
 	local camera = workspace.CurrentCamera
 	local mouse = player:GetMouse()
@@ -44,10 +45,12 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	local lastHitboxUpdate = 0
 	local lastNoRecoilUpdate = 0
 	local lastSilentAimUpdate = 0
+	local lastBrightnessUpdate = 0
 	local ESP_UPDATE_RATE = 0.03
 	local HITBOX_UPDATE_RATE = 0.05
 	local NO_RECOIL_UPDATE_RATE = 0.05
 	local SILENT_AIM_UPDATE_RATE = 0.01
+	local BRIGHTNESS_UPDATE_RATE = 0.1
 
 	-- ==========================================
 	-- MOVEMENT VARS
@@ -73,6 +76,45 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	local antiKickHooked = false
 
 	-- ==========================================
+	-- BRIGHTNESS / FULLBRIGHT VARS
+	-- ==========================================
+	local fullbrightEnabled = false
+	local brightnessValue = 2
+	local removeFogEnabled = false
+	local forceTimeEnabled = false
+	local forceTimeValue = 14
+	local noShadowsEnabled = false
+	local ambientColor = Color3.fromRGB(255, 255, 255)
+	local outdoorAmbientColor = Color3.fromRGB(255, 255, 255)
+	local removeAtmosphere = false
+	local removeBloom = false
+	local removeBlur = false
+	local removeColorCorrection = false
+	local removeSunRays = false
+	local removeDepthOfField = false
+
+	-- Original lighting values (saved for restore)
+	local originalLighting = {
+		saved = false,
+		Brightness = nil,
+		Ambient = nil,
+		OutdoorAmbient = nil,
+		ClockTime = nil,
+		FogStart = nil,
+		FogEnd = nil,
+		FogColor = nil,
+		GlobalShadows = nil,
+		EnvironmentDiffuseScale = nil,
+		EnvironmentSpecularScale = nil,
+		ExposureCompensation = nil,
+		ColorShift_Bottom = nil,
+		ColorShift_Top = nil,
+	}
+
+	local originalEffects = {}
+	local removedEffects = {}
+
+	-- ==========================================
 	-- ESP VARS
 	-- ==========================================
 	local espEnabled = false
@@ -90,7 +132,7 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	local espLineSmoothing = 0.3
 
 	-- ==========================================
-	-- HITBOX VARS (FIXED - SINGLE DECLARATION)
+	-- HITBOX VARS
 	-- ==========================================
 	local hitboxEnabled = false
 	local hitboxSize = 10
@@ -99,7 +141,7 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	local hitboxESPColor = Color3.fromRGB(255, 255, 0)
 	local hitboxMountedColor = Color3.fromRGB(0, 255, 255)
 	local hitboxData = {}
-	local hitboxOriginalSizes = {} -- Store original HRP sizes
+	local hitboxOriginalSizes = {}
 
 	-- ==========================================
 	-- ANTI HITBOX VARS
@@ -229,7 +271,7 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	end
 
 	-- ==========================================
-	-- MOUNT DETECTION (SINGLE DEFINITION)
+	-- MOUNT DETECTION
 	-- ==========================================
 	local function getPlayerMountInfo(p)
 		if not p or not p.Character then return false, nil end
@@ -273,6 +315,199 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 
 	local function isLocalPlayerInVehicle()
 		return isOnMount(player)
+	end
+
+	-- ==========================================
+	-- BRIGHTNESS / FULLBRIGHT SYSTEM
+	-- ==========================================
+	local function saveLightingDefaults()
+		if originalLighting.saved then return end
+		originalLighting.saved = true
+		pcall(function()
+			originalLighting.Brightness = Lighting.Brightness
+			originalLighting.Ambient = Lighting.Ambient
+			originalLighting.OutdoorAmbient = Lighting.OutdoorAmbient
+			originalLighting.ClockTime = Lighting.ClockTime
+			originalLighting.FogStart = Lighting.FogStart
+			originalLighting.FogEnd = Lighting.FogEnd
+			originalLighting.FogColor = Lighting.FogColor
+			originalLighting.GlobalShadows = Lighting.GlobalShadows
+			originalLighting.EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale
+			originalLighting.EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale
+			originalLighting.ExposureCompensation = Lighting.ExposureCompensation
+			originalLighting.ColorShift_Bottom = Lighting.ColorShift_Bottom
+			originalLighting.ColorShift_Top = Lighting.ColorShift_Top
+		end)
+
+		-- Save post-processing effects state
+		pcall(function()
+			for _, child in ipairs(Lighting:GetChildren()) do
+				if child:IsA("PostEffect") or child:IsA("Atmosphere") or child:IsA("Sky") then
+					originalEffects[child] = {
+						Enabled = pcall(function() return child.Enabled end) and child.Enabled or true,
+						ClassName = child.ClassName,
+						Name = child.Name,
+					}
+				end
+			end
+		end)
+	end
+
+	local function applyFullbright()
+		if not fullbrightEnabled then return end
+		saveLightingDefaults()
+
+		pcall(function()
+			Lighting.Brightness = brightnessValue
+			Lighting.Ambient = ambientColor
+			Lighting.OutdoorAmbient = outdoorAmbientColor
+			Lighting.EnvironmentDiffuseScale = 1
+			Lighting.EnvironmentSpecularScale = 1
+			Lighting.ExposureCompensation = 0.3
+			Lighting.ColorShift_Bottom = Color3.fromRGB(200, 200, 200)
+			Lighting.ColorShift_Top = Color3.fromRGB(255, 255, 255)
+		end)
+
+		-- Remove fog
+		if removeFogEnabled then
+			pcall(function()
+				Lighting.FogStart = 0
+				Lighting.FogEnd = 9999999
+				Lighting.FogColor = Color3.fromRGB(200, 200, 200)
+			end)
+		end
+
+		-- Force time
+		if forceTimeEnabled then
+			pcall(function()
+				Lighting.ClockTime = forceTimeValue
+			end)
+		end
+
+		-- No shadows
+		if noShadowsEnabled then
+			pcall(function()
+				Lighting.GlobalShadows = false
+			end)
+		end
+
+		-- Remove atmosphere
+		if removeAtmosphere then
+			pcall(function()
+				for _, child in ipairs(Lighting:GetChildren()) do
+					if child:IsA("Atmosphere") then
+						child.Density = 0
+						child.Offset = 0
+						child.Glare = 0
+						child.Haze = 0
+					end
+				end
+				-- Also check workspace terrain
+				for _, child in ipairs(workspace.Terrain:GetChildren()) do
+					if child:IsA("Atmosphere") then
+						child.Density = 0
+						child.Offset = 0
+						child.Glare = 0
+						child.Haze = 0
+					end
+				end
+			end)
+		end
+
+		-- Remove bloom
+		if removeBloom then
+			pcall(function()
+				for _, child in ipairs(Lighting:GetChildren()) do
+					if child:IsA("BloomEffect") then
+						child.Enabled = false
+					end
+				end
+			end)
+		end
+
+		-- Remove blur
+		if removeBlur then
+			pcall(function()
+				for _, child in ipairs(Lighting:GetChildren()) do
+					if child:IsA("BlurEffect") then
+						child.Enabled = false
+					end
+				end
+			end)
+		end
+
+		-- Remove color correction
+		if removeColorCorrection then
+			pcall(function()
+				for _, child in ipairs(Lighting:GetChildren()) do
+					if child:IsA("ColorCorrectionEffect") then
+						child.Enabled = false
+					end
+				end
+			end)
+		end
+
+		-- Remove sun rays
+		if removeSunRays then
+			pcall(function()
+				for _, child in ipairs(Lighting:GetChildren()) do
+					if child:IsA("SunRaysEffect") then
+						child.Enabled = false
+					end
+				end
+			end)
+		end
+
+		-- Remove depth of field
+		if removeDepthOfField then
+			pcall(function()
+				for _, child in ipairs(Lighting:GetChildren()) do
+					if child:IsA("DepthOfFieldEffect") then
+						child.Enabled = false
+					end
+				end
+			end)
+		end
+	end
+
+	local function restoreLighting()
+		if not originalLighting.saved then return end
+
+		pcall(function()
+			if originalLighting.Brightness then Lighting.Brightness = originalLighting.Brightness end
+			if originalLighting.Ambient then Lighting.Ambient = originalLighting.Ambient end
+			if originalLighting.OutdoorAmbient then Lighting.OutdoorAmbient = originalLighting.OutdoorAmbient end
+			if originalLighting.ClockTime then Lighting.ClockTime = originalLighting.ClockTime end
+			if originalLighting.FogStart then Lighting.FogStart = originalLighting.FogStart end
+			if originalLighting.FogEnd then Lighting.FogEnd = originalLighting.FogEnd end
+			if originalLighting.FogColor then Lighting.FogColor = originalLighting.FogColor end
+			if originalLighting.GlobalShadows ~= nil then Lighting.GlobalShadows = originalLighting.GlobalShadows end
+			if originalLighting.EnvironmentDiffuseScale then Lighting.EnvironmentDiffuseScale = originalLighting.EnvironmentDiffuseScale end
+			if originalLighting.EnvironmentSpecularScale then Lighting.EnvironmentSpecularScale = originalLighting.EnvironmentSpecularScale end
+			if originalLighting.ExposureCompensation then Lighting.ExposureCompensation = originalLighting.ExposureCompensation end
+			if originalLighting.ColorShift_Bottom then Lighting.ColorShift_Bottom = originalLighting.ColorShift_Bottom end
+			if originalLighting.ColorShift_Top then Lighting.ColorShift_Top = originalLighting.ColorShift_Top end
+		end)
+
+		-- Restore effects
+		pcall(function()
+			for child, data in pairs(originalEffects) do
+				if child and child.Parent then
+					pcall(function() child.Enabled = data.Enabled end)
+				end
+			end
+		end)
+
+		-- Restore atmosphere
+		pcall(function()
+			for _, child in ipairs(Lighting:GetChildren()) do
+				if child:IsA("Atmosphere") then
+					-- Can't perfectly restore but re-enable
+					child.Density = 0.395
+					child.Offset = 0
+				end
+			end
+		end)
 	end
 
 	-- ==========================================
@@ -779,20 +1014,15 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	end
 
 	-- ==========================================
-	-- HITBOX SYSTEM v5.1 - DIRECT HRP EXPAND
-	-- NO NEW PARTS CREATED - ONLY MODIFY EXISTING HRP
+	-- HITBOX SYSTEM v5.2
 	-- ==========================================
-
 	local function cleanHitboxForPlayer(p)
 		local dd = hitboxData[p]
 		if not dd then return end
 
-		-- Destroy highlight
 		if dd.highlight and dd.highlight.Parent then
 			pcall(function() dd.highlight:Destroy() end)
 		end
-
-		-- Disconnect all connections
 		if dd.updateConn then
 			pcall(function() dd.updateConn:Disconnect() end)
 		end
@@ -803,12 +1033,10 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 			pcall(function() dd.charRemoveConn:Disconnect() end)
 		end
 
-		-- Restore original HRP size
 		if p and p.Parent and p.Character then
 			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
 			if hrp then
 				pcall(function()
-					-- Restore to saved original or default
 					local origSize = hitboxOriginalSizes[p]
 					hrp.Size = origSize or Vector3.new(2, 2, 1)
 					hrp.Transparency = 1
@@ -828,19 +1056,16 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 		local hum = p.Character:FindFirstChildOfClass("Humanoid")
 		if not hrp or not hum or hum.Health <= 0 then return end
 
-		-- Clean previous if exists
 		cleanHitboxForPlayer(p)
 
-		-- Save original HRP size BEFORE modifying
 		pcall(function()
-			hitboxOriginalSizes[p] = hrp.Size:lerp(hrp.Size, 1) -- clone the Vector3
+			hitboxOriginalSizes[p] = hrp.Size:lerp(hrp.Size, 1)
 		end)
 
 		hitboxData[p] = {}
 		local dd = hitboxData[p]
 		dd.trackedChar = p.Character
 
-		-- Expand HRP directly
 		pcall(function()
 			hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
 			hrp.Transparency = hitboxTransparency
@@ -849,9 +1074,7 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 			hrp.CanCollide = false
 		end)
 
-		-- Highlight for visual
 		if hitboxESPEnabled then
-			-- Remove old highlights first
 			for _, child in ipairs(p.Character:GetChildren()) do
 				if child:IsA("Highlight") and child.Name == "RyuHitboxHL" then
 					pcall(function() child:Destroy() end)
@@ -870,15 +1093,11 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 			dd.highlight = hl
 		end
 
-		-- Continuous update - only properties, HRP follows player automatically
 		dd.updateConn = RunService.Heartbeat:Connect(function()
-			-- Validate player still exists
 			if not p or not p.Parent then
 				cleanHitboxForPlayer(p)
 				return
 			end
-
-			-- Validate character still exists
 			if not p.Character or p.Character ~= dd.trackedChar then
 				cleanHitboxForPlayer(p)
 				return
@@ -892,7 +1111,6 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 				return
 			end
 
-			-- If dead, reset and stop
 			if targetHum.Health <= 0 then
 				pcall(function()
 					local origSize = hitboxOriginalSizes[p]
@@ -903,7 +1121,6 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 				return
 			end
 
-			-- Detect mount state
 			local isMounted = false
 			pcall(function()
 				isMounted = targetHum.Sit == true or targetHum:GetState() == Enum.HumanoidStateType.Seated
@@ -911,7 +1128,6 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 
 			local color = isMounted and hitboxMountedColor or hitboxESPColor
 
-			-- Update HRP properties only (position is automatic)
 			pcall(function()
 				targetHRP.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
 				targetHRP.Transparency = hitboxTransparency
@@ -920,12 +1136,10 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 				targetHRP.CanCollide = false
 			end)
 
-			-- Update or create highlight
 			if hitboxESPEnabled then
 				if dd.highlight and dd.highlight.Parent then
 					pcall(function() dd.highlight.FillColor = color end)
 				else
-					-- Recreate if destroyed
 					pcall(function()
 						local hl = Instance.new("Highlight")
 						hl.Name = "RyuHitboxHL"
@@ -940,7 +1154,6 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 					end)
 				end
 			else
-				-- ESP disabled, remove highlight
 				if dd.highlight and dd.highlight.Parent then
 					pcall(function() dd.highlight:Destroy() end)
 					dd.highlight = nil
@@ -948,13 +1161,11 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 			end
 		end)
 
-		-- Death cleanup
 		dd.deathConn = hum.Died:Connect(function()
 			task.wait(0.3)
 			cleanHitboxForPlayer(p)
 		end)
 
-		-- Character removing cleanup
 		dd.charRemoveConn = p.CharacterRemoving:Connect(function()
 			cleanHitboxForPlayer(p)
 		end)
@@ -970,7 +1181,6 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 
 				if hum and hrp and hum.Health > 0 then
 					local dd = hitboxData[p]
-					-- Create if not exists or character changed (respawn)
 					if not dd or dd.trackedChar ~= p.Character then
 						createHitboxForPlayer(p)
 					end
@@ -980,7 +1190,6 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 			end
 		end
 
-		-- Clean up players who left
 		for p, _ in pairs(hitboxData) do
 			if not p or not p.Parent or not Players:FindFirstChild(p.Name) then
 				cleanHitboxForPlayer(p)
@@ -989,7 +1198,6 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	end
 
 	local function disableHitboxExpander()
-		-- Clean all tracked data
 		local playersToClean = {}
 		for p, _ in pairs(hitboxData) do
 			table.insert(playersToClean, p)
@@ -999,7 +1207,6 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 		end
 		hitboxData = {}
 
-		-- Force reset ALL player HRPs as safety net
 		for _, p in ipairs(Players:GetPlayers()) do
 			if p ~= player and p.Character then
 				local hrp = p.Character:FindFirstChild("HumanoidRootPart")
@@ -1011,7 +1218,6 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 						hrp.Material = Enum.Material.SmoothPlastic
 					end)
 				end
-				-- Remove any leftover highlights
 				for _, child in ipairs(p.Character:GetChildren()) do
 					if child:IsA("Highlight") and child.Name == "RyuHitboxHL" then
 						pcall(function() child:Destroy() end)
@@ -1321,7 +1527,7 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	-- UI WINDOW
 	-- ==========================================
 	local Window = Rayfield:CreateWindow({
-		Name = "RyuExploit v5.1 - Westbound Fixed",
+		Name = "RyuExploit v5.2 - Fullbright Edition",
 		LoadingTitle = "RyuExploit Loading",
 		LoadingSubtitle = "By NubyCode",
 		ConfigurationSaving = {Enabled = true, FolderName = "RyuExploit", FileName = "Config"},
@@ -1505,7 +1711,7 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	ESPTab:CreateColorPicker({Name = "Team Color", Color = Color3.fromRGB(0, 255, 0), Flag = "ETeamC", Callback = function(V) espTeamColor = V end})
 
 	-- ==========================================
-	-- TAB: Hitbox (FIXED v5.1 - NO NEW PARTS)
+	-- TAB: Hitbox
 	-- ==========================================
 	local HitboxTab = Window:CreateTab("Hitbox", 4483362458)
 	HitboxTab:CreateSection("Hitbox Expander (Direct HRP)")
@@ -1542,6 +1748,216 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 		end
 	end})
 	HitboxTab:CreateSlider({Name = "Size", Range = {1,30}, Increment = 1, Suffix = " (x0.1)", CurrentValue = 10, Flag = "AHBSize", Callback = function(V) antiHitboxSize = V/10 end})
+
+	-- ==========================================
+	-- TAB: Brightness / Fullbright (NEW)
+	-- ==========================================
+	local BrightnessTab = Window:CreateTab("Brightness", 4483362458)
+
+	BrightnessTab:CreateSection("🔆 Fullbright")
+	BrightnessTab:CreateToggle({Name = "Enable Fullbright", CurrentValue = false, Flag = "Fullbright", Callback = function(V)
+		fullbrightEnabled = V
+		if V then
+			saveLightingDefaults()
+			applyFullbright()
+			Rayfield:Notify({Title = "Fullbright", Content = "Enabled! Everything is bright now!", Duration = 3})
+		else
+			restoreLighting()
+			Rayfield:Notify({Title = "Fullbright", Content = "Disabled - Original lighting restored", Duration = 3})
+		end
+	end})
+
+	BrightnessTab:CreateSlider({Name = "Brightness Level", Range = {0, 10}, Increment = 1, Suffix = "", CurrentValue = 2, Flag = "BrightLvl", Callback = function(V)
+		brightnessValue = V
+		if fullbrightEnabled then applyFullbright() end
+	end})
+
+	BrightnessTab:CreateColorPicker({Name = "Ambient Color", Color = Color3.fromRGB(255, 255, 255), Flag = "AmbCol", Callback = function(V)
+		ambientColor = V
+		if fullbrightEnabled then applyFullbright() end
+	end})
+
+	BrightnessTab:CreateColorPicker({Name = "Outdoor Ambient", Color = Color3.fromRGB(255, 255, 255), Flag = "OutAmbCol", Callback = function(V)
+		outdoorAmbientColor = V
+		if fullbrightEnabled then applyFullbright() end
+	end})
+
+	BrightnessTab:CreateSection("🌫️ Fog Control")
+	BrightnessTab:CreateToggle({Name = "Remove Fog", CurrentValue = false, Flag = "RemFog", Callback = function(V)
+		removeFogEnabled = V
+		if fullbrightEnabled then applyFullbright() end
+		if not V and originalLighting.saved then
+			pcall(function()
+				Lighting.FogStart = originalLighting.FogStart or 0
+				Lighting.FogEnd = originalLighting.FogEnd or 100000
+			end)
+		end
+	end})
+
+	BrightnessTab:CreateSection("🌤️ Time Control")
+	BrightnessTab:CreateToggle({Name = "Force Time of Day", CurrentValue = false, Flag = "ForceTime", Callback = function(V)
+		forceTimeEnabled = V
+		if fullbrightEnabled then applyFullbright() end
+		if not V and originalLighting.saved then
+			pcall(function() Lighting.ClockTime = originalLighting.ClockTime or 14 end)
+		end
+	end})
+
+	BrightnessTab:CreateSlider({Name = "Time (Hour)", Range = {0, 24}, Increment = 1, Suffix = "h", CurrentValue = 14, Flag = "TimeVal", Callback = function(V)
+		forceTimeValue = V
+		if fullbrightEnabled and forceTimeEnabled then
+			pcall(function() Lighting.ClockTime = V end)
+		end
+	end})
+
+	BrightnessTab:CreateSection("🔲 Shadow Control")
+	BrightnessTab:CreateToggle({Name = "No Shadows", CurrentValue = false, Flag = "NoShadow", Callback = function(V)
+		noShadowsEnabled = V
+		if fullbrightEnabled then applyFullbright() end
+		if not V and originalLighting.saved then
+			pcall(function() Lighting.GlobalShadows = originalLighting.GlobalShadows end)
+		end
+	end})
+
+	BrightnessTab:CreateSection("✨ Post-Processing Removal")
+	BrightnessTab:CreateToggle({Name = "Remove Atmosphere", CurrentValue = false, Flag = "RemAtmo", Callback = function(V)
+		removeAtmosphere = V
+		if fullbrightEnabled then applyFullbright() end
+		if not V then
+			pcall(function()
+				for _, child in ipairs(Lighting:GetChildren()) do
+					if child:IsA("Atmosphere") then
+						child.Density = 0.395
+						child.Offset = 0
+						child.Glare = 0
+						child.Haze = 0
+					end
+				end
+			end)
+		end
+	end})
+
+	BrightnessTab:CreateToggle({Name = "Remove Bloom", CurrentValue = false, Flag = "RemBloom", Callback = function(V)
+		removeBloom = V
+		if fullbrightEnabled then applyFullbright() end
+		if not V then
+			pcall(function()
+				for _, child in ipairs(Lighting:GetChildren()) do
+					if child:IsA("BloomEffect") then child.Enabled = true end
+				end
+			end)
+		end
+	end})
+
+	BrightnessTab:CreateToggle({Name = "Remove Blur", CurrentValue = false, Flag = "RemBlur", Callback = function(V)
+		removeBlur = V
+		if fullbrightEnabled then applyFullbright() end
+		if not V then
+			pcall(function()
+				for _, child in ipairs(Lighting:GetChildren()) do
+					if child:IsA("BlurEffect") then child.Enabled = true end
+				end
+			end)
+		end
+	end})
+
+	BrightnessTab:CreateToggle({Name = "Remove Color Correction", CurrentValue = false, Flag = "RemCC", Callback = function(V)
+		removeColorCorrection = V
+		if fullbrightEnabled then applyFullbright() end
+		if not V then
+			pcall(function()
+				for _, child in ipairs(Lighting:GetChildren()) do
+					if child:IsA("ColorCorrectionEffect") then child.Enabled = true end
+				end
+			end)
+		end
+	end})
+
+	BrightnessTab:CreateToggle({Name = "Remove Sun Rays", CurrentValue = false, Flag = "RemSun", Callback = function(V)
+		removeSunRays = V
+		if fullbrightEnabled then applyFullbright() end
+		if not V then
+			pcall(function()
+				for _, child in ipairs(Lighting:GetChildren()) do
+					if child:IsA("SunRaysEffect") then child.Enabled = true end
+				end
+			end)
+		end
+	end})
+
+	BrightnessTab:CreateToggle({Name = "Remove Depth of Field", CurrentValue = false, Flag = "RemDOF", Callback = function(V)
+		removeDepthOfField = V
+		if fullbrightEnabled then applyFullbright() end
+		if not V then
+			pcall(function()
+				for _, child in ipairs(Lighting:GetChildren()) do
+					if child:IsA("DepthOfFieldEffect") then child.Enabled = true end
+				end
+			end)
+		end
+	end})
+
+	BrightnessTab:CreateSection("⚡ Quick Presets")
+	BrightnessTab:CreateButton({Name = "🌞 Max Bright (Everything)", Callback = function()
+		fullbrightEnabled = true
+		brightnessValue = 5
+		removeFogEnabled = true
+		forceTimeEnabled = true
+		forceTimeValue = 14
+		noShadowsEnabled = true
+		removeAtmosphere = true
+		removeBloom = true
+		removeBlur = true
+		removeColorCorrection = true
+		removeSunRays = true
+		removeDepthOfField = true
+		ambientColor = Color3.fromRGB(255, 255, 255)
+		outdoorAmbientColor = Color3.fromRGB(255, 255, 255)
+		applyFullbright()
+		Rayfield:Notify({Title = "Max Bright", Content = "Maximum brightness applied! Everything removed!", Duration = 4})
+	end})
+
+	BrightnessTab:CreateButton({Name = "🌙 Night Vision", Callback = function()
+		fullbrightEnabled = true
+		brightnessValue = 3
+		removeFogEnabled = true
+		noShadowsEnabled = true
+		removeAtmosphere = true
+		forceTimeEnabled = false
+		ambientColor = Color3.fromRGB(180, 255, 180)
+		outdoorAmbientColor = Color3.fromRGB(180, 255, 180)
+		applyFullbright()
+		Rayfield:Notify({Title = "Night Vision", Content = "Green night vision applied!", Duration = 4})
+	end})
+
+	BrightnessTab:CreateButton({Name = "☀️ Sunny Day", Callback = function()
+		fullbrightEnabled = true
+		brightnessValue = 3
+		removeFogEnabled = true
+		forceTimeEnabled = true
+		forceTimeValue = 14
+		noShadowsEnabled = false
+		removeAtmosphere = false
+		ambientColor = Color3.fromRGB(255, 255, 230)
+		outdoorAmbientColor = Color3.fromRGB(255, 255, 230)
+		applyFullbright()
+		Rayfield:Notify({Title = "Sunny Day", Content = "Bright sunny day!", Duration = 4})
+	end})
+
+	BrightnessTab:CreateButton({Name = "🔄 Restore Original", Callback = function()
+		fullbrightEnabled = false
+		removeFogEnabled = false
+		forceTimeEnabled = false
+		noShadowsEnabled = false
+		removeAtmosphere = false
+		removeBloom = false
+		removeBlur = false
+		removeColorCorrection = false
+		removeSunRays = false
+		removeDepthOfField = false
+		restoreLighting()
+		Rayfield:Notify({Title = "Restored", Content = "Original lighting restored!", Duration = 4})
+	end})
 
 	-- ==========================================
 	-- TAB: Movement
@@ -1759,6 +2175,11 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 		if noRecoilEnabled or noSpreadEnabled then
 			task.wait(0.5); if char and char.Parent then setupToolListener(char) end
 		end
+		-- Re-apply fullbright after respawn (some games reset lighting)
+		if fullbrightEnabled then
+			task.wait(1)
+			applyFullbright()
+		end
 	end)
 
 	-- ==========================================
@@ -1832,6 +2253,14 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 			if hitboxEnabled then updateHitboxExpander() end
 			if antiHitboxEnabled then updateAntiHitbox() end
 		end
+
+		-- Brightness continuous enforcement (games may try to reset lighting)
+		if now - lastBrightnessUpdate >= BRIGHTNESS_UPDATE_RATE then
+			lastBrightnessUpdate = now
+			if fullbrightEnabled then
+				applyFullbright()
+			end
+		end
 	end)
 
 	-- ==========================================
@@ -1858,14 +2287,13 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 		if not hitboxEnabled then return end
 		p.CharacterAdded:Connect(function(char)
 			if not hitboxEnabled then return end
-			task.wait(1) -- Wait for character to fully load
+			task.wait(1)
 			if p.Character and hitboxEnabled then
 				createHitboxForPlayer(p)
 			end
 		end)
 	end)
 
-	-- Also handle existing players' future respawns
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p ~= player then
 			p.CharacterAdded:Connect(function(char)
@@ -1879,6 +2307,64 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	end
 
 	-- ==========================================
+	-- LIGHTING CHANGE DETECTION
+	-- Prevent games from overriding our brightness
+	-- ==========================================
+	pcall(function()
+		Lighting:GetPropertyChangedSignal("Brightness"):Connect(function()
+			if fullbrightEnabled and Lighting.Brightness ~= brightnessValue then
+				pcall(function() Lighting.Brightness = brightnessValue end)
+			end
+		end)
+		Lighting:GetPropertyChangedSignal("Ambient"):Connect(function()
+			if fullbrightEnabled and Lighting.Ambient ~= ambientColor then
+				pcall(function() Lighting.Ambient = ambientColor end)
+			end
+		end)
+		Lighting:GetPropertyChangedSignal("ClockTime"):Connect(function()
+			if fullbrightEnabled and forceTimeEnabled and Lighting.ClockTime ~= forceTimeValue then
+				pcall(function() Lighting.ClockTime = forceTimeValue end)
+			end
+		end)
+		Lighting:GetPropertyChangedSignal("FogEnd"):Connect(function()
+			if fullbrightEnabled and removeFogEnabled and Lighting.FogEnd ~= 9999999 then
+				pcall(function() Lighting.FogEnd = 9999999 end)
+			end
+		end)
+		Lighting:GetPropertyChangedSignal("GlobalShadows"):Connect(function()
+			if fullbrightEnabled and noShadowsEnabled and Lighting.GlobalShadows ~= false then
+				pcall(function() Lighting.GlobalShadows = false end)
+			end
+		end)
+	end)
+
+	-- Detect new post-processing effects being added
+	pcall(function()
+		Lighting.ChildAdded:Connect(function(child)
+			if not fullbrightEnabled then return end
+			task.wait(0.1)
+			if removeAtmosphere and child:IsA("Atmosphere") then
+				pcall(function() child.Density = 0; child.Offset = 0; child.Glare = 0; child.Haze = 0 end)
+			end
+			if removeBloom and child:IsA("BloomEffect") then
+				pcall(function() child.Enabled = false end)
+			end
+			if removeBlur and child:IsA("BlurEffect") then
+				pcall(function() child.Enabled = false end)
+			end
+			if removeColorCorrection and child:IsA("ColorCorrectionEffect") then
+				pcall(function() child.Enabled = false end)
+			end
+			if removeSunRays and child:IsA("SunRaysEffect") then
+				pcall(function() child.Enabled = false end)
+			end
+			if removeDepthOfField and child:IsA("DepthOfFieldEffect") then
+				pcall(function() child.Enabled = false end)
+			end
+		end)
+	end)
+
+	-- ==========================================
 	-- INITIAL SETUP
 	-- ==========================================
 	task.spawn(function()
@@ -1887,8 +2373,8 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 	end)
 
 	Rayfield:Notify({
-		Title = "RyuExploit v5.1",
-		Content = "Loaded!\n✅ Hitbox: Direct HRP expand (no new parts)\n✅ Works on mounted/horse players\n✅ Cyan = Mounted | Yellow = Normal",
-		Duration = 6
+		Title = "RyuExploit v5.2",
+		Content = "Loaded!\n🔆 NEW: Brightness/Fullbright Tab\n✅ Max Bright, Night Vision, Sunny Day presets\n✅ Remove Fog, Shadows, Effects\n✅ Anti-reset: Games can't override your brightness!",
+		Duration = 7
 	})
 end
