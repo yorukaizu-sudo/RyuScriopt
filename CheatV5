@@ -3,31 +3,60 @@ local data = Instance.new("NumberValue")
 data.Name = "Loaded"
 data.Parent = game:GetService("Players").LocalPlayer.PlayerScripts
 
-local Rayfield = nil
-for i = 1, 5 do
-	local s, r = pcall(function()
-		return loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-	end)
-	if s and r then Rayfield = r break end
-	task.wait(2)
+local function safeLoadstring(code)
+	if not code or code == "" then return nil end
+	if type(loadstring) ~= "function" then
+		warn("[RyuExploit] loadstring not available! Use a different executor.")
+		return nil
+	end
+	local fn, err = loadstring(code)
+	if not fn then warn("[RyuExploit] Compile error:", err) return nil end
+	local s, r = pcall(fn)
+	if s then return r end
+	warn("[RyuExploit] Runtime error:", r)
+	return nil
 end
 
-if not Rayfield then
-	local s, r = pcall(function()
-		return loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source"))()
+local function safeHttpGet(url)
+	local s, r = pcall(function() return game:HttpGet(url) end)
+	if s and r and r ~= "" and #r > 100 then return r end
+	local ok2, res2 = pcall(function()
+		if syn and syn.request then return syn.request({Url=url,Method="GET"}).Body
+		elseif request then return request({Url=url,Method="GET"}).Body
+		elseif http_request then return http_request({Url=url,Method="GET"}).Body end
+		return nil
 	end)
-	if s and r then Rayfield = r end
+	if ok2 and res2 and res2 ~= "" and #res2 > 100 then return res2 end
+	return nil
+end
+
+local Rayfield = nil
+local urls = {
+	"https://sirius.menu/rayfield",
+	"https://raw.githubusercontent.com/shlexware/Rayfield/main/source",
+	"https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source",
+}
+
+for _, url in ipairs(urls) do
+	if Rayfield then break end
+	for i = 1, 3 do
+		local code = safeHttpGet(url)
+		if code then
+			Rayfield = safeLoadstring(code)
+			if Rayfield then break end
+		end
+		task.wait(1)
+	end
 end
 
 if not Rayfield then
 	warn("[RyuExploit] Cannot load UI library")
-	local m = game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Loaded")
-	if m then m:Destroy() end
+	game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Loaded"):Destroy()
 	return
 end
 
 -- ==========================================
--- SERVICES
+-- SERVICES (dari sini sama persis, JANGAN DIUBAH)
 -- ==========================================
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
