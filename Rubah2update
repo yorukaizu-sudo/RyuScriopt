@@ -466,15 +466,48 @@ local function cleanItemESP()
 	for _, bb in pairs(itemESPBillboards) do pcall(function() if bb and bb.Parent then bb:Destroy() end end) end; itemESPBillboards = {}
 end
 
-local function getItemPosition(item)
-	if not item or not item.Parent then return nil end
-	if item:IsA("BasePart") then return item.Position end
-	if item:IsA("Model") then
-		if item.PrimaryPart then return item.PrimaryPart.Position end
-		local handle = item:FindFirstChild("Handle"); if handle and handle:IsA("BasePart") then return handle.Position end
-		for _, child in ipairs(item:GetDescendants()) do if child:IsA("BasePart") then return child.Position end end
+local function setupItemESPConnections()
+	for _, conn in pairs(itemESPConnections) do pcall(function() conn:Disconnect() end) end
+	itemESPConnections = {}
+	local folder = findItemFolder()
+	if folder then
+		table.insert(itemESPConnections, folder.ChildAdded:Connect(function(c)
+			if itemESPEnabled then
+				task.wait(0.2)
+				if isValidItem(c) then applyItemHighlight(c) end
+			end
+		end))
+		table.insert(itemESPConnections, folder.ChildRemoved:Connect(function(c)
+			if itemESPHighlights[c] then pcall(function() itemESPHighlights[c]:Destroy() end); itemESPHighlights[c] = nil end
+			if itemESPBillboards[c] then pcall(function() itemESPBillboards[c]:Destroy() end); itemESPBillboards[c] = nil end
+		end))
+		-- Juga monitor descendants dalam folder
+		table.insert(itemESPConnections, folder.DescendantAdded:Connect(function(d)
+			if itemESPEnabled and isValidItem(d) and not itemESPHighlights[d] then
+				task.wait(0.2)
+				applyItemHighlight(d)
+			end
+		end))
+		table.insert(itemESPConnections, folder.DescendantRemoving:Connect(function(d)
+			if itemESPHighlights[d] then pcall(function() itemESPHighlights[d]:Destroy() end); itemESPHighlights[d] = nil end
+			if itemESPBillboards[d] then pcall(function() itemESPBillboards[d]:Destroy() end); itemESPBillboards[d] = nil end
+		end))
 	end
-	return nil
+	-- Monitor workspace untuk Model/Tool/MeshPart baru
+	table.insert(itemESPConnections, workspace.DescendantAdded:Connect(function(d)
+		if itemESPEnabled then
+			if (d:IsA("Model") or d:IsA("Tool") or d:IsA("Accessory") or d:IsA("MeshPart") or d:IsA("UnionOperation")) then
+				task.wait(0.3)
+				if isValidItem(d) and not itemESPHighlights[d] and not itemESPBillboards[d] then
+					applyItemHighlight(d)
+				end
+			end
+		end
+	end))
+	table.insert(itemESPConnections, workspace.DescendantRemoving:Connect(function(d)
+		if itemESPHighlights[d] then pcall(function() itemESPHighlights[d]:Destroy() end); itemESPHighlights[d] = nil end
+		if itemESPBillboards[d] then pcall(function() itemESPBillboards[d]:Destroy() end); itemESPBillboards[d] = nil end
+	end))
 end
 
 local function getItemName(item) if not item then return "Unknown" end; local name=item.Name or "Unknown"; local nv=item:FindFirstChild("ItemName") or item:FindFirstChild("Name") or item:FindFirstChild("DisplayName"); if nv and nv:IsA("StringValue") then name=nv.Value end; return name end
@@ -495,8 +528,29 @@ local function isValidItem(item)
 	if not item or not item.Parent then return false end
 	if item:FindFirstChildOfClass("Humanoid") then return false end
 	if Players:GetPlayerFromCharacter(item) then return false end
-	if item:IsA("BasePart") then return true end
-	if item:IsA("Model") then for _, d in ipairs(item:GetDescendants()) do if d:IsA("BasePart") then return true end end end
+	-- Cek apakah item adalah karakter player
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p.Character and (item == p.Character or item:IsDescendantOf(p.Character)) then
+			return false
+		end
+	end
+	if item:IsA("MeshPart") or item:IsA("UnionOperation") or item:IsA("Part") or item:IsA("BasePart") then
+		return true
+	end
+	if item:IsA("Model") then
+		for _, d in ipairs(item:GetDescendants()) do
+			if d:IsA("BasePart") or d:IsA("MeshPart") or d:IsA("UnionOperation") then
+				return true
+			end
+		end
+	end
+	if item:IsA("Accessory") or item:IsA("Tool") then
+		for _, d in ipairs(item:GetDescendants()) do
+			if d:IsA("BasePart") or d:IsA("MeshPart") then
+				return true
+			end
+		end
+	end
 	return false
 end
 
