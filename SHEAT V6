@@ -114,15 +114,7 @@ local hitboxCollisionGroupCreated = false
 local antiHitboxEnabled = false
 local antiHitboxSize = 1
 local antiHitboxParts = {}
--- ==========================================
--- BRIGHTNESS VARS
--- ==========================================
-local brightnessEnabled = false
-local brightnessValue = 1
-local originalBrightness = nil
-local originalAmbient = nil
-local originalOutdoorAmbient = nil
-local originalExposureCompensation = nil
+
 -- ==========================================
 -- AIMLOCK VARS
 -- ==========================================
@@ -1377,34 +1369,6 @@ local function clearAllESP()
 		if d.highlight then pcall(function() d.highlight:Destroy() end) end
 	end
 	espObjects = {}
-end
--- ==========================================
--- BRIGHTNESS SYSTEM
--- ==========================================
-local function saveLightingDefaults()
-	if originalBrightness == nil then
-		originalBrightness = game:GetService("Lighting").Brightness
-		originalAmbient = game:GetService("Lighting").Ambient
-		originalOutdoorAmbient = game:GetService("Lighting").OutdoorAmbient
-		originalExposureCompensation = game:GetService("Lighting").ExposureCompensation
-	end
-end
-
-local function applyBrightness()
-	if not brightnessEnabled then return end
-	local Lighting = game:GetService("Lighting")
-	Lighting.Brightness = brightnessValue
-	Lighting.Ambient = Color3.fromRGB(178 * brightnessValue, 178 * brightnessValue, 178 * brightnessValue)
-	Lighting.OutdoorAmbient = Color3.fromRGB(178 * brightnessValue, 178 * brightnessValue, 178 * brightnessValue)
-	Lighting.ExposureCompensation = brightnessValue - 1
-end
-
-local function restoreBrightness()
-	local Lighting = game:GetService("Lighting")
-	if originalBrightness then Lighting.Brightness = originalBrightness end
-	if originalAmbient then Lighting.Ambient = originalAmbient end
-	if originalOutdoorAmbient then Lighting.OutdoorAmbient = originalOutdoorAmbient end
-	if originalExposureCompensation then Lighting.ExposureCompensation = originalExposureCompensation end
 end
 -- ==========================================
 -- BRIGHTNESS SYSTEM
