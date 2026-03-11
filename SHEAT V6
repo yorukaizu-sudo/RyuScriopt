@@ -1657,7 +1657,90 @@ AntiKickTab:CreateButton({Name = "Anti AFK", Callback = function()
 	end)
 	Rayfield:Notify({Title = "Anti AFK", Content = "Enabled", Duration = 3})
 end})
-
+-- ==========================================
+-- TAB: Visuals
+-- ==========================================
+local VisualsTab = Window:CreateTab("Visuals", 4483362458)
+VisualsTab:CreateSection("Brightness / Fullbright")
+VisualsTab:CreateToggle({
+	Name = "Enable Brightness", 
+	CurrentValue = false, 
+	Flag = "Brightness", 
+	Callback = function(V)
+		brightnessEnabled = V
+		saveLightingDefaults()
+		if V then 
+			applyBrightness()
+			Rayfield:Notify({Title = "Brightness", Content = "Enabled!", Duration = 2})
+		else 
+			restoreBrightness()
+			Rayfield:Notify({Title = "Brightness", Content = "Disabled!", Duration = 2})
+		end
+	end
+})
+VisualsTab:CreateSlider({
+	Name = "Brightness Level", 
+	Range = {1, 5}, 
+	Increment = 0.1, 
+	Suffix = "x", 
+	CurrentValue = 1, 
+	Flag = "BrightVal", 
+	Callback = function(V) 
+		brightnessValue = V
+		if brightnessEnabled then applyBrightness() end
+	end
+})
+VisualsTab:CreateButton({
+	Name = "Fullbright (Max)", 
+	Callback = function()
+		brightnessEnabled = true
+		brightnessValue = 3
+		saveLightingDefaults()
+		applyBrightness()
+		Rayfield:Notify({Title = "Fullbright", Content = "Max brightness enabled!", Duration = 2})
+	end
+})
+VisualsTab:CreateButton({
+	Name = "Reset Lighting", 
+	Callback = function()
+		brightnessEnabled = false
+		restoreBrightness()
+		Rayfield:Notify({Title = "Lighting", Content = "Restored to default", Duration = 2})
+	end
+})
+VisualsTab:CreateSection("Remove Effects")
+VisualsTab:CreateButton({
+	Name = "Remove Fog", 
+	Callback = function()
+		local Lighting = game:GetService("Lighting")
+		Lighting.FogEnd = 100000
+		Lighting.FogStart = 0
+		pcall(function()
+			for _, v in ipairs(Lighting:GetChildren()) do
+				if v:IsA("Atmosphere") then v.Density = 0 end
+				if v:IsA("BlurEffect") then v.Enabled = false end
+				if v:IsA("DepthOfFieldEffect") then v.Enabled = false end
+			end
+		end)
+		Rayfield:Notify({Title = "Fog", Content = "Removed!", Duration = 2})
+	end
+})
+VisualsTab:CreateButton({
+	Name = "Remove All Effects", 
+	Callback = function()
+		local Lighting = game:GetService("Lighting")
+		pcall(function()
+			for _, v in ipairs(Lighting:GetChildren()) do
+				if v:IsA("PostEffect") or v:IsA("Atmosphere") or v:IsA("Sky") or v:IsA("Clouds") then
+					pcall(function() v:Destroy() end)
+				end
+			end
+		end)
+		Lighting.FogEnd = 100000
+		Lighting.GlobalShadows = false
+		Rayfield:Notify({Title = "Effects", Content = "All removed!", Duration = 2})
+	end
+})
 -- ==========================================
 -- MOVEMENT FUNCTIONS
 -- ==========================================
