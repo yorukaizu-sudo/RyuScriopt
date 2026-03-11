@@ -26,6 +26,9 @@ if not Rayfield then
 	return
 end
 
+-- ==========================================
+-- SERVICES
+-- ==========================================
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
@@ -35,18 +38,21 @@ local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local mouse = player:GetMouse()
 
+-- ==========================================
+-- UPDATE RATES
+-- ==========================================
 local lastESPUpdate = 0
 local lastHitboxUpdate = 0
 local lastNoRecoilUpdate = 0
 local lastSilentAimUpdate = 0
-local lastTriggerbotUpdate = 0
 local ESP_UPDATE_RATE = 0.03
 local HITBOX_UPDATE_RATE = 0.1
 local NO_RECOIL_UPDATE_RATE = 0.05
 local SILENT_AIM_UPDATE_RATE = 0.01
-local TRIGGERBOT_UPDATE_RATE = 0.01
 
--- Movement
+-- ==========================================
+-- MOVEMENT VARS
+-- ==========================================
 local speed = 16
 local jumpPower = 50
 local speedMethod = "Default"
@@ -61,11 +67,15 @@ local lastHealth = 100
 local isFalling = false
 local wasInAir = false
 
--- Anti Kick
+-- ==========================================
+-- ANTI KICK VARS
+-- ==========================================
 local antiKickEnabled = false
 local antiKickHooked = false
 
--- ESP
+-- ==========================================
+-- ESP VARS
+-- ==========================================
 local espEnabled = false
 local espBox = false
 local espLine = false
@@ -80,20 +90,27 @@ local espEnemyColor = Color3.fromRGB(255, 0, 0)
 local espObjects = {}
 local espLineSmoothing = 0.3
 
--- Hitbox
+-- ==========================================
+-- HITBOX VARS
+-- ==========================================
 local hitboxEnabled = false
 local hitboxSize = 10
 local hitboxTransparency = 0.7
 local hitboxESPEnabled = false
 local hitboxESPColor = Color3.fromRGB(255, 255, 0)
 local hitboxData = {}
+local hitboxCollisionGroupCreated = false
 
--- Anti Hitbox
+-- ==========================================
+-- ANTI HITBOX VARS
+-- ==========================================
 local antiHitboxEnabled = false
 local antiHitboxSize = 1
 local antiHitboxParts = {}
 
--- Aimlock
+-- ==========================================
+-- AIMLOCK VARS
+-- ==========================================
 local aimlockEnabled = false
 local aimlockTarget = nil
 local aimlockPart = "Head"
@@ -106,7 +123,9 @@ local aimlockKey = Enum.UserInputType.MouseButton2
 local autoSwitchTarget = true
 local aimlockTeamCheck = false
 
--- Silent Aim
+-- ==========================================
+-- SILENT AIM VARS
+-- ==========================================
 local silentAimEnabled = false
 local silentAimPart = "Head"
 local silentAimFOV = 200
@@ -127,7 +146,9 @@ local silentAimVisualLineObj = nil
 local bulletRedirectEnabled = false
 local bulletRedirectHooked = false
 
--- Aim Assist
+-- ==========================================
+-- AIM ASSIST VARS
+-- ==========================================
 local aimAssistEnabled = false
 local aimAssistStrength = 0.5
 local aimAssistFOV = 150
@@ -157,7 +178,9 @@ local aimAssistSnapStrength = 0.8
 local aimAssistFirstLock = false
 local aimAssistTrackingSmooth = 0.12
 
--- No Recoil
+-- ==========================================
+-- NO RECOIL VARS
+-- ==========================================
 local noRecoilEnabled = false
 local noSpreadEnabled = false
 local noRecoilStrength = 100
@@ -172,54 +195,36 @@ local noRecoilCurrentTool = nil
 local noRecoilToolConnection = nil
 local noRecoilOverriddenObjects = {}
 
--- Brightness
+local recoilKeywords = {"recoil","kickback","kick","bloom","sway","shake","camshake","camerashake","deviation","recovery","camjump","rise","climb","rebound","wobble","jitter","bounce","cameraoffset","impulse","pushback","knockback","gunraise","muzzlerise","vertical_recoil","horizontal_recoil","recoilup","recoilside"}
+local spreadKeywords = {"spread","accuracy","inaccuracy","cone","spreadcone","dispersion","scatter","randomspread","hipfire","hipspread","aimspread","movingspread","bulletspread","maxspread","minspread","basespread","bulletdeviation","firedeviation"}
+
+-- ==========================================
+-- BRIGHTNESS VARS (NEW)
+-- ==========================================
 local fullbrightEnabled = false
 local brightnessValue = 2
 local ambientColor = Color3.fromRGB(200, 200, 200)
 local noFogEnabled = false
 local noShadowsEnabled = false
-local originalLighting = {
-	Brightness = nil,
-	Ambient = nil,
-	OutdoorAmbient = nil,
-	FogStart = nil,
-	FogEnd = nil,
-	FogColor = nil,
-	ClockTime = nil,
-	GlobalShadows = nil,
-	EnvironmentDiffuseScale = nil,
-	EnvironmentSpecularScale = nil,
-}
-local originalAtmosphere = {
-	Density = nil,
-	Offset = nil,
-	Color = nil,
-	Decay = nil,
-	Glare = nil,
-	Haze = nil,
-}
-local originalColorCorrection = {
-	Brightness = nil,
-	Contrast = nil,
-	Saturation = nil,
-	TintColor = nil,
-}
-local lightingSaved = false
-local customClockTime = 14
 local useCustomTime = false
+local customClockTime = 14
 local removePostEffects = false
+local lightingSaved = false
+local originalLighting = {}
+local originalAtmosphere = {}
+local originalColorCorrection = {}
 
--- Triggerbot
+-- ==========================================
+-- TRIGGERBOT VARS (NEW)
+-- ==========================================
 local triggerbotEnabled = false
 local triggerbotDelay = 0.05
 local triggerbotMaxDistance = 300
 local triggerbotTeamCheck = false
 local triggerbotTargetPart = "Any"
-local triggerbotAutoShoot = true
 local triggerbotHoldMode = false
 local triggerbotHoldKey = Enum.KeyCode.CapsLock
 local triggerbotHoldActive = false
-local triggerbotFOV = 500
 local triggerbotRayRadius = 3
 local triggerbotBurstMode = false
 local triggerbotBurstCount = 3
@@ -234,15 +239,14 @@ local triggerbotCrosshairColor = Color3.fromRGB(0, 255, 0)
 local triggerbotActiveColor = Color3.fromRGB(255, 0, 0)
 local triggerbotIsTargeting = false
 
-local recoilKeywords = {"recoil","kickback","kick","bloom","sway","shake","camshake","camerashake","deviation","recovery","camjump","rise","climb","rebound","wobble","jitter","bounce","cameraoffset","impulse","pushback","knockback","gunraise","muzzlerise","vertical_recoil","horizontal_recoil","recoilup","recoilside"}
-local spreadKeywords = {"spread","accuracy","inaccuracy","cone","spreadcone","dispersion","scatter","randomspread","hipfire","hipspread","aimspread","movingspread","bulletspread","maxspread","minspread","basespread","bulletdeviation","firedeviation"}
-
 -- ==========================================
--- UTILITY
+-- UTILITY FUNCTIONS
 -- ==========================================
 local function containsKeyword(name, keywords)
 	local nl = name:lower()
-	for _, kw in ipairs(keywords) do if nl:find(kw:lower()) then return true end end
+	for _, kw in ipairs(keywords) do
+		if nl:find(kw:lower()) then return true end
+	end
 	return false
 end
 
@@ -259,12 +263,42 @@ end
 local function getEquippedTool()
 	local c = player.Character
 	if not c then return nil end
-	for _, i in ipairs(c:GetChildren()) do if i:IsA("Tool") then return i end end
+	for _, i in ipairs(c:GetChildren()) do
+		if i:IsA("Tool") then return i end
+	end
 	return nil
 end
 
+local function isInVehicle(p)
+	if not p or not p.Character then return false end
+	local hum = p.Character:FindFirstChildOfClass("Humanoid")
+	if not hum then return false end
+	if hum.Sit then return true end
+	local ok, seat = pcall(function() return hum.SeatPart end)
+	if ok and seat then return true end
+	return false
+end
+
+local function isLocalPlayerInVehicle()
+	return isInVehicle(player)
+end
+
 -- ==========================================
--- BRIGHTNESS / FULLBRIGHT
+-- COLLISION GROUP SETUP
+-- ==========================================
+local function setupHitboxCollisionGroup()
+	if hitboxCollisionGroupCreated then return end
+	pcall(function()
+		local PS = game:GetService("PhysicsService")
+		pcall(function() PS:RegisterCollisionGroup("RyuHitboxGhost") end)
+		pcall(function() PS:CollisionGroupSetCollidable("RyuHitboxGhost", "Default", false) end)
+		pcall(function() PS:CollisionGroupSetCollidable("RyuHitboxGhost", "RyuHitboxGhost", false) end)
+		hitboxCollisionGroupCreated = true
+	end)
+end
+
+-- ==========================================
+-- BRIGHTNESS SYSTEM (NEW)
 -- ==========================================
 local function saveLightingDefaults()
 	if lightingSaved then return end
@@ -279,7 +313,6 @@ local function saveLightingDefaults()
 	originalLighting.GlobalShadows = Lighting.GlobalShadows
 	originalLighting.EnvironmentDiffuseScale = Lighting.EnvironmentDiffuseScale
 	originalLighting.EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale
-
 	local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
 	if atmo then
 		originalAtmosphere.Density = atmo.Density
@@ -289,7 +322,6 @@ local function saveLightingDefaults()
 		originalAtmosphere.Glare = atmo.Glare
 		originalAtmosphere.Haze = atmo.Haze
 	end
-
 	local cc = Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
 	if cc then
 		originalColorCorrection.Brightness = cc.Brightness
@@ -302,31 +334,17 @@ end
 local function applyFullbright()
 	if not fullbrightEnabled then return end
 	saveLightingDefaults()
-
 	Lighting.Brightness = brightnessValue
 	Lighting.Ambient = ambientColor
 	Lighting.OutdoorAmbient = ambientColor
-
-	if useCustomTime then
-		Lighting.ClockTime = customClockTime
-	end
-
-	if noShadowsEnabled then
-		Lighting.GlobalShadows = false
-	end
-
+	if useCustomTime then Lighting.ClockTime = customClockTime end
+	if noShadowsEnabled then Lighting.GlobalShadows = false end
 	if noFogEnabled then
 		Lighting.FogStart = 0
 		Lighting.FogEnd = 9e9
 		local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
-		if atmo then
-			atmo.Density = 0
-			atmo.Offset = 0
-			atmo.Glare = 0
-			atmo.Haze = 0
-		end
+		if atmo then atmo.Density = 0; atmo.Offset = 0; atmo.Glare = 0; atmo.Haze = 0 end
 	end
-
 	if removePostEffects then
 		for _, effect in ipairs(Lighting:GetChildren()) do
 			if effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("SunRaysEffect") then
@@ -334,12 +352,7 @@ local function applyFullbright()
 			end
 		end
 		local cc = Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
-		if cc then
-			cc.Brightness = 0.1
-			cc.Contrast = 0.1
-			cc.Saturation = 0
-			cc.TintColor = Color3.fromRGB(255, 255, 255)
-		end
+		if cc then cc.Brightness = 0.1; cc.Contrast = 0.1; cc.Saturation = 0; cc.TintColor = Color3.new(1,1,1) end
 	end
 end
 
@@ -355,7 +368,6 @@ local function restoreLighting()
 	Lighting.GlobalShadows = originalLighting.GlobalShadows
 	Lighting.EnvironmentDiffuseScale = originalLighting.EnvironmentDiffuseScale
 	Lighting.EnvironmentSpecularScale = originalLighting.EnvironmentSpecularScale
-
 	local atmo = Lighting:FindFirstChildOfClass("Atmosphere")
 	if atmo and originalAtmosphere.Density then
 		atmo.Density = originalAtmosphere.Density
@@ -365,7 +377,6 @@ local function restoreLighting()
 		atmo.Glare = originalAtmosphere.Glare
 		atmo.Haze = originalAtmosphere.Haze
 	end
-
 	local cc = Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
 	if cc and originalColorCorrection.Brightness then
 		cc.Brightness = originalColorCorrection.Brightness
@@ -373,7 +384,6 @@ local function restoreLighting()
 		cc.Saturation = originalColorCorrection.Saturation
 		cc.TintColor = originalColorCorrection.TintColor
 	end
-
 	for _, effect in ipairs(Lighting:GetChildren()) do
 		if effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("SunRaysEffect") then
 			effect.Enabled = true
@@ -382,7 +392,7 @@ local function restoreLighting()
 end
 
 -- ==========================================
--- TRIGGERBOT
+-- TRIGGERBOT SYSTEM (NEW)
 -- ==========================================
 local function triggerbotCanSee(fromPos, targetPart)
 	if not triggerbotVisibleCheck then return true end
@@ -404,17 +414,12 @@ local function getTriggerbotTarget()
 	local myChar = player.Character
 	local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
 	if not myHrp then return nil end
-
 	local camPos = camera.CFrame.Position
 	local camLook = camera.CFrame.LookVector
-
-	-- Raycast from camera
 	local params = RaycastParams.new()
 	params.FilterDescendantsInstances = {myChar}
 	params.FilterType = Enum.RaycastFilterType.Exclude
-
 	local result = workspace:Raycast(camPos, camLook * triggerbotMaxDistance, params)
-
 	if result and result.Instance then
 		local hitModel = result.Instance:FindFirstAncestorOfClass("Model")
 		if hitModel then
@@ -423,12 +428,9 @@ local function getTriggerbotTarget()
 				local hum = hitModel:FindFirstChildOfClass("Humanoid")
 				if hum and hum.Health > 0 then
 					if triggerbotTeamCheck and isTeammate(hitPlayer) then return nil end
-
-					-- Check target part filter
 					if triggerbotTargetPart ~= "Any" then
-						local hitPart = result.Instance
-						if triggerbotTargetPart == "Head" and hitPart.Name ~= "Head" then
-							-- Check if head is close to crosshair
+						local hitPartName = result.Instance.Name
+						if triggerbotTargetPart == "Head" and hitPartName ~= "Head" then
 							local head = hitModel:FindFirstChild("Head")
 							if not head then return nil end
 							local sp, onS = camera:WorldToViewportPoint(head.Position)
@@ -436,23 +438,19 @@ local function getTriggerbotTarget()
 							local cs = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
 							if (Vector2.new(sp.X, sp.Y) - cs).Magnitude > triggerbotRayRadius * 5 then return nil end
 						elseif triggerbotTargetPart == "Body" then
-							local partName = hitPart.Name:lower()
-							local isBody = partName:find("torso") or partName:find("humanoidrootpart") or partName:find("upper") or partName:find("lower")
-							if not isBody and hitPart.Name ~= "HumanoidRootPart" then return nil end
+							local pn = hitPartName:lower()
+							local isBody = pn:find("torso") or pn:find("humanoidrootpart") or pn:find("upper") or pn:find("lower")
+							if not isBody and hitPartName ~= "HumanoidRootPart" then return nil end
 						end
 					end
-
 					return hitPlayer
 				end
 			end
 		end
 	end
-
-	-- Sphere cast fallback - check nearby players to crosshair
 	if triggerbotRayRadius > 1 then
 		local cs = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
 		local closest, closestDist = nil, math.huge
-
 		for _, p in ipairs(Players:GetPlayers()) do
 			if p ~= player and p.Character then
 				local hum = p.Character:FindFirstChildOfClass("Humanoid")
@@ -460,11 +458,9 @@ local function getTriggerbotTarget()
 				if hum and hrp and hum.Health > 0 then
 					if triggerbotTeamCheck and isTeammate(p) then continue end
 					if (myHrp.Position - hrp.Position).Magnitude > triggerbotMaxDistance then continue end
-
-					local partsToCheck = {"Head", "HumanoidRootPart", "UpperTorso", "Torso", "LowerTorso"}
+					local partsToCheck = {"Head","HumanoidRootPart","UpperTorso","Torso","LowerTorso"}
 					if triggerbotTargetPart == "Head" then partsToCheck = {"Head"} end
-					if triggerbotTargetPart == "Body" then partsToCheck = {"HumanoidRootPart", "UpperTorso", "Torso", "LowerTorso"} end
-
+					if triggerbotTargetPart == "Body" then partsToCheck = {"HumanoidRootPart","UpperTorso","Torso","LowerTorso"} end
 					for _, pn in ipairs(partsToCheck) do
 						local part = p.Character:FindFirstChild(pn)
 						if part then
@@ -473,8 +469,7 @@ local function getTriggerbotTarget()
 								local sd = (Vector2.new(sp.X, sp.Y) - cs).Magnitude
 								if sd <= triggerbotRayRadius * 3 and sd < closestDist then
 									if triggerbotCanSee(camPos, part) then
-										closestDist = sd
-										closest = p
+										closestDist = sd; closest = p
 									end
 								end
 							end
@@ -485,76 +480,31 @@ local function getTriggerbotTarget()
 		end
 		return closest
 	end
-
 	return nil
 end
 
 local function fireTriggerbotShot()
-	-- Simulate mouse click
 	pcall(function()
 		local VU = game:GetService("VirtualUser")
+		local center = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
 		if triggerbotBurstMode then
 			for i = 1, triggerbotBurstCount do
-				VU:Button1Down(Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2), camera.CFrame)
+				VU:Button1Down(center, camera.CFrame)
 				task.wait(triggerbotBurstDelay)
-				VU:Button1Up(Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2), camera.CFrame)
+				VU:Button1Up(center, camera.CFrame)
 				if i < triggerbotBurstCount then task.wait(triggerbotBurstDelay) end
 			end
 		else
-			VU:Button1Down(Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2), camera.CFrame)
+			VU:Button1Down(center, camera.CFrame)
 			task.wait(0.03)
-			VU:Button1Up(Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2), camera.CFrame)
+			VU:Button1Up(center, camera.CFrame)
 		end
 	end)
-
-	-- Fallback: use mouse
-	pcall(function()
-		if not game:GetService("VirtualUser") then
-			mouse1click()
-		end
-	end)
-end
-
-local function applyTriggerbot()
-	if not triggerbotEnabled then
-		triggerbotIsTargeting = false
-		return
-	end
-
-	-- Hold mode check
-	if triggerbotHoldMode and not triggerbotHoldActive then
-		triggerbotIsTargeting = false
-		return
-	end
-
-	-- Don't trigger if already holding mouse
-	if not triggerbotAutoShoot then
-		triggerbotIsTargeting = false
-		return
-	end
-
-	local now = tick()
-	if now - triggerbotLastShot < triggerbotCooldown then return end
-
-	local target = getTriggerbotTarget()
-	triggerbotIsTargeting = (target ~= nil)
-
-	if target then
-		task.wait(triggerbotDelay)
-		-- Re-check target after delay
-		local recheck = getTriggerbotTarget()
-		if recheck then
-			triggerbotLastShot = tick()
-			fireTriggerbotShot()
-		end
-	end
 end
 
 local function createTriggerbotCrosshair()
 	if triggerbotCrosshairObj then return end
 	triggerbotCrosshairObj = {}
-
-	-- 4 lines making a crosshair
 	for i = 1, 4 do
 		local line = Drawing.new("Line")
 		line.Thickness = 2
@@ -568,45 +518,30 @@ end
 local function updateTriggerbotCrosshair()
 	if not triggerbotCrosshairObj then createTriggerbotCrosshair() end
 	if not triggerbotShowCrosshair or not triggerbotEnabled then
-		for i = 1, 4 do
-			if triggerbotCrosshairObj[i] then triggerbotCrosshairObj[i].Visible = false end
-		end
+		for i = 1, 4 do if triggerbotCrosshairObj[i] then triggerbotCrosshairObj[i].Visible = false end end
 		return
 	end
-
 	local cx = camera.ViewportSize.X / 2
 	local cy = camera.ViewportSize.Y / 2
 	local s = triggerbotCrosshairSize
 	local gap = 3
 	local col = triggerbotIsTargeting and triggerbotActiveColor or triggerbotCrosshairColor
-
-	-- Top
 	triggerbotCrosshairObj[1].From = Vector2.new(cx, cy - s - gap)
 	triggerbotCrosshairObj[1].To = Vector2.new(cx, cy - gap)
-	triggerbotCrosshairObj[1].Color = col
-	triggerbotCrosshairObj[1].Visible = true
-
-	-- Bottom
+	triggerbotCrosshairObj[1].Color = col; triggerbotCrosshairObj[1].Visible = true
 	triggerbotCrosshairObj[2].From = Vector2.new(cx, cy + gap)
 	triggerbotCrosshairObj[2].To = Vector2.new(cx, cy + s + gap)
-	triggerbotCrosshairObj[2].Color = col
-	triggerbotCrosshairObj[2].Visible = true
-
-	-- Left
+	triggerbotCrosshairObj[2].Color = col; triggerbotCrosshairObj[2].Visible = true
 	triggerbotCrosshairObj[3].From = Vector2.new(cx - s - gap, cy)
 	triggerbotCrosshairObj[3].To = Vector2.new(cx - gap, cy)
-	triggerbotCrosshairObj[3].Color = col
-	triggerbotCrosshairObj[3].Visible = true
-
-	-- Right
+	triggerbotCrosshairObj[3].Color = col; triggerbotCrosshairObj[3].Visible = true
 	triggerbotCrosshairObj[4].From = Vector2.new(cx + gap, cy)
 	triggerbotCrosshairObj[4].To = Vector2.new(cx + s + gap, cy)
-	triggerbotCrosshairObj[4].Color = col
-	triggerbotCrosshairObj[4].Visible = true
+	triggerbotCrosshairObj[4].Color = col; triggerbotCrosshairObj[4].Visible = true
 end
 
 -- ==========================================
--- NO RECOIL
+-- NO RECOIL SYSTEM
 -- ==========================================
 local function overrideSingleValue(obj, isSpread)
 	if not isValidInstance(obj) or not obj:IsA("ValueBase") then return end
@@ -614,20 +549,20 @@ local function overrideSingleValue(obj, isSpread)
 	if noRecoilOverriddenObjects[key] then return end
 	local ok, val = pcall(function() return obj.Value end)
 	if not ok or typeof(val) ~= "number" then return end
-	local red = isSpread and (noSpreadStrength/100) or (noRecoilStrength/100)
-	noRecoilOverriddenObjects[key] = {obj=obj, originalValue=val, type="value"}
-	pcall(function() obj.Value = val * (1-red) end)
+	local red = isSpread and (noSpreadStrength / 100) or (noRecoilStrength / 100)
+	noRecoilOverriddenObjects[key] = {obj = obj, originalValue = val, type = "value"}
+	pcall(function() obj.Value = val * (1 - red) end)
 end
 
 local function overrideSingleAttribute(obj, attrName, isSpread)
 	if not isValidInstance(obj) then return end
-	local key = tostring(obj).."_attr_"..attrName
+	local key = tostring(obj) .. "attr" .. attrName
 	if noRecoilOverriddenObjects[key] then return end
 	local ok, val = pcall(function() return obj:GetAttribute(attrName) end)
 	if not ok or typeof(val) ~= "number" then return end
-	local red = isSpread and (noSpreadStrength/100) or (noRecoilStrength/100)
-	noRecoilOverriddenObjects[key] = {obj=obj, attrName=attrName, originalValue=val, type="attribute"}
-	pcall(function() obj:SetAttribute(attrName, val*(1-red)) end)
+	local red = isSpread and (noSpreadStrength / 100) or (noRecoilStrength / 100)
+	noRecoilOverriddenObjects[key] = {obj = obj, attrName = attrName, originalValue = val, type = "attribute"}
+	pcall(function() obj:SetAttribute(attrName, val * (1 - red)) end)
 end
 
 local function overrideTableRecoil(tbl, depth)
@@ -636,12 +571,16 @@ local function overrideTableRecoil(tbl, depth)
 	for key, val in pairs(tbl) do
 		if typeof(key) == "string" then
 			if noRecoilEnabled and typeof(val) == "number" then
-				for _, kw in ipairs(recoilKeywords) do if key:lower():find(kw) then tbl[key] = val*(1-noRecoilStrength/100) break end end
+				for _, kw in ipairs(recoilKeywords) do
+					if key:lower():find(kw) then tbl[key] = val * (1 - noRecoilStrength / 100); break end
+				end
 			end
 			if noSpreadEnabled and typeof(val) == "number" then
-				for _, kw in ipairs(spreadKeywords) do if key:lower():find(kw) then tbl[key] = val*(1-noSpreadStrength/100) break end end
+				for _, kw in ipairs(spreadKeywords) do
+					if key:lower():find(kw) then tbl[key] = val * (1 - noSpreadStrength / 100); break end
+				end
 			end
-			if typeof(val) == "table" then overrideTableRecoil(val, depth+1) end
+			if typeof(val) == "table" then overrideTableRecoil(val, depth + 1) end
 		end
 	end
 end
@@ -711,23 +650,23 @@ end
 local function refreshRecoilOverrides()
 	if not (noRecoilEnabled or noSpreadEnabled) or not noRecoilValueOverride then return end
 	for key, d in pairs(noRecoilOverriddenObjects) do
-		if not isValidInstance(d.obj) then noRecoilOverriddenObjects[key] = nil continue end
+		if not isValidInstance(d.obj) then noRecoilOverriddenObjects[key] = nil; continue end
 		pcall(function()
 			if d.type == "value" then
 				local cv = d.obj.Value
 				if typeof(cv) == "number" then
 					local isSp = containsKeyword(d.obj.Name, spreadKeywords)
-					local red = isSp and (noSpreadStrength/100) or (noRecoilStrength/100)
-					local tv = d.originalValue*(1-red)
-					if math.abs(cv-tv)>0.001 and math.abs(cv-d.originalValue)<0.001 then d.obj.Value = tv end
+					local red = isSp and (noSpreadStrength / 100) or (noRecoilStrength / 100)
+					local tv = d.originalValue * (1 - red)
+					if math.abs(cv - tv) > 0.001 and math.abs(cv - d.originalValue) < 0.001 then d.obj.Value = tv end
 				end
 			elseif d.type == "attribute" then
 				local cv = d.obj:GetAttribute(d.attrName)
 				if typeof(cv) == "number" then
 					local isSp = containsKeyword(d.attrName, spreadKeywords)
-					local red = isSp and (noSpreadStrength/100) or (noRecoilStrength/100)
-					local tv = d.originalValue*(1-red)
-					if math.abs(cv-tv)>0.001 and math.abs(cv-d.originalValue)<0.001 then d.obj:SetAttribute(d.attrName, tv) end
+					local red = isSp and (noSpreadStrength / 100) or (noRecoilStrength / 100)
+					local tv = d.originalValue * (1 - red)
+					if math.abs(cv - tv) > 0.001 and math.abs(cv - d.originalValue) < 0.001 then d.obj:SetAttribute(d.attrName, tv) end
 				end
 			end
 		end)
@@ -742,10 +681,10 @@ local function applyNoRecoilCameraLock()
 			noRecoilIsShooting = true
 			noRecoilLockedCFrame = camera.CFrame
 		elseif noRecoilLockedCFrame then
-			local str = noRecoilStrength/100
+			local str = noRecoilStrength / 100
 			local cp = camera.CFrame.Position
 			local ll = noRecoilLockedCFrame.LookVector
-			camera.CFrame = camera.CFrame:Lerp(CFrame.new(cp, cp+ll), str*0.8)
+			camera.CFrame = camera.CFrame:Lerp(CFrame.new(cp, cp + ll), str * 0.8)
 		end
 	elseif noRecoilIsShooting then
 		noRecoilIsShooting = false
@@ -794,7 +733,7 @@ local function deepScanModules()
 					if n:find("recoil") or n:find("spread") or n:find("weapon") or n:find("gun") or n:find("config") then
 						pcall(function()
 							local md = require(desc)
-							if typeof(md) == "table" then overrideTableRecoil(md) count=count+1 end
+							if typeof(md) == "table" then overrideTableRecoil(md); count = count + 1 end
 						end)
 					end
 				end
@@ -825,14 +764,12 @@ local function hookNoRecoilRemotes()
 				for i, arg in ipairs(args) do
 					if typeof(arg) == "Vector3" then
 						local ld = camera.CFrame.LookVector
-						if arg.Unit:Dot(ld) > 0.8 then
-							args[i] = ld:Lerp(arg.Unit, 1-noSpreadStrength/100) * arg.Magnitude
-						end
+						if arg.Unit:Dot(ld) > 0.8 then args[i] = ld:Lerp(arg.Unit, 1 - noSpreadStrength / 100) * arg.Magnitude end
 					elseif typeof(arg) == "table" then
 						for k, v in pairs(arg) do
-							if typeof(k)=="string" and typeof(v)=="number" then
-								if containsKeyword(k, spreadKeywords) then arg[k]=v*(1-noSpreadStrength/100) end
-								if containsKeyword(k, recoilKeywords) then arg[k]=v*(1-noRecoilStrength/100) end
+							if typeof(k) == "string" and typeof(v) == "number" then
+								if containsKeyword(k, spreadKeywords) then arg[k] = v * (1 - noSpreadStrength / 100) end
+								if containsKeyword(k, recoilKeywords) then arg[k] = v * (1 - noRecoilStrength / 100) end
 							end
 						end
 					end
@@ -845,7 +782,7 @@ local function hookNoRecoilRemotes()
 end
 
 -- ==========================================
--- SILENT AIM
+-- SILENT AIM SYSTEM
 -- ==========================================
 local function canSeeTarget(fromPos, targetPart)
 	if not silentAimVisibleCheck then return true end
@@ -864,7 +801,7 @@ local function canSeeTarget(fromPos, targetPart)
 end
 
 local function getSilentAimTargetPart(char)
-	if silentAimAutoHeadshot and math.random(1,100) <= silentAimHeadshotChance then
+	if silentAimAutoHeadshot and math.random(1, 100) <= silentAimHeadshotChance then
 		local head = char:FindFirstChild("Head")
 		if head then return head end
 	end
@@ -875,9 +812,10 @@ local function getSilentAimTargetPart(char)
 	elseif silentAimPart == "Random" then
 		local valid = {}
 		for _, pn in ipairs({"Head","HumanoidRootPart","UpperTorso","LowerTorso","Torso"}) do
-			local p = char:FindFirstChild(pn) if p then table.insert(valid, p) end
+			local p = char:FindFirstChild(pn)
+			if p then table.insert(valid, p) end
 		end
-		if #valid > 0 then return valid[math.random(1,#valid)] end
+		if #valid > 0 then return valid[math.random(1, #valid)] end
 	elseif silentAimPart == "Nearest to Cursor" then
 		local cs = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
 		local cp, cd = nil, math.huge
@@ -885,7 +823,10 @@ local function getSilentAimTargetPart(char)
 			local p = char:FindFirstChild(pn)
 			if p then
 				local sp, onS = camera:WorldToViewportPoint(p.Position)
-				if onS then local sd = (Vector2.new(sp.X,sp.Y)-cs).Magnitude if sd < cd then cd=sd cp=p end end
+				if onS then
+					local sd = (Vector2.new(sp.X, sp.Y) - cs).Magnitude
+					if sd < cd then cd = sd; cp = p end
+				end
 			end
 		end
 		return cp or char:FindFirstChild("HumanoidRootPart")
@@ -922,25 +863,21 @@ local function getSilentAimTarget()
 				if (myHrp.Position - hrp.Position).Magnitude > silentAimDistance then continue end
 				local sp, onScreen = camera:WorldToViewportPoint(hrp.Position)
 				if onScreen then
-					local sd = (Vector2.new(sp.X,sp.Y)-cs).Magnitude
+					local sd = (Vector2.new(sp.X, sp.Y) - cs).Magnitude
 					if sd <= silentAimFOV and sd < closestDist and canSeeTarget(myHrp.Position, hrp) then
-						closestDist = sd
-						closest = p
+						closestDist = sd; closest = p
 					end
 				end
 			end
 		end
 	end
-	if closest and closest.Character then
-		return closest, getSilentAimTargetPart(closest.Character)
-	end
+	if closest and closest.Character then return closest, getSilentAimTargetPart(closest.Character) end
 	return nil, nil
 end
 
 local function hookSilentAim()
 	if silentAimHooked then return end
 	silentAimHooked = true
-
 	pcall(function()
 		local mt = getrawmetatable(game)
 		if not mt then return end
@@ -950,10 +887,7 @@ local function hookSilentAim()
 			if silentAimEnabled and self == mouse then
 				if key == "Hit" or key == "hit" then
 					local t, tp = getSilentAimTarget()
-					if t and tp then
-						silentAimCurrentTarget = t
-						return CFrame.new(getPredictedPosition(tp, t.Character))
-					end
+					if t and tp then silentAimCurrentTarget = t; return CFrame.new(getPredictedPosition(tp, t.Character)) end
 				elseif key == "Target" or key == "target" then
 					local t, tp = getSilentAimTarget()
 					if t and tp then return tp end
@@ -961,18 +895,14 @@ local function hookSilentAim()
 					local t, tp = getSilentAimTarget()
 					if t and tp then
 						local pos = getPredictedPosition(tp, t.Character)
-						return Ray.new(camera.CFrame.Position, (pos-camera.CFrame.Position).Unit)
+						return Ray.new(camera.CFrame.Position, (pos - camera.CFrame.Position).Unit)
 					end
 				end
-			end
-			if key == "Size" and typeof(self)=="Instance" and self:IsA("BasePart") and self.Name == "HitboxOverlay" then
-				return Vector3.new(2,2,1)
 			end
 			return oldIdx(self, key)
 		end)
 		setreadonly(mt, true)
 	end)
-
 	pcall(function()
 		local hf = hookfunction or replaceclosure
 		if not hf then return end
@@ -980,17 +910,16 @@ local function hookSilentAim()
 		hf(workspace.Raycast, newcclosure(function(self, origin, direction, rayParams, ...)
 			if not silentAimEnabled then return oldRC(self, origin, direction, rayParams, ...) end
 			local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-			if myHrp and (origin-myHrp.Position).Magnitude < 15 then
+			if myHrp and (origin - myHrp.Position).Magnitude < 15 then
 				local t, tp = getSilentAimTarget()
 				if t and tp and math.random(1,100) <= silentAimHitChance then
 					local tPos = getPredictedPosition(tp, t.Character)
-					return oldRC(self, origin, (tPos-origin).Unit * direction.Magnitude, rayParams, ...)
+					return oldRC(self, origin, (tPos - origin).Unit * direction.Magnitude, rayParams, ...)
 				end
 			end
 			return oldRC(self, origin, direction, rayParams, ...)
 		end))
 	end)
-
 	pcall(function()
 		local hf = hookfunction or replaceclosure
 		if not hf then return end
@@ -998,17 +927,16 @@ local function hookSilentAim()
 		hf(workspace.FindPartOnRay, newcclosure(function(self, ray, ignoreList, ...)
 			if not silentAimEnabled then return oldFPR(self, ray, ignoreList, ...) end
 			local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-			if myHrp and (ray.Origin-myHrp.Position).Magnitude < 15 then
+			if myHrp and (ray.Origin - myHrp.Position).Magnitude < 15 then
 				local t, tp = getSilentAimTarget()
 				if t and tp and math.random(1,100) <= silentAimHitChance then
 					local tPos = getPredictedPosition(tp, t.Character)
-					return oldFPR(self, Ray.new(ray.Origin, (tPos-ray.Origin).Unit * ray.Direction.Magnitude), ignoreList, ...)
+					return oldFPR(self, Ray.new(ray.Origin, (tPos - ray.Origin).Unit * ray.Direction.Magnitude), ignoreList, ...)
 				end
 			end
 			return oldFPR(self, ray, ignoreList, ...)
 		end))
 	end)
-
 	pcall(function()
 		local hf = hookfunction or replaceclosure
 		if not hf then return end
@@ -1017,11 +945,11 @@ local function hookSilentAim()
 		hf(workspace.FindPartOnRayWithIgnoreList, newcclosure(function(self, ray, ignoreList, ...)
 			if not silentAimEnabled then return oldFPR2(self, ray, ignoreList, ...) end
 			local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-			if myHrp and (ray.Origin-myHrp.Position).Magnitude < 15 then
+			if myHrp and (ray.Origin - myHrp.Position).Magnitude < 15 then
 				local t, tp = getSilentAimTarget()
 				if t and tp and math.random(1,100) <= silentAimHitChance then
 					local tPos = getPredictedPosition(tp, t.Character)
-					return oldFPR2(self, Ray.new(ray.Origin, (tPos-ray.Origin).Unit * ray.Direction.Magnitude), ignoreList, ...)
+					return oldFPR2(self, Ray.new(ray.Origin, (tPos - ray.Origin).Unit * ray.Direction.Magnitude), ignoreList, ...)
 				end
 			end
 			return oldFPR2(self, ray, ignoreList, ...)
@@ -1051,24 +979,22 @@ local function hookBulletRedirect()
 					local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 					if myHrp then
 						if arg.Unit:Dot(camera.CFrame.LookVector) > 0.5 then
-							args[i] = (tPos-camera.CFrame.Position).Unit * arg.Magnitude
-						elseif (arg-myHrp.Position).Magnitude > 5 then
-							args[i] = tPos
-						end
+							args[i] = (tPos - camera.CFrame.Position).Unit * arg.Magnitude
+						elseif (arg - myHrp.Position).Magnitude > 5 then args[i] = tPos end
 					end
 				elseif typeof(arg) == "CFrame" then args[i] = CFrame.new(arg.Position, tPos)
-				elseif typeof(arg) == "Ray" then args[i] = Ray.new(arg.Origin, (tPos-arg.Origin).Unit * arg.Direction.Magnitude)
+				elseif typeof(arg) == "Ray" then args[i] = Ray.new(arg.Origin, (tPos - arg.Origin).Unit * arg.Direction.Magnitude)
 				elseif typeof(arg) == "Instance" and arg:IsA("BasePart") then args[i] = tp
 				elseif typeof(arg) == "table" then
 					for k, v in pairs(arg) do
-						if typeof(v)=="Vector3" and typeof(k)=="string" then
+						if typeof(v) == "Vector3" and typeof(k) == "string" then
 							local kl = k:lower()
-							if kl:find("pos") or kl:find("hit") or kl:find("target") or kl:find("point") then arg[k]=tPos
-							elseif kl:find("dir") or kl:find("look") or kl:find("aim") then arg[k]=(tPos-camera.CFrame.Position).Unit end
-						elseif typeof(v)=="CFrame" and typeof(k)=="string" then
-							if k:lower():find("aim") or k:lower():find("look") then arg[k]=CFrame.new(v.Position,tPos) end
-						elseif typeof(v)=="Instance" and v:IsA("BasePart") and typeof(k)=="string" then
-							if k:lower():find("hit") or k:lower():find("target") then arg[k]=tp end
+							if kl:find("pos") or kl:find("hit") or kl:find("target") or kl:find("point") then arg[k] = tPos
+							elseif kl:find("dir") or kl:find("look") or kl:find("aim") then arg[k] = (tPos - camera.CFrame.Position).Unit end
+						elseif typeof(v) == "CFrame" and typeof(k) == "string" then
+							if k:lower():find("aim") or k:lower():find("look") then arg[k] = CFrame.new(v.Position, tPos) end
+						elseif typeof(v) == "Instance" and v:IsA("BasePart") and typeof(k) == "string" then
+							if k:lower():find("hit") or k:lower():find("target") then arg[k] = tp end
 						end
 					end
 				end
@@ -1087,13 +1013,14 @@ local function hookBulletRedirect()
 			local isShoot = name:find("fire") or name:find("shoot") or name:find("attack") or name:find("bullet") or name:find("hit") or name:find("damage")
 			if not isShoot then return oldIS(self, ...) end
 			local t, tp = getSilentAimTarget()
-			if not t or not tp or math.random(1,100)>silentAimHitChance then return oldIS(self, ...) end
+			if not t or not tp or math.random(1,100) > silentAimHitChance then return oldIS(self, ...) end
 			local tPos = getPredictedPosition(tp, t.Character)
 			local args = {...}
 			for i, arg in ipairs(args) do
-				if typeof(arg)=="Vector3" and arg.Unit:Dot(camera.CFrame.LookVector)>0.5 then args[i]=(tPos-camera.CFrame.Position).Unit*arg.Magnitude
-				elseif typeof(arg)=="CFrame" then args[i]=CFrame.new(arg.Position,tPos)
-				elseif typeof(arg)=="Instance" and arg:IsA("BasePart") then args[i]=tp end
+				if typeof(arg) == "Vector3" and arg.Unit:Dot(camera.CFrame.LookVector) > 0.5 then
+					args[i] = (tPos - camera.CFrame.Position).Unit * arg.Magnitude
+				elseif typeof(arg) == "CFrame" then args[i] = CFrame.new(arg.Position, tPos)
+				elseif typeof(arg) == "Instance" and arg:IsA("BasePart") then args[i] = tp end
 			end
 			return oldIS(self, unpack(args))
 		end))
@@ -1101,7 +1028,7 @@ local function hookBulletRedirect()
 end
 
 -- ==========================================
--- ANTI KICK
+-- ANTI KICK SYSTEM
 -- ==========================================
 local function enableAntiKick()
 	if antiKickHooked then return end
@@ -1113,23 +1040,25 @@ local function enableAntiKick()
 			setreadonly(mt, false)
 			mt.__namecall = newcclosure(function(self, ...)
 				local m = getnamecallmethod()
-				if (m=="Kick" or m=="Destroy") and self == player then return nil end
+				if (m == "Kick" or m == "Destroy") and self == player then return nil end
 				return oldNC(self, ...)
 			end)
 			setreadonly(mt, true)
 		end
 	end)
-	pcall(function() player.Kick = function(s,...) if s==player then return nil end end end)
+	pcall(function() player.Kick = function(s, ...) if s == player then return nil end end end)
 end
 
 -- ==========================================
--- NOCLIP
+-- NOCLIP SYSTEM
 -- ==========================================
 local function applyNoclip()
 	if not noclip then return end
 	local char = player.Character
 	if not char then return end
-	for _, v in ipairs(char:GetDescendants()) do if v:IsA("BasePart") then v.CanCollide = false end end
+	for _, v in ipairs(char:GetDescendants()) do
+		if v:IsA("BasePart") then v.CanCollide = false end
+	end
 	if noclipMethod == "CFrame Bypass" then
 		local hrp = char:FindFirstChild("HumanoidRootPart")
 		local hum = char:FindFirstChildOfClass("Humanoid")
@@ -1137,54 +1066,169 @@ local function applyNoclip()
 			local params = RaycastParams.new()
 			params.FilterDescendantsInstances = {char}
 			params.FilterType = Enum.RaycastFilterType.Exclude
-			if workspace:Raycast(hrp.Position, hum.MoveDirection*3, params) then hrp.CFrame = hrp.CFrame + hum.MoveDirection*1.5 end
+			if workspace:Raycast(hrp.Position, hum.MoveDirection * 3, params) then
+				hrp.CFrame = hrp.CFrame + hum.MoveDirection * 1.5
+			end
 		end
 		if UserInputService:IsKeyDown(Enum.KeyCode.Space) then
-			local hrp = char:FindFirstChild("HumanoidRootPart")
-			if hrp then hrp.CFrame = hrp.CFrame + Vector3.new(0,1,0) end
+			local hrp2 = char:FindFirstChild("HumanoidRootPart")
+			if hrp2 then hrp2.CFrame = hrp2.CFrame + Vector3.new(0, 1, 0) end
 		end
 	elseif noclipMethod == "Phase Bypass" then
 		pcall(function() char:FindFirstChildOfClass("Humanoid"):ChangeState(Enum.HumanoidStateType.Running) end)
 	elseif noclipMethod == "Velocity Bypass" then
 		local hrp = char:FindFirstChild("HumanoidRootPart")
-		if hrp and hrp.AssemblyLinearVelocity.Magnitude > 60 then hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity.Unit*60 end
+		if hrp and hrp.AssemblyLinearVelocity.Magnitude > 60 then
+			hrp.AssemblyLinearVelocity = hrp.AssemblyLinearVelocity.Unit * 60
+		end
 	end
 end
 
 -- ==========================================
--- HITBOX
+-- HITBOX SYSTEM (FIXED v3)
 -- ==========================================
 local function cleanHitboxForPlayer(p)
-	local dd = hitboxData[p] if not dd then return end
+	local dd = hitboxData[p]
+	if not dd then return end
 	if dd.overlayPart and dd.overlayPart.Parent then pcall(function() dd.overlayPart:Destroy() end) end
 	if dd.espVisual and dd.espVisual.Parent then pcall(function() dd.espVisual:Destroy() end) end
 	if dd.deathConn then pcall(function() dd.deathConn:Disconnect() end) end
-	if p.Character then local hrp = p.Character:FindFirstChild("HumanoidRootPart") if hrp then hrp.CanQuery = true end end
-	dd.overlayPart=nil dd.espVisual=nil dd.trackedChar=nil dd.deathConn=nil
+	if dd.updateConn then pcall(function() dd.updateConn:Disconnect() end) end
+	if dd.charRemovingConn then pcall(function() dd.charRemovingConn:Disconnect() end) end
+	if dd.seatConn then pcall(function() dd.seatConn:Disconnect() end) end
+	if p and p.Parent and p.Character then
+		local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			pcall(function()
+				hrp.Size = Vector3.new(2, 2, 1)
+				hrp.Transparency = 1
+				hrp.CanCollide = false
+				hrp.CanTouch = true
+				hrp.CanQuery = true
+				hrp.Material = Enum.Material.SmoothPlastic
+			end)
+		end
+	end
+	dd.overlayPart = nil; dd.espVisual = nil; dd.trackedChar = nil
+	dd.deathConn = nil; dd.updateConn = nil; dd.charRemovingConn = nil
+	dd.seatConn = nil; dd.pausedForVehicle = false
+end
+
+local function pauseHitboxForVehicle(p)
+	local dd = hitboxData[p]
+	if not dd then return end
+	if dd.overlayPart and dd.overlayPart.Parent then
+		pcall(function() dd.overlayPart.Transparency = 1; dd.overlayPart.CanQuery = false end)
+	end
+	if dd.espVisual and dd.espVisual.Parent then
+		pcall(function() dd.espVisual.Transparency = 1 end)
+	end
+	if p and p.Character then
+		local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			pcall(function()
+				hrp.Size = Vector3.new(2, 2, 1); hrp.Transparency = 1
+				hrp.CanCollide = false; hrp.CanTouch = true; hrp.Material = Enum.Material.SmoothPlastic
+			end)
+		end
+	end
+	dd.pausedForVehicle = true
+end
+
+local function resumeHitboxFromVehicle(p)
+	local dd = hitboxData[p]
+	if not dd then return end
+	if dd.overlayPart and dd.overlayPart.Parent then
+		pcall(function()
+			dd.overlayPart.Transparency = hitboxTransparency
+			dd.overlayPart.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+			dd.overlayPart.Color = hitboxESPColor
+		end)
+	end
+	if p and p.Character then
+		local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			pcall(function()
+				hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+				hrp.Transparency = hitboxTransparency; hrp.Material = Enum.Material.ForceField
+				hrp.Color = hitboxESPColor; hrp.CanCollide = false; hrp.CanTouch = false
+			end)
+		end
+	end
+	dd.pausedForVehicle = false
 end
 
 local function createHitboxOverlay(p)
-	if not p.Character then return end
+	if not p or not p.Character then return end
 	local hrp = p.Character:FindFirstChild("HumanoidRootPart")
 	local hum = p.Character:FindFirstChildOfClass("Humanoid")
 	if not hrp or not hum or hum.Health <= 0 then return end
+	if isInVehicle(p) then return end
 	if not hitboxData[p] then hitboxData[p] = {} end
 	local dd = hitboxData[p]
 	if dd.overlayPart and dd.overlayPart.Parent then pcall(function() dd.overlayPart:Destroy() end) end
 	if dd.espVisual and dd.espVisual.Parent then pcall(function() dd.espVisual:Destroy() end) end
-	local ov = Instance.new("Part") ov.Name="HitboxOverlay"
-	ov.Size=Vector3.new(hitboxSize,hitboxSize,hitboxSize)
-	ov.Transparency=hitboxTransparency ov.CanCollide=false ov.CanQuery=true
-	ov.Anchored=false ov.Massless=true ov.Material=Enum.Material.ForceField
-	ov.Color=hitboxESPColor ov.Parent=p.Character
-	local w = Instance.new("WeldConstraint") w.Part0=hrp w.Part1=ov w.Parent=ov
-	ov.CFrame=hrp.CFrame hrp.CanQuery=false
-	dd.overlayPart=ov dd.trackedChar=p.Character
-	dd.deathConn = hum.Died:Connect(function() task.wait(0.5) cleanHitboxForPlayer(p) end)
+	if dd.deathConn then pcall(function() dd.deathConn:Disconnect() end) end
+	if dd.updateConn then pcall(function() dd.updateConn:Disconnect() end) end
+	if dd.charRemovingConn then pcall(function() dd.charRemovingConn:Disconnect() end) end
+	if dd.seatConn then pcall(function() dd.seatConn:Disconnect() end) end
+	setupHitboxCollisionGroup()
+	pcall(function()
+		hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+		hrp.Transparency = hitboxTransparency; hrp.Material = Enum.Material.ForceField
+		hrp.Color = hitboxESPColor; hrp.CanCollide = false; hrp.CanTouch = false
+	end)
+	local ov = Instance.new("Part")
+	ov.Name = "HitboxVisual"; ov.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+	ov.Transparency = hitboxTransparency; ov.CanCollide = false; ov.CanTouch = false
+	ov.CanQuery = false; ov.Anchored = false; ov.Massless = true
+	ov.Material = Enum.Material.ForceField; ov.Color = hitboxESPColor
+	ov.Shape = Enum.PartType.Ball; ov.CFrame = hrp.CFrame
+	pcall(function() ov.CollisionGroup = "RyuHitboxGhost" end)
+	ov.Parent = p.Character
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = hrp; weld.Part1 = ov; weld.Parent = ov; ov.CFrame = hrp.CFrame
+	dd.seatConn = hum:GetPropertyChangedSignal("Sit"):Connect(function()
+		if not hitboxData[p] then return end
+		if hum.Sit then pauseHitboxForVehicle(p)
+		else task.wait(0.5); if hitboxEnabled and p.Parent and p.Character then resumeHitboxFromVehicle(p) end end
+	end)
+	dd.updateConn = RunService.Heartbeat:Connect(function()
+		if not ov or not ov.Parent then
+			if dd.updateConn then pcall(function() dd.updateConn:Disconnect() end); dd.updateConn = nil end; return
+		end
+		if not p or not p.Parent or not p.Character then
+			pcall(function() ov:Destroy() end)
+			if dd.updateConn then pcall(function() dd.updateConn:Disconnect() end); dd.updateConn = nil end; return
+		end
+		local targetHRP = p.Character:FindFirstChild("HumanoidRootPart")
+		if not targetHRP then
+			pcall(function() ov:Destroy() end)
+			if dd.updateConn then pcall(function() dd.updateConn:Disconnect() end); dd.updateConn = nil end; return
+		end
+		if dd.pausedForVehicle then return end
+		local targetHum = p.Character:FindFirstChildOfClass("Humanoid")
+		if targetHum and targetHum.Sit then pauseHitboxForVehicle(p); return end
+		pcall(function()
+			local ns = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+			if ov.Size ~= ns then ov.Size = ns end
+			ov.Transparency = hitboxTransparency; ov.Color = hitboxESPColor
+		end)
+		pcall(function()
+			local ns = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
+			if targetHRP.Size ~= ns then targetHRP.Size = ns end
+			targetHRP.Transparency = hitboxTransparency; targetHRP.Color = hitboxESPColor
+			targetHRP.Material = Enum.Material.ForceField; targetHRP.CanCollide = false; targetHRP.CanTouch = false
+		end)
+	end)
+	dd.overlayPart = ov; dd.trackedChar = p.Character; dd.pausedForVehicle = false
+	dd.deathConn = hum.Died:Connect(function() task.wait(0.5); cleanHitboxForPlayer(p) end)
+	dd.charRemovingConn = p.CharacterRemoving:Connect(function() cleanHitboxForPlayer(p) end)
 end
 
 local function updateHitboxExpander()
 	if not hitboxEnabled then return end
+	local localVehicle = isLocalPlayerInVehicle()
 	for _, p in ipairs(Players:GetPlayers()) do
 		if p ~= player and p.Character then
 			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
@@ -1192,72 +1236,88 @@ local function updateHitboxExpander()
 			if hrp and hum and hum.Health > 0 then
 				if not hitboxData[p] then hitboxData[p] = {} end
 				local dd = hitboxData[p]
-				if not dd.overlayPart or not dd.overlayPart.Parent or dd.trackedChar ~= p.Character then
-					if dd.deathConn then pcall(function() dd.deathConn:Disconnect() end) end
-					createHitboxOverlay(p)
+				local targetVehicle = isInVehicle(p)
+				if targetVehicle or localVehicle then
+					if dd.overlayPart and dd.overlayPart.Parent and not dd.pausedForVehicle then pauseHitboxForVehicle(p) end
 				else
-					dd.overlayPart.Size=Vector3.new(hitboxSize,hitboxSize,hitboxSize)
-					dd.overlayPart.Transparency=hitboxTransparency
-					dd.overlayPart.Color=hitboxESPColor
-					if hrp.CanQuery then hrp.CanQuery=false end
+					if dd.pausedForVehicle then resumeHitboxFromVehicle(p) end
+					if not dd.overlayPart or not dd.overlayPart.Parent or dd.trackedChar ~= p.Character then createHitboxOverlay(p) end
 				end
-				if hitboxESPEnabled and dd.overlayPart and dd.overlayPart.Parent then
+				if hitboxESPEnabled and dd.overlayPart and dd.overlayPart.Parent and not dd.pausedForVehicle then
 					if not dd.espVisual or not dd.espVisual.Parent then
-						local b = Instance.new("BoxHandleAdornment") b.Adornee=dd.overlayPart b.Size=dd.overlayPart.Size
-						b.Color3=hitboxESPColor b.Transparency=0.5 b.AlwaysOnTop=true b.ZIndex=10 b.Parent=dd.overlayPart
-						dd.espVisual=b
-					else dd.espVisual.Size=dd.overlayPart.Size dd.espVisual.Color3=hitboxESPColor end
-				elseif dd.espVisual then pcall(function() dd.espVisual:Destroy() end) dd.espVisual=nil end
+						local b = Instance.new("BoxHandleAdornment")
+						b.Adornee = dd.overlayPart; b.Size = dd.overlayPart.Size
+						b.Color3 = hitboxESPColor; b.Transparency = 0.5; b.AlwaysOnTop = true; b.ZIndex = 10
+						b.Parent = dd.overlayPart; dd.espVisual = b
+					else pcall(function() dd.espVisual.Size = dd.overlayPart.Size; dd.espVisual.Color3 = hitboxESPColor end) end
+				elseif dd.espVisual then pcall(function() dd.espVisual:Destroy() end); dd.espVisual = nil end
 			elseif hitboxData[p] and hitboxData[p].overlayPart then cleanHitboxForPlayer(p) end
 		end
 	end
-	for p in pairs(hitboxData) do if not p.Parent then cleanHitboxForPlayer(p) hitboxData[p]=nil end end
+	for p, _ in pairs(hitboxData) do
+		if not p.Parent then cleanHitboxForPlayer(p); hitboxData[p] = nil end
+	end
 end
 
 local function disableHitboxExpander()
-	for p in pairs(hitboxData) do
-		if hitboxData[p].deathConn then pcall(function() hitboxData[p].deathConn:Disconnect() end) end
-		cleanHitboxForPlayer(p)
-	end
+	for p, _ in pairs(hitboxData) do cleanHitboxForPlayer(p) end
 	hitboxData = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
+			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				pcall(function()
+					hrp.Size = Vector3.new(2, 2, 1); hrp.Transparency = 1
+					hrp.CanCollide = false; hrp.CanTouch = true; hrp.CanQuery = true
+					hrp.Material = Enum.Material.SmoothPlastic
+				end)
+			end
+		end
+	end
 end
 
+-- ==========================================
+-- ANTI HITBOX SYSTEM
+-- ==========================================
 local function updateAntiHitbox()
 	if not antiHitboxEnabled then return end
 	local mc = player.Character
 	if not mc or not mc:FindFirstChild("HumanoidRootPart") then return end
-	for _, pn in ipairs({"Head","Torso","UpperTorso","LowerTorso","LeftArm","RightArm","LeftLeg","RightLeg","Left Arm","Right Arm","Left Leg","Right Leg","HumanoidRootPart"}) do
+	local partNames = {"Head","Torso","UpperTorso","LowerTorso","LeftArm","RightArm","LeftLeg","RightLeg","Left Arm","Right Arm","Left Leg","Right Leg","HumanoidRootPart"}
+	for _, pn in ipairs(partNames) do
 		local part = mc:FindFirstChild(pn)
 		if part and part:IsA("BasePart") then
 			if not antiHitboxParts[pn] then antiHitboxParts[pn] = {} end
 			local d = antiHitboxParts[pn]
 			if not d.fakePart or not d.fakePart.Parent then
-				local fp = Instance.new("Part") fp.Name="AH_"..pn fp.Size=Vector3.new(antiHitboxSize,antiHitboxSize,antiHitboxSize)
-				fp.Transparency=1 fp.CanCollide=false fp.CanQuery=true fp.Anchored=false fp.Massless=true fp.Parent=mc
-				local w = Instance.new("WeldConstraint") w.Part0=part w.Part1=fp w.Parent=fp
-				fp.CFrame=part.CFrame d.fakePart=fp
-			else d.fakePart.Size=Vector3.new(antiHitboxSize,antiHitboxSize,antiHitboxSize) end
-			part.CanQuery=false
+				local fp = Instance.new("Part")
+				fp.Name = "AH_"..pn; fp.Size = Vector3.new(antiHitboxSize, antiHitboxSize, antiHitboxSize)
+				fp.Transparency = 1; fp.CanCollide = false; fp.CanTouch = false; fp.CanQuery = true
+				fp.Anchored = false; fp.Massless = true; fp.Parent = mc
+				local w = Instance.new("WeldConstraint")
+				w.Part0 = part; w.Part1 = fp; w.Parent = fp; fp.CFrame = part.CFrame; d.fakePart = fp
+			else d.fakePart.Size = Vector3.new(antiHitboxSize, antiHitboxSize, antiHitboxSize) end
+			part.CanQuery = false
 		end
 	end
 end
 
 -- ==========================================
--- AIM ASSIST
+-- AIM ASSIST SYSTEM
 -- ==========================================
 local function getAimAssistTargetPart(char)
 	local now = tick()
-	if aimAssistLastChosenPart and char:FindFirstChild(aimAssistLastChosenPart) and now-aimAssistLastPartSwitch < aimAssistPartSwitchRate then
+	if aimAssistLastChosenPart and char:FindFirstChild(aimAssistLastChosenPart) and now - aimAssistLastPartSwitch < aimAssistPartSwitchRate then
 		return char:FindFirstChild(aimAssistLastChosenPart)
 	end
 	aimAssistLastPartSwitch = now
 	local pn = "HumanoidRootPart"
 	if aimAssistTargetPart == "Dynamic" then
-		if math.random(1,100) <= aimAssistHeadshotRate then pn="Head"
-		else for _, n in ipairs({"HumanoidRootPart","UpperTorso","LowerTorso","Torso"}) do if char:FindFirstChild(n) then pn=n break end end end
-	elseif aimAssistTargetPart == "Head" then pn="Head"
+		if math.random(1, 100) <= aimAssistHeadshotRate then pn = "Head"
+		else for _, n in ipairs({"HumanoidRootPart","UpperTorso","LowerTorso","Torso"}) do if char:FindFirstChild(n) then pn = n; break end end end
+	elseif aimAssistTargetPart == "Head" then pn = "Head"
 	elseif aimAssistTargetPart == "Body" then
-		for _, n in ipairs({"HumanoidRootPart","UpperTorso","Torso"}) do if char:FindFirstChild(n) then pn=n break end end
+		for _, n in ipairs({"HumanoidRootPart","UpperTorso","Torso"}) do if char:FindFirstChild(n) then pn = n; break end end
 	end
 	aimAssistLastChosenPart = pn
 	return char:FindFirstChild(pn) or char:FindFirstChild("HumanoidRootPart")
@@ -1274,11 +1334,11 @@ local function getAimAssistTarget()
 			local hrp = p.Character:FindFirstChild("HumanoidRootPart")
 			if hum and hrp and hum.Health > 0 then
 				if aimAssistTeamCheck and isTeammate(p) then continue end
-				if (myHrp.Position-hrp.Position).Magnitude > aimAssistDistance then continue end
+				if (myHrp.Position - hrp.Position).Magnitude > aimAssistDistance then continue end
 				local sp, onS = camera:WorldToViewportPoint(hrp.Position)
 				if onS then
-					local sd = (Vector2.new(sp.X,sp.Y)-cs).Magnitude
-					if sd <= aimAssistFOV and sd < cd then cd=sd closest=p end
+					local sd = (Vector2.new(sp.X, sp.Y) - cs).Magnitude
+					if sd <= aimAssistFOV and sd < cd then cd = sd; closest = p end
 				end
 			end
 		end
@@ -1290,9 +1350,9 @@ local function isAimAssistTargetValid(p)
 	if not p or not p.Parent or not p.Character then return false end
 	local hum = p.Character:FindFirstChildOfClass("Humanoid")
 	local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-	if not hum or not hrp or hum.Health<=0 then return false end
+	if not hum or not hrp or hum.Health <= 0 then return false end
 	local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	if not myHrp or (myHrp.Position-hrp.Position).Magnitude > aimAssistDistance then return false end
+	if not myHrp or (myHrp.Position - hrp.Position).Magnitude > aimAssistDistance then return false end
 	local _, onS = camera:WorldToViewportPoint(hrp.Position)
 	return onS
 end
@@ -1303,7 +1363,7 @@ local function applyAimAssist(dt)
 	if not myChar or not myChar:FindFirstChild("HumanoidRootPart") then return end
 	if aimAssistOnlyWhileAiming then
 		local isAiming = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) or UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2)
-		if not isAiming then aimAssistStickyTarget=nil aimAssistCurrentTarget=nil aimAssistFirstLock=false return end
+		if not isAiming then aimAssistStickyTarget = nil; aimAssistCurrentTarget = nil; aimAssistFirstLock = false; return end
 	end
 	local now = tick()
 	local target = nil
@@ -1312,52 +1372,49 @@ local function applyAimAssist(dt)
 			local hrp = aimAssistStickyTarget.Character:FindFirstChild("HumanoidRootPart")
 			if hrp then
 				local sp, onS = camera:WorldToViewportPoint(hrp.Position)
-				if onS and (Vector2.new(sp.X,sp.Y)-Vector2.new(camera.ViewportSize.X/2,camera.ViewportSize.Y/2)).Magnitude <= aimAssistFOV*1.8 then
-					target = aimAssistStickyTarget
-				end
+				if onS and (Vector2.new(sp.X, sp.Y) - Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)).Magnitude <= aimAssistFOV * 1.8 then target = aimAssistStickyTarget end
 			end
 		end
-		if not target and now-lastStickyTime < aimAssistReattachDelay then return end
+		if not target and now - lastStickyTime < aimAssistReattachDelay then return end
 	end
-	if not target then
-		target = getAimAssistTarget()
-		if target then aimAssistFirstLock=true aimAssistLastTargetSwitch=now end
-	end
-	if not target or not target.Character then aimAssistCurrentTarget=nil aimAssistStickyTarget=nil aimAssistFirstLock=false return end
+	if not target then target = getAimAssistTarget(); if target then aimAssistFirstLock = true; aimAssistLastTargetSwitch = now end end
+	if not target or not target.Character then aimAssistCurrentTarget = nil; aimAssistStickyTarget = nil; aimAssistFirstLock = false; return end
 	local isNew = (aimAssistStickyTarget ~= target)
-	aimAssistStickyTarget=target aimAssistCurrentTarget=target lastStickyTime=now
+	aimAssistStickyTarget = target; aimAssistCurrentTarget = target; lastStickyTime = now
 	local tp = getAimAssistTargetPart(target.Character)
 	if not tp then return end
 	local tPos = tp.Position
 	if aimAssistPrediction then
 		local hrp = target.Character:FindFirstChild("HumanoidRootPart")
-		if hrp then tPos = tPos + Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z)*aimAssistPredictionAmount end
+		if hrp then tPos = tPos + Vector3.new(hrp.AssemblyLinearVelocity.X, 0, hrp.AssemblyLinearVelocity.Z) * aimAssistPredictionAmount end
 	end
 	local tsp, onS = camera:WorldToViewportPoint(tPos)
 	if not onS then return end
 	local cs = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
-	local offMag = (Vector2.new(tsp.X,tsp.Y)-cs).Magnitude
-	if offMag <= aimAssistInnerDeadzone then camera.CFrame=camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position,tPos),0.95) return end
+	local offMag = (Vector2.new(tsp.X, tsp.Y) - cs).Magnitude
+	if offMag <= aimAssistInnerDeadzone then camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, tPos), 0.95); return end
 	local ms
 	if offMag <= aimAssistSlowdownZone then
-		local zf = 1-(offMag/aimAssistSlowdownZone)
-		ms = aimAssistStrength*(0.6+zf*0.4)+aimAssistMagnetism*zf*0.5
+		local zf = 1 - (offMag / aimAssistSlowdownZone)
+		ms = aimAssistStrength * (0.6 + zf * 0.4) + aimAssistMagnetism * zf * 0.5
 	else
-		local ff = 1-math.clamp((offMag-aimAssistSlowdownZone)/(aimAssistFOV-aimAssistSlowdownZone),0,1)
-		ms = aimAssistStrength*(0.2+ff*0.4)
+		local ff = 1 - math.clamp((offMag - aimAssistSlowdownZone) / (aimAssistFOV - aimAssistSlowdownZone), 0, 1)
+		ms = aimAssistStrength * (0.2 + ff * 0.4)
 	end
-	if aimAssistFirstLock and isNew then ms=math.min(ms+aimAssistSnapStrength*0.3,1) aimAssistFirstLock=false end
+	if aimAssistFirstLock and isNew then ms = math.min(ms + aimAssistSnapStrength * 0.3, 1); aimAssistFirstLock = false end
 	local ts = aimAssistTrackingSmooth
-	if aimAssistSmoothing and offMag < 30 then ts=ts*0.5 end
+	if aimAssistSmoothing and offMag < 30 then ts = ts * 0.5 end
 	ms = math.clamp(ms, 0.01, 0.95)
-	local fl = math.clamp(ms*(1-ts)+ts, 0.02, 0.9)
+	local fl = math.clamp(ms * (1 - ts) + ts, 0.02, 0.9)
 	camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, tPos), fl)
 end
 
 -- ==========================================
--- ESP
+-- ESP SYSTEM
 -- ==========================================
-local function lerpV2(a,b,t) return Vector2.new(a.X+(b.X-a.X)*t, a.Y+(b.Y-a.Y)*t) end
+local function lerpV2(a, b, t)
+	return Vector2.new(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t)
+end
 
 local function updatePlayerESP()
 	if not espEnabled then return end
@@ -1366,502 +1423,321 @@ local function updatePlayerESP()
 		if tp == player then continue end
 		if espTeamCheck and isTeammate(tp) then
 			if espObjects[tp] then
-				local d=espObjects[tp]
-				if d.box then d.box.Visible=false end if d.line then d.line.Visible=false end
-				if d.name then d.name.Visible=false end if d.distText then d.distText.Visible=false end
-				if d.healthText then d.healthText.Visible=false end if d.healthBar then d.healthBar.Visible=false end
-				if d.healthBg then d.healthBg.Visible=false end
-				if d.highlight then pcall(function() d.highlight:Destroy() end) d.highlight=nil end
-			end
-			continue
+				local d = espObjects[tp]
+				if d.box then d.box.Visible = false end; if d.line then d.line.Visible = false end
+				if d.name then d.name.Visible = false end; if d.distText then d.distText.Visible = false end
+				if d.healthText then d.healthText.Visible = false end; if d.healthBar then d.healthBar.Visible = false end
+				if d.healthBg then d.healthBg.Visible = false end
+				if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
+			end; continue
 		end
 		local char = tp.Character
 		if not espObjects[tp] then
 			espObjects[tp] = {
-				box=Drawing.new("Square"), line=Drawing.new("Line"),
-				name=Drawing.new("Text"), distText=Drawing.new("Text"),
-				healthText=Drawing.new("Text"), healthBar=Drawing.new("Line"),
-				healthBg=Drawing.new("Line"), smoothFrom=nil, smoothTo=nil,
+				box = Drawing.new("Square"), line = Drawing.new("Line"),
+				name = Drawing.new("Text"), distText = Drawing.new("Text"),
+				healthText = Drawing.new("Text"), healthBar = Drawing.new("Line"),
+				healthBg = Drawing.new("Line"), smoothFrom = nil, smoothTo = nil,
 			}
-			local d=espObjects[tp]
-			d.box.Thickness=1.5 d.box.Filled=false d.box.Visible=false
-			d.line.Thickness=1.5 d.line.Visible=false
-			d.name.Size=14 d.name.Center=true d.name.Outline=true d.name.Font=2 d.name.Visible=false
-			d.distText.Size=12 d.distText.Center=true d.distText.Outline=true d.distText.Font=2 d.distText.Visible=false
-			d.healthText.Size=12 d.healthText.Center=true d.healthText.Outline=true d.healthText.Font=2 d.healthText.Visible=false
-			d.healthBar.Thickness=3 d.healthBar.Visible=false
-			d.healthBg.Thickness=5 d.healthBg.Visible=false d.healthBg.Color=Color3.fromRGB(40,40,40)
+			local d = espObjects[tp]
+			d.box.Thickness = 1.5; d.box.Filled = false; d.box.Visible = false
+			d.line.Thickness = 1.5; d.line.Visible = false
+			d.name.Size = 14; d.name.Center = true; d.name.Outline = true; d.name.Font = 2; d.name.Visible = false
+			d.distText.Size = 12; d.distText.Center = true; d.distText.Outline = true; d.distText.Font = 2; d.distText.Visible = false
+			d.healthText.Size = 12; d.healthText.Center = true; d.healthText.Outline = true; d.healthText.Font = 2; d.healthText.Visible = false
+			d.healthBar.Thickness = 3; d.healthBar.Visible = false
+			d.healthBg.Thickness = 5; d.healthBg.Visible = false; d.healthBg.Color = Color3.fromRGB(40, 40, 40)
 		end
-		local d=espObjects[tp]
+		local d = espObjects[tp]
 		local color = espTeamCheck and (isTeammate(tp) and espTeamColor or espEnemyColor) or espColor
 		if not char or not char:FindFirstChild("HumanoidRootPart") then
-			d.box.Visible=false d.line.Visible=false d.name.Visible=false
-			d.distText.Visible=false d.healthText.Visible=false d.healthBar.Visible=false d.healthBg.Visible=false
-			if d.highlight then pcall(function() d.highlight:Destroy() end) d.highlight=nil end
-			continue
+			d.box.Visible = false; d.line.Visible = false; d.name.Visible = false
+			d.distText.Visible = false; d.healthText.Visible = false
+			d.healthBar.Visible = false; d.healthBg.Visible = false
+			if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end; continue
 		end
-		local hrp=char.HumanoidRootPart
-		local head=char:FindFirstChild("Head")
-		local hum=char:FindFirstChildOfClass("Humanoid")
-		local pos,onS=camera:WorldToViewportPoint(hrp.Position)
+		local hrp = char.HumanoidRootPart; local head = char:FindFirstChild("Head"); local hum = char:FindFirstChildOfClass("Humanoid")
+		local pos, onS = camera:WorldToViewportPoint(hrp.Position)
 		if onS then
-			local tp2=camera:WorldToViewportPoint((hrp.CFrame*CFrame.new(0,3,0)).Position)
-			local bp=camera:WorldToViewportPoint((hrp.CFrame*CFrame.new(0,-4.5,0)).Position)
-			local h=math.abs(tp2.Y-bp.Y) local w=h/1.8
-			if espBox then d.box.Size=Vector2.new(w,h) d.box.Position=Vector2.new(pos.X-w/2,pos.Y-h/2) d.box.Color=color d.box.Visible=true else d.box.Visible=false end
+			local tp2 = camera:WorldToViewportPoint((hrp.CFrame * CFrame.new(0, 3, 0)).Position)
+			local bp = camera:WorldToViewportPoint((hrp.CFrame * CFrame.new(0, -4.5, 0)).Position)
+			local h = math.abs(tp2.Y - bp.Y); local w = h / 1.8
+			if espBox then d.box.Size = Vector2.new(w, h); d.box.Position = Vector2.new(pos.X - w/2, pos.Y - h/2); d.box.Color = color; d.box.Visible = true else d.box.Visible = false end
 			if espLine then
-				local tf=Vector2.new(camera.ViewportSize.X/2,camera.ViewportSize.Y) local tt=Vector2.new(pos.X,pos.Y)
-				if d.smoothFrom and d.smoothTo then d.smoothFrom=lerpV2(d.smoothFrom,tf,espLineSmoothing) d.smoothTo=lerpV2(d.smoothTo,tt,espLineSmoothing)
-				else d.smoothFrom=tf d.smoothTo=tt end
-				d.line.From=d.smoothFrom d.line.To=d.smoothTo d.line.Color=color d.line.Visible=true
-			else d.line.Visible=false d.smoothFrom=nil d.smoothTo=nil end
+				local tf = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y); local tt = Vector2.new(pos.X, pos.Y)
+				if d.smoothFrom and d.smoothTo then d.smoothFrom = lerpV2(d.smoothFrom, tf, espLineSmoothing); d.smoothTo = lerpV2(d.smoothTo, tt, espLineSmoothing)
+				else d.smoothFrom = tf; d.smoothTo = tt end
+				d.line.From = d.smoothFrom; d.line.To = d.smoothTo; d.line.Color = color; d.line.Visible = true
+			else d.line.Visible = false; d.smoothFrom = nil; d.smoothTo = nil end
 			if espName and head then
-				local np=camera:WorldToViewportPoint((head.CFrame*CFrame.new(0,2,0)).Position)
-				d.name.Position=Vector2.new(np.X,np.Y) d.name.Text=tp.DisplayName.." (@"..tp.Name..")" d.name.Color=color d.name.Visible=true
-			else d.name.Visible=false end
+				local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
+				d.name.Position = Vector2.new(np.X, np.Y); d.name.Text = tp.DisplayName.." (@"..tp.Name..")"; d.name.Color = color; d.name.Visible = true
+			else d.name.Visible = false end
 			if espDistance and myHrp and head then
-				local dist=math.floor((myHrp.Position-hrp.Position).Magnitude)
-				local np=camera:WorldToViewportPoint((head.CFrame*CFrame.new(0,2,0)).Position)
-				d.distText.Position=Vector2.new(np.X,np.Y+(espName and 14 or 0)) d.distText.Text="["..dist.."m]" d.distText.Color=Color3.fromRGB(200,200,200) d.distText.Visible=true
-			else d.distText.Visible=false end
+				local dist = math.floor((myHrp.Position - hrp.Position).Magnitude)
+				local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
+				d.distText.Position = Vector2.new(np.X, np.Y + (espName and 14 or 0)); d.distText.Text = "["..dist.."m]"
+				d.distText.Color = Color3.fromRGB(200, 200, 200); d.distText.Visible = true
+			else d.distText.Visible = false end
 			if espHealth and hum then
-				local hp=math.clamp(hum.Health/hum.MaxHealth,0,1)
+				local hp = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
 				if espBox then
-					local bx=pos.X-w/2-7
-					d.healthBg.From=Vector2.new(bx,pos.Y+h/2) d.healthBg.To=Vector2.new(bx,pos.Y-h/2) d.healthBg.Visible=true
-					d.healthBar.From=Vector2.new(bx,pos.Y+h/2) d.healthBar.To=Vector2.new(bx,pos.Y+h/2-h*hp)
-					d.healthBar.Color=Color3.fromRGB(255*(1-hp),255*hp,0) d.healthBar.Visible=true
-				else d.healthBar.Visible=false d.healthBg.Visible=false end
+					local bx = pos.X - w/2 - 7
+					d.healthBg.From = Vector2.new(bx, pos.Y + h/2); d.healthBg.To = Vector2.new(bx, pos.Y - h/2); d.healthBg.Visible = true
+					d.healthBar.From = Vector2.new(bx, pos.Y + h/2); d.healthBar.To = Vector2.new(bx, pos.Y + h/2 - h * hp)
+					d.healthBar.Color = Color3.fromRGB(255*(1-hp), 255*hp, 0); d.healthBar.Visible = true
+				else d.healthBar.Visible = false; d.healthBg.Visible = false end
 				if head then
-					local yOff=(espName and 14 or 0)+(espDistance and 14 or 0)
-					local np=camera:WorldToViewportPoint((head.CFrame*CFrame.new(0,2,0)).Position)
-					d.healthText.Position=Vector2.new(np.X,np.Y+yOff)
-					d.healthText.Text=math.floor(hum.Health).."/"..math.floor(hum.MaxHealth).." HP"
-					d.healthText.Color=Color3.fromRGB(255*(1-hp),255*hp,0) d.healthText.Visible=true
+					local yOff = (espName and 14 or 0) + (espDistance and 14 or 0)
+					local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
+					d.healthText.Position = Vector2.new(np.X, np.Y + yOff)
+					d.healthText.Text = math.floor(hum.Health).."/"..math.floor(hum.MaxHealth).." HP"
+					d.healthText.Color = Color3.fromRGB(255*(1-hp), 255*hp, 0); d.healthText.Visible = true
 				end
-			else d.healthBar.Visible=false d.healthBg.Visible=false d.healthText.Visible=false end
+			else d.healthBar.Visible = false; d.healthBg.Visible = false; d.healthText.Visible = false end
 			if espHighlight then
 				if not d.highlight or not d.highlight.Parent then
-					d.highlight=Instance.new("Highlight") d.highlight.FillColor=color d.highlight.OutlineColor=Color3.new(1,1,1)
-					d.highlight.FillTransparency=0.7 d.highlight.OutlineTransparency=0.3 d.highlight.Parent=char
-				else d.highlight.FillColor=color end
-			elseif d.highlight then pcall(function() d.highlight:Destroy() end) d.highlight=nil end
+					d.highlight = Instance.new("Highlight"); d.highlight.FillColor = color; d.highlight.OutlineColor = Color3.new(1,1,1)
+					d.highlight.FillTransparency = 0.7; d.highlight.OutlineTransparency = 0.3; d.highlight.Parent = char
+				else d.highlight.FillColor = color end
+			elseif d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
 		else
-			d.box.Visible=false d.line.Visible=false d.name.Visible=false
-			d.distText.Visible=false d.healthText.Visible=false d.healthBar.Visible=false d.healthBg.Visible=false
-			d.smoothFrom=nil d.smoothTo=nil
+			d.box.Visible = false; d.line.Visible = false; d.name.Visible = false
+			d.distText.Visible = false; d.healthText.Visible = false; d.healthBar.Visible = false; d.healthBg.Visible = false
+			d.smoothFrom = nil; d.smoothTo = nil
 		end
 	end
 end
 
 local function clearAllESP()
 	for _, d in pairs(espObjects) do
-		pcall(function() d.box:Remove() end) pcall(function() d.line:Remove() end)
-		pcall(function() d.name:Remove() end) pcall(function() d.distText:Remove() end)
-		pcall(function() d.healthText:Remove() end) pcall(function() d.healthBar:Remove() end)
+		pcall(function() d.box:Remove() end); pcall(function() d.line:Remove() end)
+		pcall(function() d.name:Remove() end); pcall(function() d.distText:Remove() end)
+		pcall(function() d.healthText:Remove() end); pcall(function() d.healthBar:Remove() end)
 		pcall(function() d.healthBg:Remove() end)
 		if d.highlight then pcall(function() d.highlight:Destroy() end) end
-	end
-	espObjects = {}
+	end; espObjects = {}
 end
 
 -- ==========================================
--- WINDOW
+-- UI WINDOW
 -- ==========================================
 local Window = Rayfield:CreateWindow({
-	Name = "RyuExploit v3.7",
+	Name = "RyuExploit v3.8",
 	LoadingTitle = "RyuExploit Loading",
 	LoadingSubtitle = "By NubyCode",
 	ConfigurationSaving = {Enabled = true, FolderName = "RyuExploit", FileName = "Config"},
 	KeySystem = true,
-	KeySettings = {
-		Title = "RyuExploit - Key System",
-		Subtitle = "Enter key to access",
-		Note = "Contact NubyCode for key",
-		FileName = "RyuExploitKey",
-		SaveKey = true,
-		GrabKeyFromSite = false,
-		Key = {"NubyHack"}
-	}
+	KeySettings = {Title = "RyuExploit - Key System", Subtitle = "Enter key to access", Note = "Contact NubyCode for key", FileName = "RyuExploitKey", SaveKey = true, GrabKeyFromSite = false, Key = {"NubyHack"}}
 })
 
 -- ==========================================
 -- TAB: Silent Aim
 -- ==========================================
 local SilentAimTab = Window:CreateTab("Silent Aim", 4483362458)
-SilentAimTab:CreateSection("Silent Aim (Peluru Auto Kena)")
+SilentAimTab:CreateSection("Silent Aim")
 SilentAimTab:CreateToggle({Name = "Enable Silent Aim", CurrentValue = false, Flag = "SilentAim", Callback = function(V)
 	silentAimEnabled = V
-	if V then hookSilentAim() hookBulletRedirect()
-		Rayfield:Notify({Title="Silent Aim",Content="ON! Peluru auto kena!",Duration=3})
-	else silentAimCurrentTarget=nil end
+	if V then hookSilentAim(); hookBulletRedirect(); Rayfield:Notify({Title = "Silent Aim", Content = "ON!", Duration = 3})
+	else silentAimCurrentTarget = nil end
 end})
-
 SilentAimTab:CreateSection("Target")
-SilentAimTab:CreateDropdown({Name="Target Part",Options={"Head","Body","Random","Nearest to Cursor","Aim Assist Sync"},CurrentOption={"Head"},MultipleOptions=false,Flag="SAPart",Callback=function(O) silentAimPart=O[1] or O end})
-SilentAimTab:CreateToggle({Name="Auto Headshot",CurrentValue=true,Flag="AutoHS",Callback=function(V) silentAimAutoHeadshot=V end})
-SilentAimTab:CreateSlider({Name="Headshot Chance",Range={0,100},Increment=5,Suffix="%",CurrentValue=100,Flag="HSChance",Callback=function(V) silentAimHeadshotChance=V end})
-SilentAimTab:CreateSlider({Name="Hit Chance",Range={1,100},Increment=1,Suffix="%",CurrentValue=100,Flag="HitChance",Callback=function(V) silentAimHitChance=V end})
-
+SilentAimTab:CreateDropdown({Name = "Target Part", Options = {"Head","Body","Random","Nearest to Cursor","Aim Assist Sync"}, CurrentOption = {"Head"}, MultipleOptions = false, Flag = "SAPart", Callback = function(O) silentAimPart = O[1] or O end})
+SilentAimTab:CreateToggle({Name = "Auto Headshot", CurrentValue = true, Flag = "AutoHS", Callback = function(V) silentAimAutoHeadshot = V end})
+SilentAimTab:CreateSlider({Name = "Headshot Chance", Range = {0,100}, Increment = 5, Suffix = "%", CurrentValue = 100, Flag = "HSChance", Callback = function(V) silentAimHeadshotChance = V end})
+SilentAimTab:CreateSlider({Name = "Hit Chance", Range = {1,100}, Increment = 1, Suffix = "%", CurrentValue = 100, Flag = "HitChance", Callback = function(V) silentAimHitChance = V end})
 SilentAimTab:CreateSection("Range")
-SilentAimTab:CreateSlider({Name="FOV Radius",Range={50,800},Increment=10,Suffix=" px",CurrentValue=200,Flag="SAFOV",Callback=function(V) silentAimFOV=V if silentAimFOVCircle then silentAimFOVCircle.Radius=V end end})
-SilentAimTab:CreateSlider({Name="Max Distance",Range={50,2000},Increment=50,Suffix=" studs",CurrentValue=500,Flag="SADist",Callback=function(V) silentAimDistance=V end})
-
+SilentAimTab:CreateSlider({Name = "FOV Radius", Range = {50,800}, Increment = 10, Suffix = " px", CurrentValue = 200, Flag = "SAFOV", Callback = function(V) silentAimFOV = V; if silentAimFOVCircle then silentAimFOVCircle.Radius = V end end})
+SilentAimTab:CreateSlider({Name = "Max Distance", Range = {50,2000}, Increment = 50, Suffix = " studs", CurrentValue = 500, Flag = "SADist", Callback = function(V) silentAimDistance = V end})
 SilentAimTab:CreateSection("Prediction")
-SilentAimTab:CreateToggle({Name="Movement Prediction",CurrentValue=true,Flag="SAPred",Callback=function(V) silentAimPrediction=V end})
-SilentAimTab:CreateSlider({Name="Prediction Amount",Range={1,50},Increment=1,Suffix="%",CurrentValue=12,Flag="SAPredAmt",Callback=function(V) silentAimPredictionAmount=V/100 end})
-
+SilentAimTab:CreateToggle({Name = "Movement Prediction", CurrentValue = true, Flag = "SAPred", Callback = function(V) silentAimPrediction = V end})
+SilentAimTab:CreateSlider({Name = "Prediction Amount", Range = {1,50}, Increment = 1, Suffix = "%", CurrentValue = 12, Flag = "SAPredAmt", Callback = function(V) silentAimPredictionAmount = V/100 end})
 SilentAimTab:CreateSection("Safety")
-SilentAimTab:CreateToggle({Name="Wall Check",CurrentValue=false,Flag="SAWall",Callback=function(V) silentAimVisibleCheck=V end})
-SilentAimTab:CreateToggle({Name="Team Check",CurrentValue=false,Flag="SATeam",Callback=function(V) silentAimTeamCheck=V end})
-
+SilentAimTab:CreateToggle({Name = "Wall Check", CurrentValue = false, Flag = "SAWall", Callback = function(V) silentAimVisibleCheck = V end})
+SilentAimTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "SATeam", Callback = function(V) silentAimTeamCheck = V end})
 SilentAimTab:CreateSection("Visuals")
-SilentAimTab:CreateToggle({Name="Show FOV Circle",CurrentValue=false,Flag="SAShowFOV",Callback=function(V) silentAimShowFOV=V if silentAimFOVCircle then silentAimFOVCircle.Visible=V and silentAimEnabled end end})
-SilentAimTab:CreateToggle({Name="Show Target Line",CurrentValue=false,Flag="SALine",Callback=function(V) silentAimVisualLine=V if not V and silentAimVisualLineObj then silentAimVisualLineObj.Visible=false end end})
-
+SilentAimTab:CreateToggle({Name = "Show FOV Circle", CurrentValue = false, Flag = "SAShowFOV", Callback = function(V) silentAimShowFOV = V; if silentAimFOVCircle then silentAimFOVCircle.Visible = V and silentAimEnabled end end})
+SilentAimTab:CreateToggle({Name = "Show Target Line", CurrentValue = false, Flag = "SALine", Callback = function(V) silentAimVisualLine = V; if not V and silentAimVisualLineObj then silentAimVisualLineObj.Visible = false end end})
 SilentAimTab:CreateSection("Bullet Redirect")
-SilentAimTab:CreateToggle({Name="Remote Hook Redirect",CurrentValue=false,Flag="BulletRedir",Callback=function(V) bulletRedirectEnabled=V if V then hookBulletRedirect() end end})
-
-silentAimFOVCircle = Drawing.new("Circle")
-silentAimFOVCircle.Color=Color3.fromRGB(255,0,255) silentAimFOVCircle.Thickness=1.5
-silentAimFOVCircle.Filled=false silentAimFOVCircle.Radius=silentAimFOV
-silentAimFOVCircle.Visible=false silentAimFOVCircle.Transparency=0.6
-
-silentAimVisualLineObj = Drawing.new("Line")
-silentAimVisualLineObj.Color=Color3.fromRGB(255,0,255) silentAimVisualLineObj.Thickness=1
-silentAimVisualLineObj.Visible=false silentAimVisualLineObj.Transparency=0.5
+SilentAimTab:CreateToggle({Name = "Remote Hook Redirect", CurrentValue = false, Flag = "BulletRedir", Callback = function(V) bulletRedirectEnabled = V; if V then hookBulletRedirect() end end})
+silentAimFOVCircle = Drawing.new("Circle"); silentAimFOVCircle.Color = Color3.fromRGB(255, 0, 255); silentAimFOVCircle.Thickness = 1.5; silentAimFOVCircle.Filled = false; silentAimFOVCircle.Radius = silentAimFOV; silentAimFOVCircle.Visible = false; silentAimFOVCircle.Transparency = 0.6
+silentAimVisualLineObj = Drawing.new("Line"); silentAimVisualLineObj.Color = Color3.fromRGB(255, 0, 255); silentAimVisualLineObj.Thickness = 1; silentAimVisualLineObj.Visible = false; silentAimVisualLineObj.Transparency = 0.5
 
 -- ==========================================
 -- TAB: No Recoil
 -- ==========================================
 local NoRecoilTab = Window:CreateTab("No Recoil", 4483362458)
 NoRecoilTab:CreateSection("No Recoil")
-NoRecoilTab:CreateToggle({Name="Enable No Recoil",CurrentValue=false,Flag="NoRecoil",Callback=function(V)
-	noRecoilEnabled=V
-	if V then local c=player.Character if c then setupToolListener(c) end
-		Rayfield:Notify({Title="No Recoil",Content="ON!",Duration=3})
-	else restoreAllRecoilValues() end
-end})
-NoRecoilTab:CreateSlider({Name="Recoil Reduction",Range={10,100},Increment=5,Suffix="%",CurrentValue=100,Flag="RecoilStr",Callback=function(V) noRecoilStrength=V local t=getEquippedTool() if t and noRecoilEnabled then noRecoilOverriddenObjects={} scanEquippedTool(t) end end})
-
+NoRecoilTab:CreateToggle({Name = "Enable No Recoil", CurrentValue = false, Flag = "NoRecoil", Callback = function(V) noRecoilEnabled = V; if V then local c = player.Character; if c then setupToolListener(c) end; Rayfield:Notify({Title = "No Recoil", Content = "ON!", Duration = 3}) else restoreAllRecoilValues() end end})
+NoRecoilTab:CreateSlider({Name = "Recoil Reduction", Range = {10,100}, Increment = 5, Suffix = "%", CurrentValue = 100, Flag = "RecoilStr", Callback = function(V) noRecoilStrength = V; local t = getEquippedTool(); if t and noRecoilEnabled then noRecoilOverriddenObjects = {}; scanEquippedTool(t) end end})
 NoRecoilTab:CreateSection("No Spread")
-NoRecoilTab:CreateToggle({Name="Enable No Spread",CurrentValue=false,Flag="NoSpread",Callback=function(V)
-	noSpreadEnabled=V
-	if V then local c=player.Character if c then setupToolListener(c) end
-		Rayfield:Notify({Title="No Spread",Content="ON!",Duration=3})
-	else restoreAllRecoilValues() end
-end})
-NoRecoilTab:CreateSlider({Name="Spread Reduction",Range={10,100},Increment=5,Suffix="%",CurrentValue=100,Flag="SpreadStr",Callback=function(V) noSpreadStrength=V local t=getEquippedTool() if t and noSpreadEnabled then noRecoilOverriddenObjects={} scanEquippedTool(t) end end})
-
+NoRecoilTab:CreateToggle({Name = "Enable No Spread", CurrentValue = false, Flag = "NoSpread", Callback = function(V) noSpreadEnabled = V; if V then local c = player.Character; if c then setupToolListener(c) end; Rayfield:Notify({Title = "No Spread", Content = "ON!", Duration = 3}) else restoreAllRecoilValues() end end})
+NoRecoilTab:CreateSlider({Name = "Spread Reduction", Range = {10,100}, Increment = 5, Suffix = "%", CurrentValue = 100, Flag = "SpreadStr", Callback = function(V) noSpreadStrength = V; local t = getEquippedTool(); if t and noSpreadEnabled then noRecoilOverriddenObjects = {}; scanEquippedTool(t) end end})
 NoRecoilTab:CreateSection("Methods")
-NoRecoilTab:CreateToggle({Name="Camera Lock",CurrentValue=true,Flag="CamLock",Callback=function(V) noRecoilCameraLock=V end})
-NoRecoilTab:CreateToggle({Name="Value Override",CurrentValue=true,Flag="ValOver",Callback=function(V) noRecoilValueOverride=V if V then local t=getEquippedTool() if t then scanEquippedTool(t) end end end})
-NoRecoilTab:CreateToggle({Name="Remote Intercept",CurrentValue=false,Flag="RemInt",Callback=function(V) noRecoilRemoteIntercept=V if V then hookNoRecoilRemotes() end end})
-
+NoRecoilTab:CreateToggle({Name = "Camera Lock", CurrentValue = true, Flag = "CamLock", Callback = function(V) noRecoilCameraLock = V end})
+NoRecoilTab:CreateToggle({Name = "Value Override", CurrentValue = true, Flag = "ValOver", Callback = function(V) noRecoilValueOverride = V; if V then local t = getEquippedTool(); if t then scanEquippedTool(t) end end end})
+NoRecoilTab:CreateToggle({Name = "Remote Intercept", CurrentValue = false, Flag = "RemInt", Callback = function(V) noRecoilRemoteIntercept = V; if V then hookNoRecoilRemotes() end end})
 NoRecoilTab:CreateSection("Actions")
-NoRecoilTab:CreateButton({Name="Force Scan Weapon",Callback=function()
-	local t=getEquippedTool()
-	if t then noRecoilOverriddenObjects={} scanEquippedTool(t)
-		local c=0 for _ in pairs(noRecoilOverriddenObjects) do c=c+1 end
-		Rayfield:Notify({Title="Done",Content="Overrode "..c.." values on: "..t.Name,Duration=4})
-	else Rayfield:Notify({Title="Error",Content="Equip senjata dulu!",Duration=3}) end
-end})
-NoRecoilTab:CreateButton({Name="Deep Scan Modules",Callback=function()
-	local c=deepScanModules()
-	Rayfield:Notify({Title="Done",Content="Overrode "..c.." modules",Duration=4})
-end})
-NoRecoilTab:CreateButton({Name="Restore Values",Callback=function() restoreAllRecoilValues() Rayfield:Notify({Title="Restored",Content="Done",Duration=3}) end})
+NoRecoilTab:CreateButton({Name = "Force Scan Weapon", Callback = function() local t = getEquippedTool(); if t then noRecoilOverriddenObjects = {}; scanEquippedTool(t); local c = 0; for _ in pairs(noRecoilOverriddenObjects) do c = c + 1 end; Rayfield:Notify({Title = "Done", Content = "Overrode "..c.." values on: "..t.Name, Duration = 4}) else Rayfield:Notify({Title = "Error", Content = "Equip weapon first!", Duration = 3}) end end})
+NoRecoilTab:CreateButton({Name = "Deep Scan Modules", Callback = function() local c = deepScanModules(); Rayfield:Notify({Title = "Done", Content = "Overrode "..c.." modules", Duration = 4}) end})
+NoRecoilTab:CreateButton({Name = "Restore Values", Callback = function() restoreAllRecoilValues(); Rayfield:Notify({Title = "Restored", Content = "Done", Duration = 3}) end})
 
 -- ==========================================
 -- TAB: Triggerbot (NEW)
 -- ==========================================
 local TriggerbotTab = Window:CreateTab("Triggerbot", 4483362458)
 TriggerbotTab:CreateSection("Triggerbot (Auto Shoot)")
-TriggerbotTab:CreateToggle({Name="Enable Triggerbot",CurrentValue=false,Flag="Triggerbot",Callback=function(V)
-	triggerbotEnabled=V
-	if V then
-		createTriggerbotCrosshair()
-		Rayfield:Notify({Title="Triggerbot",Content="ON! Auto shoot saat crosshair di musuh!",Duration=3})
-	else
-		triggerbotIsTargeting=false
-		if triggerbotCrosshairObj then
-			for i=1,4 do if triggerbotCrosshairObj[i] then triggerbotCrosshairObj[i].Visible=false end end
-		end
-	end
+TriggerbotTab:CreateToggle({Name = "Enable Triggerbot", CurrentValue = false, Flag = "Triggerbot", Callback = function(V)
+	triggerbotEnabled = V
+	if V then createTriggerbotCrosshair(); Rayfield:Notify({Title = "Triggerbot", Content = "ON! Auto shoot when crosshair on enemy!", Duration = 3})
+	else triggerbotIsTargeting = false; if triggerbotCrosshairObj then for i = 1, 4 do if triggerbotCrosshairObj[i] then triggerbotCrosshairObj[i].Visible = false end end end end
 end})
-
 TriggerbotTab:CreateSection("Timing")
-TriggerbotTab:CreateSlider({Name="Reaction Delay",Range={0,500},Increment=10,Suffix=" ms",CurrentValue=50,Flag="TBDelay",Callback=function(V) triggerbotDelay=V/1000 end})
-TriggerbotTab:CreateSlider({Name="Cooldown",Range={10,500},Increment=10,Suffix=" ms",CurrentValue=80,Flag="TBCool",Callback=function(V) triggerbotCooldown=V/1000 end})
-
+TriggerbotTab:CreateSlider({Name = "Reaction Delay", Range = {0,500}, Increment = 10, Suffix = " ms", CurrentValue = 50, Flag = "TBDelay", Callback = function(V) triggerbotDelay = V/1000 end})
+TriggerbotTab:CreateSlider({Name = "Cooldown", Range = {10,500}, Increment = 10, Suffix = " ms", CurrentValue = 80, Flag = "TBCool", Callback = function(V) triggerbotCooldown = V/1000 end})
 TriggerbotTab:CreateSection("Target")
-TriggerbotTab:CreateDropdown({Name="Target Part",Options={"Any","Head","Body"},CurrentOption={"Any"},MultipleOptions=false,Flag="TBPart",Callback=function(O) triggerbotTargetPart=O[1] or O end})
-TriggerbotTab:CreateSlider({Name="Max Distance",Range={50,1000},Increment=25,Suffix=" studs",CurrentValue=300,Flag="TBDist",Callback=function(V) triggerbotMaxDistance=V end})
-TriggerbotTab:CreateSlider({Name="Detection Radius",Range={1,20},Increment=1,Suffix=" px",CurrentValue=3,Flag="TBRadius",Callback=function(V) triggerbotRayRadius=V end})
-
+TriggerbotTab:CreateDropdown({Name = "Target Part", Options = {"Any","Head","Body"}, CurrentOption = {"Any"}, MultipleOptions = false, Flag = "TBPart", Callback = function(O) triggerbotTargetPart = O[1] or O end})
+TriggerbotTab:CreateSlider({Name = "Max Distance", Range = {50,1000}, Increment = 25, Suffix = " studs", CurrentValue = 300, Flag = "TBDist", Callback = function(V) triggerbotMaxDistance = V end})
+TriggerbotTab:CreateSlider({Name = "Detection Radius", Range = {1,20}, Increment = 1, Suffix = " px", CurrentValue = 3, Flag = "TBRadius", Callback = function(V) triggerbotRayRadius = V end})
 TriggerbotTab:CreateSection("Burst Fire")
-TriggerbotTab:CreateToggle({Name="Burst Mode",CurrentValue=false,Flag="TBBurst",Callback=function(V) triggerbotBurstMode=V end})
-TriggerbotTab:CreateSlider({Name="Burst Count",Range={2,10},Increment=1,Suffix=" shots",CurrentValue=3,Flag="TBBurstC",Callback=function(V) triggerbotBurstCount=V end})
-TriggerbotTab:CreateSlider({Name="Burst Delay",Range={10,200},Increment=10,Suffix=" ms",CurrentValue=50,Flag="TBBurstD",Callback=function(V) triggerbotBurstDelay=V/1000 end})
-
+TriggerbotTab:CreateToggle({Name = "Burst Mode", CurrentValue = false, Flag = "TBBurst", Callback = function(V) triggerbotBurstMode = V end})
+TriggerbotTab:CreateSlider({Name = "Burst Count", Range = {2,10}, Increment = 1, Suffix = " shots", CurrentValue = 3, Flag = "TBBurstC", Callback = function(V) triggerbotBurstCount = V end})
+TriggerbotTab:CreateSlider({Name = "Burst Delay", Range = {10,200}, Increment = 10, Suffix = " ms", CurrentValue = 50, Flag = "TBBurstD", Callback = function(V) triggerbotBurstDelay = V/1000 end})
 TriggerbotTab:CreateSection("Hold Mode")
-TriggerbotTab:CreateToggle({Name="Hold Key Mode",CurrentValue=false,Flag="TBHold",Callback=function(V) triggerbotHoldMode=V end})
-TriggerbotTab:CreateDropdown({Name="Hold Key",Options={"CapsLock","LeftAlt","LeftControl","X","C","V"},CurrentOption={"CapsLock"},MultipleOptions=false,Flag="TBHoldKey",Callback=function(O)
-	local km={["CapsLock"]=Enum.KeyCode.CapsLock,["LeftAlt"]=Enum.KeyCode.LeftAlt,["LeftControl"]=Enum.KeyCode.LeftControl,["X"]=Enum.KeyCode.X,["C"]=Enum.KeyCode.C,["V"]=Enum.KeyCode.V}
-	triggerbotHoldKey=km[O[1] or O] or Enum.KeyCode.CapsLock
-end})
-
+TriggerbotTab:CreateToggle({Name = "Hold Key Mode", CurrentValue = false, Flag = "TBHold", Callback = function(V) triggerbotHoldMode = V end})
+TriggerbotTab:CreateDropdown({Name = "Hold Key", Options = {"CapsLock","LeftAlt","LeftControl","X","C","V"}, CurrentOption = {"CapsLock"}, MultipleOptions = false, Flag = "TBHoldKey", Callback = function(O) local km = {CapsLock = Enum.KeyCode.CapsLock, LeftAlt = Enum.KeyCode.LeftAlt, LeftControl = Enum.KeyCode.LeftControl, X = Enum.KeyCode.X, C = Enum.KeyCode.C, V = Enum.KeyCode.V}; triggerbotHoldKey = km[O[1] or O] or Enum.KeyCode.CapsLock end})
 TriggerbotTab:CreateSection("Safety")
-TriggerbotTab:CreateToggle({Name="Team Check",CurrentValue=false,Flag="TBTeam",Callback=function(V) triggerbotTeamCheck=V end})
-TriggerbotTab:CreateToggle({Name="Wall Check",CurrentValue=true,Flag="TBWall",Callback=function(V) triggerbotVisibleCheck=V end})
-
+TriggerbotTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "TBTeam", Callback = function(V) triggerbotTeamCheck = V end})
+TriggerbotTab:CreateToggle({Name = "Wall Check", CurrentValue = true, Flag = "TBWall", Callback = function(V) triggerbotVisibleCheck = V end})
 TriggerbotTab:CreateSection("Visuals")
-TriggerbotTab:CreateToggle({Name="Show Crosshair",CurrentValue=false,Flag="TBCross",Callback=function(V)
-	triggerbotShowCrosshair=V
-	createTriggerbotCrosshair()
-	if not V and triggerbotCrosshairObj then
-		for i=1,4 do if triggerbotCrosshairObj[i] then triggerbotCrosshairObj[i].Visible=false end end
-	end
-end})
-TriggerbotTab:CreateSlider({Name="Crosshair Size",Range={3,20},Increment=1,Suffix=" px",CurrentValue=8,Flag="TBCrossSize",Callback=function(V) triggerbotCrosshairSize=V end})
-TriggerbotTab:CreateColorPicker({Name="Crosshair Color",Color=Color3.fromRGB(0,255,0),Flag="TBCrossCol",Callback=function(V) triggerbotCrosshairColor=V end})
-TriggerbotTab:CreateColorPicker({Name="Active Color (On Target)",Color=Color3.fromRGB(255,0,0),Flag="TBActiveCol",Callback=function(V) triggerbotActiveColor=V end})
+TriggerbotTab:CreateToggle({Name = "Show Crosshair", CurrentValue = false, Flag = "TBCross", Callback = function(V) triggerbotShowCrosshair = V; createTriggerbotCrosshair(); if not V and triggerbotCrosshairObj then for i = 1, 4 do if triggerbotCrosshairObj[i] then triggerbotCrosshairObj[i].Visible = false end end end end})
+TriggerbotTab:CreateSlider({Name = "Crosshair Size", Range = {3,20}, Increment = 1, Suffix = " px", CurrentValue = 8, Flag = "TBCrossSize", Callback = function(V) triggerbotCrosshairSize = V end})
+TriggerbotTab:CreateColorPicker({Name = "Crosshair Color", Color = Color3.fromRGB(0, 255, 0), Flag = "TBCrossCol", Callback = function(V) triggerbotCrosshairColor = V end})
+TriggerbotTab:CreateColorPicker({Name = "Active Color (On Target)", Color = Color3.fromRGB(255, 0, 0), Flag = "TBActiveCol", Callback = function(V) triggerbotActiveColor = V end})
 
 -- ==========================================
 -- TAB: Aim Assist
 -- ==========================================
 local AimAssistTab = Window:CreateTab("Aim Assist", 4483362458)
 AimAssistTab:CreateSection("Aim Assist")
-AimAssistTab:CreateToggle({Name="Enable",CurrentValue=false,Flag="AimAssist",Callback=function(V) aimAssistEnabled=V if not V then aimAssistStickyTarget=nil aimAssistCurrentTarget=nil aimAssistFirstLock=false end end})
-AimAssistTab:CreateSlider({Name="Pull Strength",Range={5,95},Increment=5,Suffix="%",CurrentValue=50,Flag="AAStr",Callback=function(V) aimAssistStrength=V/100 end})
-AimAssistTab:CreateSlider({Name="Magnetism",Range={0,100},Increment=5,Suffix="%",CurrentValue=60,Flag="AAMag",Callback=function(V) aimAssistMagnetism=V/100 end})
-AimAssistTab:CreateSlider({Name="FOV Radius",Range={50,500},Increment=10,Suffix=" px",CurrentValue=150,Flag="AAFOV",Callback=function(V) aimAssistFOV=V if aimAssistFOVCircle then aimAssistFOVCircle.Radius=V end end})
-AimAssistTab:CreateSlider({Name="Max Distance",Range={50,1000},Increment=10,Suffix=" studs",CurrentValue=200,Flag="AADist",Callback=function(V) aimAssistDistance=V end})
-
+AimAssistTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "AimAssist", Callback = function(V) aimAssistEnabled = V; if not V then aimAssistStickyTarget = nil; aimAssistCurrentTarget = nil; aimAssistFirstLock = false end end})
+AimAssistTab:CreateSlider({Name = "Pull Strength", Range = {5,95}, Increment = 5, Suffix = "%", CurrentValue = 50, Flag = "AAStr", Callback = function(V) aimAssistStrength = V/100 end})
+AimAssistTab:CreateSlider({Name = "Magnetism", Range = {0,100}, Increment = 5, Suffix = "%", CurrentValue = 60, Flag = "AAMag", Callback = function(V) aimAssistMagnetism = V/100 end})
+AimAssistTab:CreateSlider({Name = "FOV Radius", Range = {50,500}, Increment = 10, Suffix = " px", CurrentValue = 150, Flag = "AAFOV", Callback = function(V) aimAssistFOV = V; if aimAssistFOVCircle then aimAssistFOVCircle.Radius = V end end})
+AimAssistTab:CreateSlider({Name = "Max Distance", Range = {50,1000}, Increment = 10, Suffix = " studs", CurrentValue = 200, Flag = "AADist", Callback = function(V) aimAssistDistance = V end})
 AimAssistTab:CreateSection("Sticky Aim")
-AimAssistTab:CreateToggle({Name="Sticky Aim",CurrentValue=true,Flag="Sticky",Callback=function(V) aimAssistStickyAim=V end})
-AimAssistTab:CreateSlider({Name="Slowdown Zone",Range={20,200},Increment=10,Suffix=" px",CurrentValue=80,Flag="SDZone",Callback=function(V) aimAssistSlowdownZone=V end})
-AimAssistTab:CreateSlider({Name="Inner Deadzone",Range={1,30},Increment=1,Suffix=" px",CurrentValue=5,Flag="IDead",Callback=function(V) aimAssistInnerDeadzone=V end})
-AimAssistTab:CreateSlider({Name="Tracking Smooth",Range={1,30},Increment=1,Suffix="%",CurrentValue=12,Flag="TSmooth",Callback=function(V) aimAssistTrackingSmooth=V/100 end})
-AimAssistTab:CreateSlider({Name="Snap Strength",Range={0,100},Increment=5,Suffix="%",CurrentValue=80,Flag="Snap",Callback=function(V) aimAssistSnapStrength=V/100 end})
-
+AimAssistTab:CreateToggle({Name = "Sticky Aim", CurrentValue = true, Flag = "Sticky", Callback = function(V) aimAssistStickyAim = V end})
+AimAssistTab:CreateSlider({Name = "Slowdown Zone", Range = {20,200}, Increment = 10, Suffix = " px", CurrentValue = 80, Flag = "SDZone", Callback = function(V) aimAssistSlowdownZone = V end})
+AimAssistTab:CreateSlider({Name = "Inner Deadzone", Range = {1,30}, Increment = 1, Suffix = " px", CurrentValue = 5, Flag = "IDead", Callback = function(V) aimAssistInnerDeadzone = V end})
+AimAssistTab:CreateSlider({Name = "Tracking Smooth", Range = {1,30}, Increment = 1, Suffix = "%", CurrentValue = 12, Flag = "TSmooth", Callback = function(V) aimAssistTrackingSmooth = V/100 end})
+AimAssistTab:CreateSlider({Name = "Snap Strength", Range = {0,100}, Increment = 5, Suffix = "%", CurrentValue = 80, Flag = "Snap", Callback = function(V) aimAssistSnapStrength = V/100 end})
 AimAssistTab:CreateSection("Headshot")
-AimAssistTab:CreateSlider({Name="Headshot Rate",Range={0,100},Increment=5,Suffix="%",CurrentValue=70,Flag="HSRate",Callback=function(V) aimAssistHeadshotRate=V end})
-AimAssistTab:CreateDropdown({Name="Target Mode",Options={"Dynamic","Head","Body"},CurrentOption={"Dynamic"},MultipleOptions=false,Flag="AAPart",Callback=function(O) aimAssistTargetPart=O[1] or O end})
-
+AimAssistTab:CreateSlider({Name = "Headshot Rate", Range = {0,100}, Increment = 5, Suffix = "%", CurrentValue = 70, Flag = "HSRate", Callback = function(V) aimAssistHeadshotRate = V end})
+AimAssistTab:CreateDropdown({Name = "Target Mode", Options = {"Dynamic","Head","Body"}, CurrentOption = {"Dynamic"}, MultipleOptions = false, Flag = "AAPart", Callback = function(O) aimAssistTargetPart = O[1] or O end})
 AimAssistTab:CreateSection("Extra")
-AimAssistTab:CreateToggle({Name="Only While Aiming",CurrentValue=true,Flag="AAOnlyAim",Callback=function(V) aimAssistOnlyWhileAiming=V end})
-AimAssistTab:CreateToggle({Name="Smooth Assist",CurrentValue=true,Flag="AASmooth",Callback=function(V) aimAssistSmoothing=V end})
-AimAssistTab:CreateToggle({Name="Prediction",CurrentValue=false,Flag="AAPred",Callback=function(V) aimAssistPrediction=V end})
-AimAssistTab:CreateSlider({Name="Prediction Amount",Range={1,50},Increment=1,Suffix="%",CurrentValue=10,Flag="AAPredAmt",Callback=function(V) aimAssistPredictionAmount=V/100 end})
-AimAssistTab:CreateToggle({Name="Team Check",CurrentValue=false,Flag="AATeam",Callback=function(V) aimAssistTeamCheck=V end})
-AimAssistTab:CreateToggle({Name="Show FOV",CurrentValue=false,Flag="AAShowFOV",Callback=function(V) showAimAssistFOV=V if aimAssistFOVCircle then aimAssistFOVCircle.Visible=V and aimAssistEnabled end end})
-
-aimAssistFOVCircle = Drawing.new("Circle")
-aimAssistFOVCircle.Color=Color3.fromRGB(255,200,0) aimAssistFOVCircle.Thickness=1
-aimAssistFOVCircle.Filled=false aimAssistFOVCircle.Radius=aimAssistFOV
-aimAssistFOVCircle.Visible=false aimAssistFOVCircle.Transparency=0.7
+AimAssistTab:CreateToggle({Name = "Only While Aiming", CurrentValue = true, Flag = "AAOnlyAim", Callback = function(V) aimAssistOnlyWhileAiming = V end})
+AimAssistTab:CreateToggle({Name = "Smooth Assist", CurrentValue = true, Flag = "AASmooth", Callback = function(V) aimAssistSmoothing = V end})
+AimAssistTab:CreateToggle({Name = "Prediction", CurrentValue = false, Flag = "AAPred", Callback = function(V) aimAssistPrediction = V end})
+AimAssistTab:CreateSlider({Name = "Prediction Amount", Range = {1,50}, Increment = 1, Suffix = "%", CurrentValue = 10, Flag = "AAPredAmt", Callback = function(V) aimAssistPredictionAmount = V/100 end})
+AimAssistTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "AATeam", Callback = function(V) aimAssistTeamCheck = V end})
+AimAssistTab:CreateToggle({Name = "Show FOV", CurrentValue = false, Flag = "AAShowFOV", Callback = function(V) showAimAssistFOV = V; if aimAssistFOVCircle then aimAssistFOVCircle.Visible = V and aimAssistEnabled end end})
+aimAssistFOVCircle = Drawing.new("Circle"); aimAssistFOVCircle.Color = Color3.fromRGB(255, 200, 0); aimAssistFOVCircle.Thickness = 1; aimAssistFOVCircle.Filled = false; aimAssistFOVCircle.Radius = aimAssistFOV; aimAssistFOVCircle.Visible = false; aimAssistFOVCircle.Transparency = 0.7
 
 -- ==========================================
 -- TAB: Aimlock
 -- ==========================================
 local AimlockTab = Window:CreateTab("Aimlock", 4483362458)
 AimlockTab:CreateSection("Aimlock")
-AimlockTab:CreateToggle({Name="Enable",CurrentValue=false,Flag="Aimlock",Callback=function(V) aimlockEnabled=V if not V then aimlockTarget=nil end end})
-AimlockTab:CreateToggle({Name="Auto Switch",CurrentValue=true,Flag="AutoSw",Callback=function(V) autoSwitchTarget=V end})
-AimlockTab:CreateToggle({Name="Team Check",CurrentValue=false,Flag="ALTeam",Callback=function(V) aimlockTeamCheck=V end})
-AimlockTab:CreateDropdown({Name="Target Part",Options={"Head","HumanoidRootPart","Torso","UpperTorso"},CurrentOption={"Head"},MultipleOptions=false,Flag="ALPart",Callback=function(O) aimlockPart=O[1] or O end})
-AimlockTab:CreateSlider({Name="Max Distance",Range={50,1000},Increment=10,Suffix=" Studs",CurrentValue=200,Flag="ALDist",Callback=function(V) aimlockDistance=V end})
-AimlockTab:CreateSlider({Name="Smoothness",Range={10,100},Increment=5,Suffix="%",CurrentValue=50,Flag="ALSmooth",Callback=function(V) aimlockSmooth=V/100 end})
-AimlockTab:CreateSlider({Name="FOV",Range={50,500},Increment=10,Suffix=" px",CurrentValue=100,Flag="ALFOV",Callback=function(V) aimlockFOV=V if fovCircle then fovCircle.Radius=V end end})
-AimlockTab:CreateToggle({Name="Show FOV",CurrentValue=false,Flag="ALShowFOV",Callback=function(V) showFOVCircle=V end})
-AimlockTab:CreateDropdown({Name="Activation Key",Options={"MouseButton2 (Right Click)","MouseButton1 (Left Click)","Q","E","F"},CurrentOption={"MouseButton2 (Right Click)"},MultipleOptions=false,Flag="ALKey",Callback=function(O)
-	local km={["MouseButton2 (Right Click)"]=Enum.UserInputType.MouseButton2,["MouseButton1 (Left Click)"]=Enum.UserInputType.MouseButton1,["Q"]=Enum.KeyCode.Q,["E"]=Enum.KeyCode.E,["F"]=Enum.KeyCode.F}
-	aimlockKey=km[O[1] or O] or Enum.UserInputType.MouseButton2
-end})
-
-fovCircle = Drawing.new("Circle")
-fovCircle.Color=Color3.fromRGB(255,255,255) fovCircle.Thickness=1 fovCircle.Filled=false
-fovCircle.Radius=aimlockFOV fovCircle.Visible=false fovCircle.Transparency=1
+AimlockTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "Aimlock", Callback = function(V) aimlockEnabled = V; if not V then aimlockTarget = nil end end})
+AimlockTab:CreateToggle({Name = "Auto Switch", CurrentValue = true, Flag = "AutoSw", Callback = function(V) autoSwitchTarget = V end})
+AimlockTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "ALTeam", Callback = function(V) aimlockTeamCheck = V end})
+AimlockTab:CreateDropdown({Name = "Target Part", Options = {"Head","HumanoidRootPart","Torso","UpperTorso"}, CurrentOption = {"Head"}, MultipleOptions = false, Flag = "ALPart", Callback = function(O) aimlockPart = O[1] or O end})
+AimlockTab:CreateSlider({Name = "Max Distance", Range = {50,1000}, Increment = 10, Suffix = " Studs", CurrentValue = 200, Flag = "ALDist", Callback = function(V) aimlockDistance = V end})
+AimlockTab:CreateSlider({Name = "Smoothness", Range = {10,100}, Increment = 5, Suffix = "%", CurrentValue = 50, Flag = "ALSmooth", Callback = function(V) aimlockSmooth = V/100 end})
+AimlockTab:CreateSlider({Name = "FOV", Range = {50,500}, Increment = 10, Suffix = " px", CurrentValue = 100, Flag = "ALFOV", Callback = function(V) aimlockFOV = V; if fovCircle then fovCircle.Radius = V end end})
+AimlockTab:CreateToggle({Name = "Show FOV", CurrentValue = false, Flag = "ALShowFOV", Callback = function(V) showFOVCircle = V end})
+AimlockTab:CreateDropdown({Name = "Activation Key", Options = {"MouseButton2 (Right Click)","MouseButton1 (Left Click)","Q","E","F"}, CurrentOption = {"MouseButton2 (Right Click)"}, MultipleOptions = false, Flag = "ALKey", Callback = function(O) local km = {["MouseButton2 (Right Click)"] = Enum.UserInputType.MouseButton2, ["MouseButton1 (Left Click)"] = Enum.UserInputType.MouseButton1, Q = Enum.KeyCode.Q, E = Enum.KeyCode.E, F = Enum.KeyCode.F}; aimlockKey = km[O[1] or O] or Enum.UserInputType.MouseButton2 end})
+fovCircle = Drawing.new("Circle"); fovCircle.Color = Color3.fromRGB(255, 255, 255); fovCircle.Thickness = 1; fovCircle.Filled = false; fovCircle.Radius = aimlockFOV; fovCircle.Visible = false; fovCircle.Transparency = 1
 
 -- ==========================================
 -- TAB: ESP
 -- ==========================================
 local ESPTab = Window:CreateTab("ESP", 4483362458)
 ESPTab:CreateSection("Player ESP")
-ESPTab:CreateToggle({Name="Enable ESP",CurrentValue=false,Flag="ESP",Callback=function(V) espEnabled=V if not V then clearAllESP() end end})
-ESPTab:CreateToggle({Name="Name",CurrentValue=false,Flag="EName",Callback=function(V) espName=V end})
-ESPTab:CreateToggle({Name="Distance",CurrentValue=false,Flag="EDist",Callback=function(V) espDistance=V end})
-ESPTab:CreateToggle({Name="Health",CurrentValue=false,Flag="EHealth",Callback=function(V) espHealth=V end})
-ESPTab:CreateToggle({Name="Box",CurrentValue=false,Flag="EBox",Callback=function(V) espBox=V end})
-ESPTab:CreateToggle({Name="Line",CurrentValue=false,Flag="ELine",Callback=function(V) espLine=V end})
-ESPTab:CreateToggle({Name="Highlight",CurrentValue=false,Flag="EHL",Callback=function(V) espHighlight=V if not V then for _,d in pairs(espObjects) do if d.highlight then pcall(function() d.highlight:Destroy() end) d.highlight=nil end end end end})
-ESPTab:CreateSlider({Name="Line Smoothness",Range={5,100},Increment=5,Suffix="%",CurrentValue=30,Flag="ESmooth",Callback=function(V) espLineSmoothing=V/100 end})
+ESPTab:CreateToggle({Name = "Enable ESP", CurrentValue = false, Flag = "ESP", Callback = function(V) espEnabled = V; if not V then clearAllESP() end end})
+ESPTab:CreateToggle({Name = "Name", CurrentValue = false, Flag = "EName", Callback = function(V) espName = V end})
+ESPTab:CreateToggle({Name = "Distance", CurrentValue = false, Flag = "EDist", Callback = function(V) espDistance = V end})
+ESPTab:CreateToggle({Name = "Health", CurrentValue = false, Flag = "EHealth", Callback = function(V) espHealth = V end})
+ESPTab:CreateToggle({Name = "Box", CurrentValue = false, Flag = "EBox", Callback = function(V) espBox = V end})
+ESPTab:CreateToggle({Name = "Line", CurrentValue = false, Flag = "ELine", Callback = function(V) espLine = V end})
+ESPTab:CreateToggle({Name = "Highlight", CurrentValue = false, Flag = "EHL", Callback = function(V) espHighlight = V; if not V then for _, d in pairs(espObjects) do if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end end end end})
+ESPTab:CreateSlider({Name = "Line Smoothness", Range = {5,100}, Increment = 5, Suffix = "%", CurrentValue = 30, Flag = "ESmooth", Callback = function(V) espLineSmoothing = V/100 end})
 ESPTab:CreateSection("Team")
-ESPTab:CreateToggle({Name="Team Check",CurrentValue=false,Flag="ETeam",Callback=function(V) espTeamCheck=V end})
-ESPTab:CreateColorPicker({Name="Enemy Color",Color=Color3.fromRGB(255,0,0),Flag="EEnemy",Callback=function(V) espEnemyColor=V espColor=V end})
-ESPTab:CreateColorPicker({Name="Team Color",Color=Color3.fromRGB(0,255,0),Flag="ETeamC",Callback=function(V) espTeamColor=V end})
+ESPTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "ETeam", Callback = function(V) espTeamCheck = V end})
+ESPTab:CreateColorPicker({Name = "Enemy Color", Color = Color3.fromRGB(255, 0, 0), Flag = "EEnemy", Callback = function(V) espEnemyColor = V; espColor = V end})
+ESPTab:CreateColorPicker({Name = "Team Color", Color = Color3.fromRGB(0, 255, 0), Flag = "ETeamC", Callback = function(V) espTeamColor = V end})
 
 -- ==========================================
 -- TAB: Hitbox
 -- ==========================================
 local HitboxTab = Window:CreateTab("Hitbox", 4483362458)
 HitboxTab:CreateSection("Hitbox Expander")
-HitboxTab:CreateToggle({Name="Enable",CurrentValue=false,Flag="HB",Callback=function(V) hitboxEnabled=V if not V then disableHitboxExpander() end end})
-HitboxTab:CreateSlider({Name="Size",Range={3,50},Increment=1,Suffix=" Studs",CurrentValue=10,Flag="HBSize",Callback=function(V) hitboxSize=V end})
-HitboxTab:CreateSlider({Name="Transparency",Range={0,100},Increment=5,Suffix="%",CurrentValue=70,Flag="HBTr",Callback=function(V) hitboxTransparency=V/100 end})
-HitboxTab:CreateToggle({Name="Show ESP",CurrentValue=false,Flag="HBESP",Callback=function(V) hitboxESPEnabled=V if not V then for _,d in pairs(hitboxData) do if d.espVisual then pcall(function() d.espVisual:Destroy() end) d.espVisual=nil end end end end})
-HitboxTab:CreateColorPicker({Name="Color",Color=Color3.fromRGB(255,255,0),Flag="HBCol",Callback=function(V) hitboxESPColor=V end})
-
+HitboxTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "HB", Callback = function(V) hitboxEnabled = V; if not V then disableHitboxExpander() end end})
+HitboxTab:CreateSlider({Name = "Size", Range = {1,500}, Increment = 1, Suffix = " Studs", CurrentValue = 10, Flag = "HBSize", Callback = function(V) hitboxSize = V end})
+HitboxTab:CreateSlider({Name = "Transparency", Range = {0,100}, Increment = 5, Suffix = "%", CurrentValue = 70, Flag = "HBTr", Callback = function(V) hitboxTransparency = V/100 end})
+HitboxTab:CreateToggle({Name = "Show ESP", CurrentValue = false, Flag = "HBESP", Callback = function(V) hitboxESPEnabled = V; if not V then for _, d in pairs(hitboxData) do if d.espVisual then pcall(function() d.espVisual:Destroy() end); d.espVisual = nil end end end end})
+HitboxTab:CreateColorPicker({Name = "Color", Color = Color3.fromRGB(255, 255, 0), Flag = "HBCol", Callback = function(V) hitboxESPColor = V end})
 HitboxTab:CreateSection("Anti Hitbox (Self)")
-HitboxTab:CreateToggle({Name="Enable",CurrentValue=false,Flag="AntiHB",Callback=function(V)
-	antiHitboxEnabled=V
-	if not V then
-		for _,pd in pairs(antiHitboxParts) do pcall(function() pd.fakePart:Destroy() end) end
-		antiHitboxParts={}
-		local mc=player.Character if mc then for _,p in ipairs(mc:GetChildren()) do if p:IsA("BasePart") then p.CanQuery=true end end end
-	end
-end})
-HitboxTab:CreateSlider({Name="Size",Range={1,30},Increment=1,Suffix=" (x0.1)",CurrentValue=10,Flag="AHBSize",Callback=function(V) antiHitboxSize=V/10 end})
+HitboxTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "AntiHB", Callback = function(V) antiHitboxEnabled = V; if not V then for _, pd in pairs(antiHitboxParts) do pcall(function() pd.fakePart:Destroy() end) end; antiHitboxParts = {}; local mc = player.Character; if mc then for _, p in ipairs(mc:GetChildren()) do if p:IsA("BasePart") then p.CanQuery = true end end end end end})
+HitboxTab:CreateSlider({Name = "Size", Range = {1,30}, Increment = 1, Suffix = " (x0.1)", CurrentValue = 10, Flag = "AHBSize", Callback = function(V) antiHitboxSize = V/10 end})
 
 -- ==========================================
 -- TAB: Brightness (NEW)
 -- ==========================================
 local BrightnessTab = Window:CreateTab("Brightness", 4483362458)
 BrightnessTab:CreateSection("Fullbright")
-BrightnessTab:CreateToggle({Name="Enable Fullbright",CurrentValue=false,Flag="Fullbright",Callback=function(V)
-	fullbrightEnabled=V
-	if V then
-		applyFullbright()
-		Rayfield:Notify({Title="Fullbright",Content="ON! Map jadi terang!",Duration=3})
-	else
-		restoreLighting()
-		Rayfield:Notify({Title="Fullbright",Content="OFF! Lighting restored.",Duration=3})
-	end
-end})
-
-BrightnessTab:CreateSlider({Name="Brightness Level",Range={0,10},Increment=1,Suffix="",CurrentValue=2,Flag="BrightLvl",Callback=function(V)
-	brightnessValue=V
-	if fullbrightEnabled then Lighting.Brightness=V end
-end})
-
-BrightnessTab:CreateColorPicker({Name="Ambient Color",Color=Color3.fromRGB(200,200,200),Flag="AmbientCol",Callback=function(V)
-	ambientColor=V
-	if fullbrightEnabled then Lighting.Ambient=V Lighting.OutdoorAmbient=V end
-end})
-
+BrightnessTab:CreateToggle({Name = "Enable Fullbright", CurrentValue = false, Flag = "Fullbright", Callback = function(V) fullbrightEnabled = V; if V then applyFullbright(); Rayfield:Notify({Title = "Fullbright", Content = "ON! Map is bright!", Duration = 3}) else restoreLighting(); Rayfield:Notify({Title = "Fullbright", Content = "OFF! Lighting restored.", Duration = 3}) end end})
+BrightnessTab:CreateSlider({Name = "Brightness Level", Range = {0,10}, Increment = 1, Suffix = "", CurrentValue = 2, Flag = "BrightLvl", Callback = function(V) brightnessValue = V; if fullbrightEnabled then Lighting.Brightness = V end end})
+BrightnessTab:CreateColorPicker({Name = "Ambient Color", Color = Color3.fromRGB(200, 200, 200), Flag = "AmbientCol", Callback = function(V) ambientColor = V; if fullbrightEnabled then Lighting.Ambient = V; Lighting.OutdoorAmbient = V end end})
 BrightnessTab:CreateSection("Time Control")
-BrightnessTab:CreateToggle({Name="Force Time of Day",CurrentValue=false,Flag="ForceTime",Callback=function(V)
-	useCustomTime=V
-	if V and fullbrightEnabled then Lighting.ClockTime=customClockTime
-	elseif not V and lightingSaved then Lighting.ClockTime=originalLighting.ClockTime end
-end})
-BrightnessTab:CreateSlider({Name="Clock Time",Range={0,24},Increment=1,Suffix=" h",CurrentValue=14,Flag="ClockTime",Callback=function(V)
-	customClockTime=V
-	if useCustomTime and fullbrightEnabled then Lighting.ClockTime=V end
-end})
-
+BrightnessTab:CreateToggle({Name = "Force Time of Day", CurrentValue = false, Flag = "ForceTime", Callback = function(V) useCustomTime = V; if V and fullbrightEnabled then Lighting.ClockTime = customClockTime elseif not V and lightingSaved then Lighting.ClockTime = originalLighting.ClockTime end end})
+BrightnessTab:CreateSlider({Name = "Clock Time", Range = {0,24}, Increment = 1, Suffix = " h", CurrentValue = 14, Flag = "ClockTime", Callback = function(V) customClockTime = V; if useCustomTime and fullbrightEnabled then Lighting.ClockTime = V end end})
 BrightnessTab:CreateSection("Fog & Effects")
-BrightnessTab:CreateToggle({Name="Remove Fog",CurrentValue=false,Flag="NoFog",Callback=function(V)
-	noFogEnabled=V
-	if V and fullbrightEnabled then
-		Lighting.FogStart=0 Lighting.FogEnd=9e9
-		local atmo=Lighting:FindFirstChildOfClass("Atmosphere")
-		if atmo then atmo.Density=0 atmo.Offset=0 atmo.Glare=0 atmo.Haze=0 end
-		Rayfield:Notify({Title="No Fog",Content="Fog removed!",Duration=3})
-	elseif not V and lightingSaved then
-		Lighting.FogStart=originalLighting.FogStart Lighting.FogEnd=originalLighting.FogEnd
-		local atmo=Lighting:FindFirstChildOfClass("Atmosphere")
-		if atmo and originalAtmosphere.Density then
-			atmo.Density=originalAtmosphere.Density atmo.Offset=originalAtmosphere.Offset
-			atmo.Glare=originalAtmosphere.Glare atmo.Haze=originalAtmosphere.Haze
-		end
-	end
-end})
-
-BrightnessTab:CreateToggle({Name="Remove Shadows",CurrentValue=false,Flag="NoShadow",Callback=function(V)
-	noShadowsEnabled=V
-	if V and fullbrightEnabled then Lighting.GlobalShadows=false
-	elseif not V and lightingSaved then Lighting.GlobalShadows=originalLighting.GlobalShadows end
-end})
-
-BrightnessTab:CreateToggle({Name="Remove Post Effects",CurrentValue=false,Flag="NoPost",Callback=function(V)
-	removePostEffects=V
-	if V and fullbrightEnabled then
-		for _, effect in ipairs(Lighting:GetChildren()) do
-			if effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("SunRaysEffect") then
-				effect.Enabled=false
-			end
-		end
-		local cc=Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
-		if cc then cc.Brightness=0.1 cc.Contrast=0.1 cc.Saturation=0 cc.TintColor=Color3.fromRGB(255,255,255) end
-		Rayfield:Notify({Title="Post Effects",Content="Removed!",Duration=3})
-	elseif not V then
-		for _, effect in ipairs(Lighting:GetChildren()) do
-			if effect:IsA("BloomEffect") or effect:IsA("BlurEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("SunRaysEffect") then
-				effect.Enabled=true
-			end
-		end
-		local cc=Lighting:FindFirstChildOfClass("ColorCorrectionEffect")
-		if cc and originalColorCorrection.Brightness then
-			cc.Brightness=originalColorCorrection.Brightness cc.Contrast=originalColorCorrection.Contrast
-			cc.Saturation=originalColorCorrection.Saturation cc.TintColor=originalColorCorrection.TintColor
-		end
-	end
-end})
-
+BrightnessTab:CreateToggle({Name = "Remove Fog", CurrentValue = false, Flag = "NoFog", Callback = function(V) noFogEnabled = V; if V and fullbrightEnabled then Lighting.FogStart = 0; Lighting.FogEnd = 9e9; local atmo = Lighting:FindFirstChildOfClass("Atmosphere"); if atmo then atmo.Density = 0; atmo.Offset = 0; atmo.Glare = 0; atmo.Haze = 0 end elseif not V and lightingSaved then Lighting.FogStart = originalLighting.FogStart; Lighting.FogEnd = originalLighting.FogEnd; local atmo = Lighting:FindFirstChildOfClass("Atmosphere"); if atmo and originalAtmosphere.Density then atmo.Density = originalAtmosphere.Density; atmo.Offset = originalAtmosphere.Offset; atmo.Glare = originalAtmosphere.Glare; atmo.Haze = originalAtmosphere.Haze end end end})
+BrightnessTab:CreateToggle({Name = "Remove Shadows", CurrentValue = false, Flag = "NoShadow", Callback = function(V) noShadowsEnabled = V; if V and fullbrightEnabled then Lighting.GlobalShadows = false elseif not V and lightingSaved then Lighting.GlobalShadows = originalLighting.GlobalShadows end end})
+BrightnessTab:CreateToggle({Name = "Remove Post Effects", CurrentValue = false, Flag = "NoPost", Callback = function(V) removePostEffects = V; if V and fullbrightEnabled then for _, e in ipairs(Lighting:GetChildren()) do if e:IsA("BloomEffect") or e:IsA("BlurEffect") or e:IsA("DepthOfFieldEffect") or e:IsA("SunRaysEffect") then e.Enabled = false end end; local cc = Lighting:FindFirstChildOfClass("ColorCorrectionEffect"); if cc then cc.Brightness = 0.1; cc.Contrast = 0.1; cc.Saturation = 0; cc.TintColor = Color3.new(1,1,1) end elseif not V then for _, e in ipairs(Lighting:GetChildren()) do if e:IsA("BloomEffect") or e:IsA("BlurEffect") or e:IsA("DepthOfFieldEffect") or e:IsA("SunRaysEffect") then e.Enabled = true end end; local cc = Lighting:FindFirstChildOfClass("ColorCorrectionEffect"); if cc and originalColorCorrection.Brightness then cc.Brightness = originalColorCorrection.Brightness; cc.Contrast = originalColorCorrection.Contrast; cc.Saturation = originalColorCorrection.Saturation; cc.TintColor = originalColorCorrection.TintColor end end end})
 BrightnessTab:CreateSection("Actions")
-BrightnessTab:CreateButton({Name="Restore All Lighting",Callback=function()
-	restoreLighting()
-	fullbrightEnabled=false noFogEnabled=false noShadowsEnabled=false removePostEffects=false useCustomTime=false
-	Rayfield:Notify({Title="Lighting",Content="All restored to original!",Duration=3})
-end})
+BrightnessTab:CreateButton({Name = "Restore All Lighting", Callback = function() restoreLighting(); fullbrightEnabled = false; noFogEnabled = false; noShadowsEnabled = false; removePostEffects = false; useCustomTime = false; Rayfield:Notify({Title = "Lighting", Content = "All restored to original!", Duration = 3}) end})
 
 -- ==========================================
 -- TAB: Movement
 -- ==========================================
 local MovementTab = Window:CreateTab("Movement", 4483362458)
 MovementTab:CreateSection("Speed")
-MovementTab:CreateDropdown({Name="Method",Options={"Default","CFrame Bypass","Velocity Bypass","BodyVelocity Bypass"},CurrentOption={"Default"},MultipleOptions=false,Flag="SpeedM",Callback=function(O) speedMethod=O[1] or O end})
-MovementTab:CreateSlider({Name="Walk Speed",Range={1,500},Increment=1,CurrentValue=16,Flag="WSpeed",Callback=function(V) speed=V end})
+MovementTab:CreateDropdown({Name = "Method", Options = {"Default","CFrame Bypass","Velocity Bypass","BodyVelocity Bypass"}, CurrentOption = {"Default"}, MultipleOptions = false, Flag = "SpeedM", Callback = function(O) speedMethod = O[1] or O end})
+MovementTab:CreateSlider({Name = "Walk Speed", Range = {1,500}, Increment = 1, CurrentValue = 16, Flag = "WSpeed", Callback = function(V) speed = V end})
 MovementTab:CreateSection("Jump")
-MovementTab:CreateDropdown({Name="Method",Options={"Default","CFrame Bypass","Velocity Bypass","BodyVelocity Bypass"},CurrentOption={"Default"},MultipleOptions=false,Flag="JumpM",Callback=function(O) jumpMethod=O[1] or O end})
-MovementTab:CreateSlider({Name="Jump Power",Range={1,500},Increment=1,CurrentValue=50,Flag="JPower",Callback=function(V) jumpPower=V end})
-MovementTab:CreateToggle({Name="Infinite Jump",CurrentValue=false,Flag="InfJump",Callback=function(V) _G.InfiniteJump=V end})
+MovementTab:CreateDropdown({Name = "Method", Options = {"Default","CFrame Bypass","Velocity Bypass","BodyVelocity Bypass"}, CurrentOption = {"Default"}, MultipleOptions = false, Flag = "JumpM", Callback = function(O) jumpMethod = O[1] or O end})
+MovementTab:CreateSlider({Name = "Jump Power", Range = {1,500}, Increment = 1, CurrentValue = 50, Flag = "JPower", Callback = function(V) jumpPower = V end})
+MovementTab:CreateToggle({Name = "Infinite Jump", CurrentValue = false, Flag = "InfJump", Callback = function(V) _G.InfiniteJump = V end})
 MovementTab:CreateSection("Noclip")
-MovementTab:CreateToggle({Name="Noclip",CurrentValue=false,Flag="Noclip",Callback=function(V) noclip=V end})
-MovementTab:CreateDropdown({Name="Method",Options={"Default","CFrame Bypass","Velocity Bypass","Phase Bypass"},CurrentOption={"Default"},MultipleOptions=false,Flag="NoclipM",Callback=function(O) noclipMethod=O[1] or O end})
+MovementTab:CreateToggle({Name = "Noclip", CurrentValue = false, Flag = "Noclip", Callback = function(V) noclip = V end})
+MovementTab:CreateDropdown({Name = "Method", Options = {"Default","CFrame Bypass","Velocity Bypass","Phase Bypass"}, CurrentOption = {"Default"}, MultipleOptions = false, Flag = "NoclipM", Callback = function(O) noclipMethod = O[1] or O end})
 MovementTab:CreateSection("No Fall Damage")
-MovementTab:CreateToggle({Name="No Fall Damage",CurrentValue=false,Flag="NoFall",Callback=function(V) noFallDamage=V end})
-MovementTab:CreateDropdown({Name="Method",Options={"Default","Velocity Brake","Health Restore","Hybrid"},CurrentOption={"Default"},MultipleOptions=false,Flag="NoFallM",Callback=function(O) noFallMethod=O[1] or O end})
+MovementTab:CreateToggle({Name = "No Fall Damage", CurrentValue = false, Flag = "NoFall", Callback = function(V) noFallDamage = V end})
+MovementTab:CreateDropdown({Name = "Method", Options = {"Default","Velocity Brake","Health Restore","Hybrid"}, CurrentOption = {"Default"}, MultipleOptions = false, Flag = "NoFallM", Callback = function(O) noFallMethod = O[1] or O end})
 
 -- ==========================================
 -- TAB: Anti Kick
 -- ==========================================
 local AntiKickTab = Window:CreateTab("Anti Kick", 4483362458)
 AntiKickTab:CreateSection("Anti Kick")
-AntiKickTab:CreateToggle({Name="Enable",CurrentValue=false,Flag="AntiKick",Callback=function(V) antiKickEnabled=V if V then enableAntiKick() Rayfield:Notify({Title="Anti Kick",Content="Enabled!",Duration=3}) end end})
-AntiKickTab:CreateButton({Name="Delete AC Scripts",Callback=function()
-	local c=0
-	for _,s in ipairs(player.PlayerScripts:GetDescendants()) do
-		if s:IsA("LocalScript") then local n=s.Name:lower()
-			for _,p in ipairs({"anticheat","anti_cheat","ac","detect","security","check","verify"}) do
-				if n:find(p) then pcall(function() s.Disabled=true s:Destroy() end) c=c+1 break end
-			end
-		end
-	end
-	Rayfield:Notify({Title="AC",Content="Disabled "..c.." scripts",Duration=3})
-end})
-AntiKickTab:CreateButton({Name="Anti AFK",Callback=function()
-	pcall(function()
-		local VU=game:GetService("VirtualUser")
-		spawn(function() while antiKickEnabled do pcall(function() VU:CaptureController() VU:ClickButton2(Vector2.new()) end) task.wait(60) end end)
-	end)
-	Rayfield:Notify({Title="Anti AFK",Content="Enabled",Duration=3})
-end})
+AntiKickTab:CreateToggle({Name = "Enable", CurrentValue = false, Flag = "AntiKick", Callback = function(V) antiKickEnabled = V; if V then enableAntiKick(); Rayfield:Notify({Title = "Anti Kick", Content = "Enabled!", Duration = 3}) end end})
+AntiKickTab:CreateButton({Name = "Delete AC Scripts", Callback = function() local c = 0; for _, s in ipairs(player.PlayerScripts:GetDescendants()) do if s:IsA("LocalScript") then local n = s.Name:lower(); for _, p in ipairs({"anticheat","anti_cheat","ac","detect","security","check","verify"}) do if n:find(p) then pcall(function() s.Disabled = true; s:Destroy() end); c = c + 1; break end end end end; Rayfield:Notify({Title = "AC", Content = "Disabled "..c.." scripts", Duration = 3}) end})
+AntiKickTab:CreateButton({Name = "Anti AFK", Callback = function() pcall(function() local VU = game:GetService("VirtualUser"); spawn(function() while antiKickEnabled do pcall(function() VU:CaptureController(); VU:ClickButton2(Vector2.new()) end); task.wait(60) end end) end); Rayfield:Notify({Title = "Anti AFK", Content = "Enabled", Duration = 3}) end})
 
 -- ==========================================
--- CORE MOVEMENT
+-- MOVEMENT FUNCTIONS
 -- ==========================================
 local function getMoveDirection()
 	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
@@ -1872,136 +1748,141 @@ end
 local function getGroundInfo()
 	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	if not hrp then return math.huge end
-	local p = RaycastParams.new() p.FilterDescendantsInstances={player.Character} p.FilterType=Enum.RaycastFilterType.Exclude
-	local r = workspace:Raycast(hrp.Position, Vector3.new(0,-500,0), p) return r and (hrp.Position-r.Position).Magnitude or math.huge
+	local p = RaycastParams.new(); p.FilterDescendantsInstances = {player.Character}; p.FilterType = Enum.RaycastFilterType.Exclude
+	local r = workspace:Raycast(hrp.Position, Vector3.new(0, -500, 0), p)
+	return r and (hrp.Position - r.Position).Magnitude or math.huge
 end
 
 local function applySpeed(dt)
-	local char=player.Character if not char then return end
-	local hrp=char:FindFirstChild("HumanoidRootPart") local hum=char:FindFirstChildOfClass("Humanoid")
+	local char = player.Character; if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart"); local hum = char:FindFirstChildOfClass("Humanoid")
 	if not hrp or not hum then return end
-	if speedMethod=="Default" then hum.WalkSpeed=speed
-	elseif speedMethod=="CFrame Bypass" then hum.WalkSpeed=16 local d=getMoveDirection() if d.Magnitude>0 and speed>16 then hrp.CFrame=hrp.CFrame+(d*(speed-16)*dt) end
-	elseif speedMethod=="Velocity Bypass" then hum.WalkSpeed=16 local d=getMoveDirection() if d.Magnitude>0 then hrp.AssemblyLinearVelocity=Vector3.new(d.X*speed,hrp.AssemblyLinearVelocity.Y,d.Z*speed) end
-	elseif speedMethod=="BodyVelocity Bypass" then
-		hum.WalkSpeed=16 local bv=hrp:FindFirstChild("SpeedBV")
-		if not bv then bv=Instance.new("BodyVelocity") bv.Name="SpeedBV" bv.MaxForce=Vector3.new(100000,0,100000) bv.P=10000 bv.Parent=hrp end
-		local d=getMoveDirection() bv.Velocity=d.Magnitude>0 and d*speed or Vector3.zero bv.MaxForce=d.Magnitude>0 and Vector3.new(100000,0,100000) or Vector3.zero
+	if speedMethod == "Default" then hum.WalkSpeed = speed
+	elseif speedMethod == "CFrame Bypass" then hum.WalkSpeed = 16; local d = getMoveDirection(); if d.Magnitude > 0 and speed > 16 then hrp.CFrame = hrp.CFrame + (d * (speed - 16) * dt) end
+	elseif speedMethod == "Velocity Bypass" then hum.WalkSpeed = 16; local d = getMoveDirection(); if d.Magnitude > 0 then hrp.AssemblyLinearVelocity = Vector3.new(d.X * speed, hrp.AssemblyLinearVelocity.Y, d.Z * speed) end
+	elseif speedMethod == "BodyVelocity Bypass" then
+		hum.WalkSpeed = 16; local bv = hrp:FindFirstChild("SpeedBV")
+		if not bv then bv = Instance.new("BodyVelocity"); bv.Name = "SpeedBV"; bv.MaxForce = Vector3.new(100000,0,100000); bv.P = 10000; bv.Parent = hrp end
+		local d = getMoveDirection()
+		if d.Magnitude > 0 then bv.Velocity = d * speed; bv.MaxForce = Vector3.new(100000,0,100000) else bv.Velocity = Vector3.zero; bv.MaxForce = Vector3.zero end
 	end
 end
 
 local function applyJump()
-	local char=player.Character if not char then return end
-	local hrp=char:FindFirstChild("HumanoidRootPart") local hum=char:FindFirstChildOfClass("Humanoid")
+	local char = player.Character; if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart"); local hum = char:FindFirstChildOfClass("Humanoid")
 	if not hrp or not hum then return end
-	if jumpMethod=="Default" then hum.UseJumpPower=true hum.JumpPower=jumpPower
-	else hum.JumpPower=0 if isJumping and canJump then canJump=false
-		if jumpMethod=="CFrame Bypass" then hrp.CFrame=hrp.CFrame+Vector3.new(0,jumpPower/50,0)
-		elseif jumpMethod=="Velocity Bypass" then hrp.AssemblyLinearVelocity=Vector3.new(hrp.AssemblyLinearVelocity.X,jumpPower,hrp.AssemblyLinearVelocity.Z)
-		elseif jumpMethod=="BodyVelocity Bypass" then
-			local bv=Instance.new("BodyVelocity") bv.MaxForce=Vector3.new(0,100000,0) bv.Velocity=Vector3.new(0,jumpPower,0) bv.Parent=hrp
-			task.delay(0.15,function() if bv.Parent then bv:Destroy() end end) end
-		task.delay(0.3,function() canJump=true end) end end
+	if jumpMethod == "Default" then hum.UseJumpPower = true; hum.JumpPower = jumpPower
+	else hum.JumpPower = 0; if isJumping and canJump then canJump = false
+		if jumpMethod == "CFrame Bypass" then hrp.CFrame = hrp.CFrame + Vector3.new(0, jumpPower/50, 0)
+		elseif jumpMethod == "Velocity Bypass" then hrp.AssemblyLinearVelocity = Vector3.new(hrp.AssemblyLinearVelocity.X, jumpPower, hrp.AssemblyLinearVelocity.Z)
+		elseif jumpMethod == "BodyVelocity Bypass" then local bv = Instance.new("BodyVelocity"); bv.MaxForce = Vector3.new(0,100000,0); bv.Velocity = Vector3.new(0, jumpPower, 0); bv.Parent = hrp; task.delay(0.15, function() if bv.Parent then bv:Destroy() end end) end
+		task.delay(0.3, function() canJump = true end) end end
 end
 
 local function applyNoFall()
-	local char=player.Character if not char then return end
-	local hrp=char:FindFirstChild("HumanoidRootPart") local hum=char:FindFirstChildOfClass("Humanoid")
+	local char = player.Character; if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart"); local hum = char:FindFirstChildOfClass("Humanoid")
 	if not hrp or not hum then return end
-	hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown,false) hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll,false)
-	local vel=hrp.AssemblyLinearVelocity
-	if noFallMethod=="Default" then if vel.Y<-50 then hrp.AssemblyLinearVelocity=Vector3.new(vel.X,-10,vel.Z) end
-	elseif noFallMethod=="Velocity Brake" then if vel.Y<-50 and getGroundInfo()<20 then hrp.AssemblyLinearVelocity=Vector3.new(vel.X,-10,vel.Z) end
-	elseif noFallMethod=="Health Restore" then
-		if vel.Y<-20 then wasInAir=true lastHealth=hum.Health end
-		if wasInAir and hum.FloorMaterial~=Enum.Material.Air then if hum.Health<lastHealth then hum.Health=lastHealth end wasInAir=false end
-	elseif noFallMethod=="Hybrid" then
-		if vel.Y<-20 and not isFalling then isFalling=true lastHealth=hum.Health end
-		if vel.Y<-80 then hrp.AssemblyLinearVelocity=Vector3.new(vel.X,-30,vel.Z) end
-		if isFalling and hum.FloorMaterial~=Enum.Material.Air then if hum.Health<lastHealth then hum.Health=lastHealth end isFalling=false end
-	end
+	hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false); hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+	local vel = hrp.AssemblyLinearVelocity
+	if noFallMethod == "Default" then if vel.Y < -50 then hrp.AssemblyLinearVelocity = Vector3.new(vel.X, -10, vel.Z) end
+	elseif noFallMethod == "Velocity Brake" then if vel.Y < -50 and getGroundInfo() < 20 then hrp.AssemblyLinearVelocity = Vector3.new(vel.X, -10, vel.Z) end
+	elseif noFallMethod == "Health Restore" then if vel.Y < -20 then wasInAir = true; lastHealth = hum.Health end; if wasInAir and hum.FloorMaterial ~= Enum.Material.Air then if hum.Health < lastHealth then hum.Health = lastHealth end; wasInAir = false end
+	elseif noFallMethod == "Hybrid" then if vel.Y < -20 and not isFalling then isFalling = true; lastHealth = hum.Health end; if vel.Y < -80 then hrp.AssemblyLinearVelocity = Vector3.new(vel.X, -30, vel.Z) end; if isFalling and hum.FloorMaterial ~= Enum.Material.Air then if hum.Health < lastHealth then hum.Health = lastHealth end; isFalling = false end end
 end
 
 local function getClosestInFOV()
-	local myHrp=player.Character and player.Character:FindFirstChild("HumanoidRootPart") if not myHrp then return nil end
-	local closest,cd=nil,math.huge local sc=Vector2.new(camera.ViewportSize.X/2,camera.ViewportSize.Y/2)
-	for _,p in ipairs(Players:GetPlayers()) do
-		if p~=player and p.Character then
+	local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart"); if not myHrp then return nil end
+	local closest, cd = nil, math.huge; local sc = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= player and p.Character then
 			if aimlockTeamCheck and isTeammate(p) then continue end
-			local tp=p.Character:FindFirstChild(aimlockPart) or p.Character:FindFirstChild("HumanoidRootPart")
-			local hum=p.Character:FindFirstChildOfClass("Humanoid")
-			if tp and hum and hum.Health>0 and (myHrp.Position-tp.Position).Magnitude<=aimlockDistance then
-				local sp,os=camera:WorldToScreenPoint(tp.Position)
-				if os then local sd=(Vector2.new(sp.X,sp.Y)-sc).Magnitude if sd<=aimlockFOV and sd<cd then cd=sd closest=p end end
+			local tp = p.Character:FindFirstChild(aimlockPart) or p.Character:FindFirstChild("HumanoidRootPart"); local hum = p.Character:FindFirstChildOfClass("Humanoid")
+			if tp and hum and hum.Health > 0 and (myHrp.Position - tp.Position).Magnitude <= aimlockDistance then
+				local sp, os = camera:WorldToScreenPoint(tp.Position)
+				if os then local sd = (Vector2.new(sp.X, sp.Y) - sc).Magnitude; if sd <= aimlockFOV and sd < cd then cd = sd; closest = p end end
 			end
 		end
-	end
-	return closest
+	end; return closest
 end
 
 local function isTargetValid(t)
 	if not t or not t.Character then return false end
-	local hum=t.Character:FindFirstChildOfClass("Humanoid") if not hum or hum.Health<=0 then return false end
-	local tp=t.Character:FindFirstChild(aimlockPart) or t.Character:FindFirstChild("HumanoidRootPart") if not tp then return false end
-	local myHrp=player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	return myHrp and (myHrp.Position-tp.Position).Magnitude<=aimlockDistance
+	local hum = t.Character:FindFirstChildOfClass("Humanoid"); if not hum or hum.Health <= 0 then return false end
+	local tp = t.Character:FindFirstChild(aimlockPart) or t.Character:FindFirstChild("HumanoidRootPart"); if not tp then return false end
+	local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	return myHrp and (myHrp.Position - tp.Position).Magnitude <= aimlockDistance
 end
 
 -- ==========================================
--- INPUT
+-- INPUT HANDLING (UPDATED for Triggerbot)
 -- ==========================================
 local aimlockHeld = false
 
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	local isAK = false
-	if typeof(aimlockKey)=="EnumItem" then
-		if aimlockKey.EnumType==Enum.UserInputType then isAK=input.UserInputType==aimlockKey
-		elseif aimlockKey.EnumType==Enum.KeyCode then isAK=input.KeyCode==aimlockKey end
+	if typeof(aimlockKey) == "EnumItem" then
+		if aimlockKey.EnumType == Enum.UserInputType then isAK = input.UserInputType == aimlockKey
+		elseif aimlockKey.EnumType == Enum.KeyCode then isAK = input.KeyCode == aimlockKey end
 	end
-	if isAK then aimlockHeld=true if aimlockEnabled then aimlockTarget=getClosestInFOV() end end
-	if input.KeyCode==Enum.KeyCode.Space and jumpMethod~="Default" then isJumping=true task.delay(0.15,function() isJumping=false end) end
-
+	if isAK then aimlockHeld = true; if aimlockEnabled then aimlockTarget = getClosestInFOV() end end
+	if input.KeyCode == Enum.KeyCode.Space and jumpMethod ~= "Default" then isJumping = true; task.delay(0.15, function() isJumping = false end) end
 	-- Triggerbot hold key
-	if triggerbotHoldMode and input.KeyCode == triggerbotHoldKey then
-		triggerbotHoldActive = true
-	end
+	if triggerbotHoldMode and input.KeyCode == triggerbotHoldKey then triggerbotHoldActive = true end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
 	local isAK = false
-	if typeof(aimlockKey)=="EnumItem" then
-		if aimlockKey.EnumType==Enum.UserInputType then isAK=input.UserInputType==aimlockKey
-		elseif aimlockKey.EnumType==Enum.KeyCode then isAK=input.KeyCode==aimlockKey end
+	if typeof(aimlockKey) == "EnumItem" then
+		if aimlockKey.EnumType == Enum.UserInputType then isAK = input.UserInputType == aimlockKey
+		elseif aimlockKey.EnumType == Enum.KeyCode then isAK = input.KeyCode == aimlockKey end
 	end
-	if isAK then aimlockHeld=false end
-
+	if isAK then aimlockHeld = false end
 	-- Triggerbot hold key release
-	if triggerbotHoldMode and input.KeyCode == triggerbotHoldKey then
-		triggerbotHoldActive = false
-	end
+	if triggerbotHoldMode and input.KeyCode == triggerbotHoldKey then triggerbotHoldActive = false end
 end)
 
 UserInputService.JumpRequest:Connect(function()
-	local hum=player.Character and player.Character:FindFirstChildOfClass("Humanoid") if not hum then return end
+	local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid"); if not hum then return end
 	if _G.InfiniteJump then
-		if jumpMethod=="Default" then hum:ChangeState(Enum.HumanoidStateType.Jumping)
-		else isJumping=true task.delay(0.1,function() isJumping=false end) end
-	elseif hum.FloorMaterial~=Enum.Material.Air then isJumping=true task.delay(0.1,function() isJumping=false end) end
+		if jumpMethod == "Default" then hum:ChangeState(Enum.HumanoidStateType.Jumping)
+		else isJumping = true; task.delay(0.1, function() isJumping = false end) end
+	elseif hum.FloorMaterial ~= Enum.Material.Air then isJumping = true; task.delay(0.1, function() isJumping = false end) end
 end)
 
 -- ==========================================
 -- CHARACTER ADDED
 -- ==========================================
 player.CharacterAdded:Connect(function(char)
-	local hum=char:WaitForChild("Humanoid",10)
-	if hum then lastHealth=hum.Health isFalling=false wasInAir=false end
-	for _,pd in pairs(antiHitboxParts) do pcall(function() pd.fakePart:Destroy() end) end
-	antiHitboxParts={}
-	noRecoilOverriddenObjects={} noRecoilCurrentTool=nil noRecoilIsShooting=false noRecoilLockedCFrame=nil
-	if noRecoilEnabled or noSpreadEnabled then
-		task.wait(0.5)
-		if char and char.Parent then setupToolListener(char) end
+	local hum = char:WaitForChild("Humanoid", 10)
+	if hum then lastHealth = hum.Health; isFalling = false; wasInAir = false end
+	for _, pd in pairs(antiHitboxParts) do pcall(function() pd.fakePart:Destroy() end) end; antiHitboxParts = {}
+	noRecoilOverriddenObjects = {}; noRecoilCurrentTool = nil; noRecoilIsShooting = false; noRecoilLockedCFrame = nil
+	if noRecoilEnabled or noSpreadEnabled then task.wait(0.5); if char and char.Parent then setupToolListener(char) end end
+end)
+
+-- ==========================================
+-- TRIGGERBOT LOOP (separate thread)
+-- ==========================================
+task.spawn(function()
+	while true do
+		if triggerbotEnabled then
+			if not triggerbotHoldMode or triggerbotHoldActive then
+				local now = tick()
+				if now - triggerbotLastShot >= triggerbotCooldown then
+					local target = getTriggerbotTarget()
+					triggerbotIsTargeting = (target ~= nil)
+					if target then
+						task.wait(triggerbotDelay)
+						local recheck = getTriggerbotTarget()
+						if recheck then triggerbotLastShot = tick(); fireTriggerbotShot() end
+					end
+				end
+			else triggerbotIsTargeting = false end
+		else triggerbotIsTargeting = false end
+		task.wait(triggerbotCooldown)
 	end
 end)
 
@@ -2010,122 +1891,107 @@ end)
 -- ==========================================
 task.spawn(function()
 	while true do
-		if fullbrightEnabled then
-			applyFullbright()
-		end
+		if fullbrightEnabled then applyFullbright() end
 		task.wait(1)
 	end
 end)
 
 -- ==========================================
--- TRIGGERBOT LOOP (separate thread for delay handling)
--- ==========================================
-task.spawn(function()
-	while true do
-		if triggerbotEnabled then
-			applyTriggerbot()
-		end
-		task.wait(triggerbotCooldown)
-	end
-end)
-
--- ==========================================
--- MAIN LOOP
+-- MAIN RENDER LOOP (UPDATED)
 -- ==========================================
 RunService.RenderStepped:Connect(function(dt)
-	local char=player.Character if not char then return end local now=tick()
-
+	local char = player.Character; if not char then return end; local now = tick()
 	if noclip then applyNoclip() end
-	applySpeed(dt) applyJump()
+	applySpeed(dt); applyJump()
 	if noFallDamage then applyNoFall() end
 	if (noRecoilEnabled or noSpreadEnabled) and noRecoilCameraLock then applyNoRecoilCameraLock() end
 
 	-- Aimlock
 	if aimlockEnabled and aimlockHeld then
-		if autoSwitchTarget and not isTargetValid(aimlockTarget) then aimlockTarget=getClosestInFOV() end
+		if autoSwitchTarget and not isTargetValid(aimlockTarget) then aimlockTarget = getClosestInFOV() end
 		if aimlockTarget and aimlockTarget.Character then
-			local tp=aimlockTarget.Character:FindFirstChild(aimlockPart) or aimlockTarget.Character:FindFirstChild("HumanoidRootPart")
-			local hum=aimlockTarget.Character:FindFirstChildOfClass("Humanoid")
-			if tp and hum and hum.Health>0 then
-				local myHrp=char:FindFirstChild("HumanoidRootPart")
-				if myHrp and (myHrp.Position-tp.Position).Magnitude<=aimlockDistance then
-					camera.CFrame=camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position,tp.Position),aimlockSmooth)
-				else aimlockTarget=autoSwitchTarget and getClosestInFOV() or nil end
-			else aimlockTarget=autoSwitchTarget and getClosestInFOV() or nil end
+			local tp = aimlockTarget.Character:FindFirstChild(aimlockPart) or aimlockTarget.Character:FindFirstChild("HumanoidRootPart")
+			local hum = aimlockTarget.Character:FindFirstChildOfClass("Humanoid")
+			if tp and hum and hum.Health > 0 then
+				local myHrp = char:FindFirstChild("HumanoidRootPart")
+				if myHrp and (myHrp.Position - tp.Position).Magnitude <= aimlockDistance then
+					camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, tp.Position), aimlockSmooth)
+				else aimlockTarget = autoSwitchTarget and getClosestInFOV() or nil end
+			else aimlockTarget = autoSwitchTarget and getClosestInFOV() or nil end
 		end
 	end
 
 	if aimAssistEnabled then applyAimAssist(dt) end
 
 	-- FOV Circles
-	local cx,cy = camera.ViewportSize.X/2, camera.ViewportSize.Y/2
-	if fovCircle then fovCircle.Position=Vector2.new(cx,cy) fovCircle.Radius=aimlockFOV fovCircle.Visible=showFOVCircle and aimlockEnabled end
-	if aimAssistFOVCircle then aimAssistFOVCircle.Position=Vector2.new(cx,cy) aimAssistFOVCircle.Radius=aimAssistFOV aimAssistFOVCircle.Visible=showAimAssistFOV and aimAssistEnabled end
-	if silentAimFOVCircle then silentAimFOVCircle.Position=Vector2.new(cx,cy) silentAimFOVCircle.Radius=silentAimFOV silentAimFOVCircle.Visible=silentAimShowFOV and silentAimEnabled end
+	local cx, cy = camera.ViewportSize.X/2, camera.ViewportSize.Y/2
+	if fovCircle then fovCircle.Position = Vector2.new(cx, cy); fovCircle.Radius = aimlockFOV; fovCircle.Visible = showFOVCircle and aimlockEnabled end
+	if aimAssistFOVCircle then aimAssistFOVCircle.Position = Vector2.new(cx, cy); aimAssistFOVCircle.Radius = aimAssistFOV; aimAssistFOVCircle.Visible = showAimAssistFOV and aimAssistEnabled end
+	if silentAimFOVCircle then silentAimFOVCircle.Position = Vector2.new(cx, cy); silentAimFOVCircle.Radius = silentAimFOV; silentAimFOVCircle.Visible = silentAimShowFOV and silentAimEnabled end
 
-	-- Triggerbot Crosshair
+	-- Triggerbot Crosshair (NEW)
 	updateTriggerbotCrosshair()
 
-	-- No Recoil
-	if now-lastNoRecoilUpdate >= NO_RECOIL_UPDATE_RATE then
-		lastNoRecoilUpdate=now
+	-- No Recoil update
+	if now - lastNoRecoilUpdate >= NO_RECOIL_UPDATE_RATE then
+		lastNoRecoilUpdate = now
 		if (noRecoilEnabled or noSpreadEnabled) and noRecoilValueOverride then refreshRecoilOverrides() end
 		if noRecoilEnabled then overrideRecoilPhysics() end
 	end
 
-	-- Silent Aim Visual
-	if now-lastSilentAimUpdate >= SILENT_AIM_UPDATE_RATE then
-		lastSilentAimUpdate=now
+	-- Silent Aim visual
+	if now - lastSilentAimUpdate >= SILENT_AIM_UPDATE_RATE then
+		lastSilentAimUpdate = now
 		if silentAimEnabled then
-			local t, tp = getSilentAimTarget()
-			silentAimCurrentTarget = t
+			local t, tp = getSilentAimTarget(); silentAimCurrentTarget = t
 			if silentAimVisualLine and t and tp then
 				local sp, onS = camera:WorldToViewportPoint(tp.Position)
 				if onS then
-					silentAimVisualLineObj.From=Vector2.new(cx,cy)
-					silentAimVisualLineObj.To=Vector2.new(sp.X,sp.Y)
-					silentAimVisualLineObj.Visible=true
-					silentAimVisualLineObj.Color=tp.Name=="Head" and Color3.fromRGB(255,50,50) or Color3.fromRGB(255,0,255)
-				else silentAimVisualLineObj.Visible=false end
-			elseif silentAimVisualLineObj then silentAimVisualLineObj.Visible=false end
-		else
-			if silentAimVisualLineObj then silentAimVisualLineObj.Visible=false end
-		end
+					silentAimVisualLineObj.From = Vector2.new(cx, cy); silentAimVisualLineObj.To = Vector2.new(sp.X, sp.Y)
+					silentAimVisualLineObj.Visible = true
+					silentAimVisualLineObj.Color = tp.Name == "Head" and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(255, 0, 255)
+				else silentAimVisualLineObj.Visible = false end
+			elseif silentAimVisualLineObj then silentAimVisualLineObj.Visible = false end
+		else if silentAimVisualLineObj then silentAimVisualLineObj.Visible = false end end
 	end
 
 	-- ESP
-	if now-lastESPUpdate >= ESP_UPDATE_RATE then lastESPUpdate=now if espEnabled then updatePlayerESP() end end
+	if now - lastESPUpdate >= ESP_UPDATE_RATE then lastESPUpdate = now; if espEnabled then updatePlayerESP() end end
 
 	-- Hitbox
-	if now-lastHitboxUpdate >= HITBOX_UPDATE_RATE then
-		lastHitboxUpdate=now
+	if now - lastHitboxUpdate >= HITBOX_UPDATE_RATE then
+		lastHitboxUpdate = now
 		if hitboxEnabled then updateHitboxExpander() end
 		if antiHitboxEnabled then updateAntiHitbox() end
 	end
 end)
 
--- Cleanup
+-- ==========================================
+-- CLEANUP
+-- ==========================================
 Players.PlayerRemoving:Connect(function(p)
 	if espObjects[p] then
-		local d=espObjects[p]
-		pcall(function() d.box:Remove() end) pcall(function() d.line:Remove() end)
-		pcall(function() d.name:Remove() end) pcall(function() d.distText:Remove() end)
-		pcall(function() d.healthText:Remove() end) pcall(function() d.healthBar:Remove() end)
+		local d = espObjects[p]
+		pcall(function() d.box:Remove() end); pcall(function() d.line:Remove() end)
+		pcall(function() d.name:Remove() end); pcall(function() d.distText:Remove() end)
+		pcall(function() d.healthText:Remove() end); pcall(function() d.healthBar:Remove() end)
 		pcall(function() d.healthBg:Remove() end)
-		if d.highlight then pcall(function() d.highlight:Destroy() end) end
-		espObjects[p]=nil
+		if d.highlight then pcall(function() d.highlight:Destroy() end) end; espObjects[p] = nil
 	end
-	if hitboxData[p] then cleanHitboxForPlayer(p) hitboxData[p]=nil end
+	if hitboxData[p] then cleanHitboxForPlayer(p); hitboxData[p] = nil end
 end)
 
+-- ==========================================
+-- INITIAL SETUP
+-- ==========================================
 task.spawn(function()
 	task.wait(1)
 	if player.Character and (noRecoilEnabled or noSpreadEnabled) then setupToolListener(player.Character) end
 end)
 
 Rayfield:Notify({
-	Title = "RyuExploit v3.7",
-	Content = "Loaded!\n\n+ Triggerbot (Auto Shoot)\n+ Brightness (Fullbright)\n+ No Fog, No Shadows",
+	Title = "RyuExploit v3.8",
+	Content = "Loaded!\n+Triggerbot (Auto Shoot)\n+Brightness (Fullbright/No Fog)\nHitbox Fixed + All Features",
 	Duration = 5
 })
 end
