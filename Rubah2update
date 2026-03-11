@@ -1253,128 +1253,183 @@ local function applyAimAssist(dt)
 	local fl = math.clamp(ms * (1 - ts) + ts, 0.02, 0.9)
 	camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, tPos), fl)
 end
-
+-- ==========================================
+-- SAFE DRAWING (XENO COMPATIBLE)
+-- ==========================================
+local function safeDrawingNew(drawType)
+    local ok, obj = pcall(function()
+        return Drawing.new(drawType)
+    end)
+    if ok and obj then return obj end
+    return nil
+end
 -- ==========================================
 -- ESP SYSTEM
 -- ==========================================
 local function lerpV2(a, b, t)
 	return Vector2.new(a.X + (b.X - a.X) * t, a.Y + (b.Y - a.Y) * t)
 end
-
 local function updatePlayerESP()
-	if not espEnabled then return end
-	local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	for _, tp in ipairs(Players:GetPlayers()) do
-		if tp == player then continue end
-		if espTeamCheck and isTeammate(tp) then
-			if espObjects[tp] then
-				local d = espObjects[tp]
-				if d.box then d.box.Visible = false end
-				if d.line then d.line.Visible = false end
-				if d.name then d.name.Visible = false end
-				if d.distText then d.distText.Visible = false end
-				if d.healthText then d.healthText.Visible = false end
-				if d.healthBar then d.healthBar.Visible = false end
-				if d.healthBg then d.healthBg.Visible = false end
-				if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
-			end
-			continue
-		end
-		local char = tp.Character
-		if not espObjects[tp] then
-			espObjects[tp] = {
-				box = Drawing.new("Square"), line = Drawing.new("Line"),
-				name = Drawing.new("Text"), distText = Drawing.new("Text"),
-				healthText = Drawing.new("Text"), healthBar = Drawing.new("Line"),
-				healthBg = Drawing.new("Line"), smoothFrom = nil, smoothTo = nil,
-			}
-			local d = espObjects[tp]
-			d.box.Thickness = 1.5; d.box.Filled = false; d.box.Visible = false
-			d.line.Thickness = 1.5; d.line.Visible = false
-			d.name.Size = 14; d.name.Center = true; d.name.Outline = true; d.name.Font = 2; d.name.Visible = false
-			d.distText.Size = 12; d.distText.Center = true; d.distText.Outline = true; d.distText.Font = 2; d.distText.Visible = false
-			d.healthText.Size = 12; d.healthText.Center = true; d.healthText.Outline = true; d.healthText.Font = 2; d.healthText.Visible = false
-			d.healthBar.Thickness = 3; d.healthBar.Visible = false
-			d.healthBg.Thickness = 5; d.healthBg.Visible = false; d.healthBg.Color = Color3.fromRGB(40, 40, 40)
-		end
-		local d = espObjects[tp]
-		local color = espTeamCheck and (isTeammate(tp) and espTeamColor or espEnemyColor) or espColor
-		if not char or not char:FindFirstChild("HumanoidRootPart") then
-			d.box.Visible = false; d.line.Visible = false; d.name.Visible = false
-			d.distText.Visible = false; d.healthText.Visible = false
-			d.healthBar.Visible = false; d.healthBg.Visible = false
-			if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
-			continue
-		end
-		local hrp = char.HumanoidRootPart
-		local head = char:FindFirstChild("Head")
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		local pos, onS = camera:WorldToViewportPoint(hrp.Position)
-		if onS then
-			local tp2 = camera:WorldToViewportPoint((hrp.CFrame * CFrame.new(0, 3, 0)).Position)
-			local bp = camera:WorldToViewportPoint((hrp.CFrame * CFrame.new(0, -4.5, 0)).Position)
-			local h = math.abs(tp2.Y - bp.Y); local w = h / 1.8
-			if espBox then
-				d.box.Size = Vector2.new(w, h)
-				d.box.Position = Vector2.new(pos.X - w/2, pos.Y - h/2)
-				d.box.Color = color; d.box.Visible = true
-			else d.box.Visible = false end
-			if espLine then
-				local tf = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y)
-				local tt = Vector2.new(pos.X, pos.Y)
-				if d.smoothFrom and d.smoothTo then
-					d.smoothFrom = lerpV2(d.smoothFrom, tf, espLineSmoothing)
-					d.smoothTo = lerpV2(d.smoothTo, tt, espLineSmoothing)
-				else d.smoothFrom = tf; d.smoothTo = tt end
-				d.line.From = d.smoothFrom; d.line.To = d.smoothTo
-				d.line.Color = color; d.line.Visible = true
-			else d.line.Visible = false; d.smoothFrom = nil; d.smoothTo = nil end
-			if espName and head then
-				local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
-				d.name.Position = Vector2.new(np.X, np.Y)
-				d.name.Text = tp.DisplayName.." (@"..tp.Name..")"
-				d.name.Color = color; d.name.Visible = true
-			else d.name.Visible = false end
-			if espDistance and myHrp and head then
-				local dist = math.floor((myHrp.Position - hrp.Position).Magnitude)
-				local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
-				d.distText.Position = Vector2.new(np.X, np.Y + (espName and 14 or 0))
-				d.distText.Text = "["..dist.."m]"
-				d.distText.Color = Color3.fromRGB(200, 200, 200); d.distText.Visible = true
-			else d.distText.Visible = false end
-			if espHealth and hum then
-				local hp = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
-				if espBox then
-					local bx = pos.X - w/2 - 7
-					d.healthBg.From = Vector2.new(bx, pos.Y + h/2)
-					d.healthBg.To = Vector2.new(bx, pos.Y - h/2); d.healthBg.Visible = true
-					d.healthBar.From = Vector2.new(bx, pos.Y + h/2)
-					d.healthBar.To = Vector2.new(bx, pos.Y + h/2 - h * hp)
-					d.healthBar.Color = Color3.fromRGB(255*(1-hp), 255*hp, 0); d.healthBar.Visible = true
-				else d.healthBar.Visible = false; d.healthBg.Visible = false end
-				if head then
-					local yOff = (espName and 14 or 0) + (espDistance and 14 or 0)
-					local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
-					d.healthText.Position = Vector2.new(np.X, np.Y + yOff)
-					d.healthText.Text = math.floor(hum.Health).."/"..math.floor(hum.MaxHealth).." HP"
-					d.healthText.Color = Color3.fromRGB(255*(1-hp), 255*hp, 0); d.healthText.Visible = true
-				end
-			else d.healthBar.Visible = false; d.healthBg.Visible = false; d.healthText.Visible = false end
-			if espHighlight then
-				if not d.highlight or not d.highlight.Parent then
-					d.highlight = Instance.new("Highlight")
-					d.highlight.FillColor = color; d.highlight.OutlineColor = Color3.new(1,1,1)
-					d.highlight.FillTransparency = 0.7; d.highlight.OutlineTransparency = 0.3
-					d.highlight.Parent = char
-				else d.highlight.FillColor = color end
-			elseif d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
-		else
-			d.box.Visible = false; d.line.Visible = false; d.name.Visible = false
-			d.distText.Visible = false; d.healthText.Visible = false
-			d.healthBar.Visible = false; d.healthBg.Visible = false
-			d.smoothFrom = nil; d.smoothTo = nil
-		end
-	end
+    if not espEnabled then return end
+    
+    -- Check apakah Drawing tersedia
+    local drawingAvailable = pcall(function() return Drawing.new end)
+    if not drawingAvailable then
+        -- Fallback: hanya pakai Highlight
+        for _, tp in ipairs(Players:GetPlayers()) do
+            if tp == player then continue end
+            if espTeamCheck and isTeammate(tp) then continue end
+            local char = tp.Character
+            if not char then continue end
+            
+            if not espObjects[tp] then espObjects[tp] = {} end
+            local d = espObjects[tp]
+            local color = espTeamCheck and (isTeammate(tp) and espTeamColor or espEnemyColor) or espColor
+            
+            if espHighlight then
+                if not d.highlight or not d.highlight.Parent then
+                    local hl = Instance.new("Highlight")
+                    hl.FillColor = color
+                    hl.OutlineColor = Color3.new(1,1,1)
+                    hl.FillTransparency = 0.7
+                    hl.OutlineTransparency = 0.3
+                    hl.Parent = char
+                    d.highlight = hl
+                else
+                    d.highlight.FillColor = color
+                end
+            elseif d.highlight then
+                pcall(function() d.highlight:Destroy() end)
+                d.highlight = nil
+            end
+        end
+        return
+    end
+    
+    -- Original Drawing-based ESP code
+    local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    for _, tp in ipairs(Players:GetPlayers()) do
+        if tp == player then continue end
+        if espTeamCheck and isTeammate(tp) then
+            if espObjects[tp] then
+                local d = espObjects[tp]
+                if d.box then d.box.Visible = false end
+                if d.line then d.line.Visible = false end
+                if d.name then d.name.Visible = false end
+                if d.distText then d.distText.Visible = false end
+                if d.healthText then d.healthText.Visible = false end
+                if d.healthBar then d.healthBar.Visible = false end
+                if d.healthBg then d.healthBg.Visible = false end
+                if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
+            end
+            continue
+        end
+        local char = tp.Character
+        if not espObjects[tp] then
+            espObjects[tp] = {}
+            local d = espObjects[tp]
+            d.box = safeDrawingNew("Square")
+            d.line = safeDrawingNew("Line")
+            d.name = safeDrawingNew("Text")
+            d.distText = safeDrawingNew("Text")
+            d.healthText = safeDrawingNew("Text")
+            d.healthBar = safeDrawingNew("Line")
+            d.healthBg = safeDrawingNew("Line")
+            
+            if d.box then d.box.Thickness = 1.5; d.box.Filled = false; d.box.Visible = false end
+            if d.line then d.line.Thickness = 1.5; d.line.Visible = false end
+            if d.name then d.name.Size = 14; d.name.Center = true; d.name.Outline = true; d.name.Font = 2; d.name.Visible = false end
+            if d.distText then d.distText.Size = 12; d.distText.Center = true; d.distText.Outline = true; d.distText.Font = 2; d.distText.Visible = false end
+            if d.healthText then d.healthText.Size = 12; d.healthText.Center = true; d.healthText.Outline = true; d.healthText.Font = 2; d.healthText.Visible = false end
+            if d.healthBar then d.healthBar.Thickness = 3; d.healthBar.Visible = false end
+            if d.healthBg then d.healthBg.Thickness = 5; d.healthBg.Visible = false; d.healthBg.Color = Color3.fromRGB(40, 40, 40) end
+        end
+        local d = espObjects[tp]
+        local color = espTeamCheck and (isTeammate(tp) and espTeamColor or espEnemyColor) or espColor
+        if not char or not char:FindFirstChild("HumanoidRootPart") then
+            if d.box then d.box.Visible = false end
+            if d.line then d.line.Visible = false end
+            if d.name then d.name.Visible = false end
+            if d.distText then d.distText.Visible = false end
+            if d.healthText then d.healthText.Visible = false end
+            if d.healthBar then d.healthBar.Visible = false end
+            if d.healthBg then d.healthBg.Visible = false end
+            if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
+            continue
+        end
+        local hrp = char.HumanoidRootPart
+        local head = char:FindFirstChild("Head")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local pos, onS = camera:WorldToViewportPoint(hrp.Position)
+        if onS then
+            local tp2 = camera:WorldToViewportPoint((hrp.CFrame * CFrame.new(0, 3, 0)).Position)
+            local bp = camera:WorldToViewportPoint((hrp.CFrame * CFrame.new(0, -4.5, 0)).Position)
+            local h = math.abs(tp2.Y - bp.Y); local w = h / 1.8
+            if espBox and d.box then
+                d.box.Size = Vector2.new(w, h)
+                d.box.Position = Vector2.new(pos.X - w/2, pos.Y - h/2)
+                d.box.Color = color; d.box.Visible = true
+            elseif d.box then d.box.Visible = false end
+            if espLine and d.line then
+                local tf = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y)
+                local tt = Vector2.new(pos.X, pos.Y)
+                if d.smoothFrom and d.smoothTo then
+                    d.smoothFrom = lerpV2(d.smoothFrom, tf, espLineSmoothing)
+                    d.smoothTo = lerpV2(d.smoothTo, tt, espLineSmoothing)
+                else d.smoothFrom = tf; d.smoothTo = tt end
+                d.line.From = d.smoothFrom; d.line.To = d.smoothTo
+                d.line.Color = color; d.line.Visible = true
+            elseif d.line then d.line.Visible = false; d.smoothFrom = nil; d.smoothTo = nil end
+            if espName and head and d.name then
+                local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
+                d.name.Position = Vector2.new(np.X, np.Y)
+                d.name.Text = tp.DisplayName.." (@"..tp.Name..")"
+                d.name.Color = color; d.name.Visible = true
+            elseif d.name then d.name.Visible = false end
+            if espDistance and myHrp and head and d.distText then
+                local dist = math.floor((myHrp.Position - hrp.Position).Magnitude)
+                local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
+                d.distText.Position = Vector2.new(np.X, np.Y + (espName and 14 or 0))
+                d.distText.Text = "["..dist.."m]"
+                d.distText.Color = Color3.fromRGB(200, 200, 200); d.distText.Visible = true
+            elseif d.distText then d.distText.Visible = false end
+            if espHealth and hum then
+                local hp = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                if espBox and d.healthBar and d.healthBg then
+                    local bx = pos.X - w/2 - 7
+                    d.healthBg.From = Vector2.new(bx, pos.Y + h/2)
+                    d.healthBg.To = Vector2.new(bx, pos.Y - h/2); d.healthBg.Visible = true
+                    d.healthBar.From = Vector2.new(bx, pos.Y + h/2)
+                    d.healthBar.To = Vector2.new(bx, pos.Y + h/2 - h * hp)
+                    d.healthBar.Color = Color3.fromRGB(255*(1-hp), 255*hp, 0); d.healthBar.Visible = true
+                elseif d.healthBar then d.healthBar.Visible = false; d.healthBg.Visible = false end
+                if head and d.healthText then
+                    local yOff = (espName and 14 or 0) + (espDistance and 14 or 0)
+                    local np = camera:WorldToViewportPoint((head.CFrame * CFrame.new(0, 2, 0)).Position)
+                    d.healthText.Position = Vector2.new(np.X, np.Y + yOff)
+                    d.healthText.Text = math.floor(hum.Health).."/"..math.floor(hum.MaxHealth).." HP"
+                    d.healthText.Color = Color3.fromRGB(255*(1-hp), 255*hp, 0); d.healthText.Visible = true
+                end
+            elseif d.healthBar then d.healthBar.Visible = false; d.healthBg.Visible = false; d.healthText.Visible = false end
+            if espHighlight then
+                if not d.highlight or not d.highlight.Parent then
+                    d.highlight = Instance.new("Highlight")
+                    d.highlight.FillColor = color; d.highlight.OutlineColor = Color3.new(1,1,1)
+                    d.highlight.FillTransparency = 0.7; d.highlight.OutlineTransparency = 0.3
+                    d.highlight.Parent = char
+                else d.highlight.FillColor = color end
+            elseif d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end
+        else
+            if d.box then d.box.Visible = false end
+            if d.line then d.line.Visible = false end
+            if d.name then d.name.Visible = false end
+            if d.distText then d.distText.Visible = false end
+            if d.healthText then d.healthText.Visible = false end
+            if d.healthBar then d.healthBar.Visible = false end
+            if d.healthBg then d.healthBg.Visible = false end
+            d.smoothFrom = nil; d.smoothTo = nil
+        end
+    end
 end
 
 local function clearAllESP()
@@ -2027,120 +2082,6 @@ ESPTab:CreateColorPicker({Name = "Enemy Color", Color = Color3.fromRGB(255, 0, 0
 ESPTab:CreateColorPicker({Name = "Team Color", Color = Color3.fromRGB(0, 255, 0), Flag = "ETeamC", Callback = function(V) espTeamColor = V end})
 
 -- ==========================================
--- MAIN RENDER LOOP (PERBAIKAN)
--- ==========================================
-RunService.RenderStepped:Connect(function(dt)
-	local char = player.Character
-	if not char then return end
-	local now = tick()
-
-	-- Movement
-	if noclip then applyNoclip() end
-	applySpeed(dt)
-	applyJump()
-	if noFallDamage then applyNoFall() end
-	if (noRecoilEnabled or noSpreadEnabled) and noRecoilCameraLock then applyNoRecoilCameraLock() end
-
-	-- Aimlock
-	if aimlockEnabled and aimlockHeld then
-		if autoSwitchTarget and not isTargetValid(aimlockTarget) then 
-			aimlockTarget = getClosestInFOV() 
-		end
-		if aimlockTarget and aimlockTarget.Character then
-			local tp = aimlockTarget.Character:FindFirstChild(aimlockPart) or aimlockTarget.Character:FindFirstChild("HumanoidRootPart")
-			local hum = aimlockTarget.Character:FindFirstChildOfClass("Humanoid")
-			if tp and hum and hum.Health > 0 then
-				local myHrp = char:FindFirstChild("HumanoidRootPart")
-				if myHrp and (myHrp.Position - tp.Position).Magnitude <= aimlockDistance then
-					camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, tp.Position), aimlockSmooth)
-				else 
-					aimlockTarget = autoSwitchTarget and getClosestInFOV() or nil 
-				end
-			else 
-				aimlockTarget = autoSwitchTarget and getClosestInFOV() or nil 
-			end
-		end
-	end
-
-	-- Aim Assist
-	if aimAssistEnabled then applyAimAssist(dt) end
-
-	-- FOV Circles
-	local cx, cy = camera.ViewportSize.X/2, camera.ViewportSize.Y/2
-	if fovCircle then 
-		fovCircle.Position = Vector2.new(cx, cy)
-		fovCircle.Radius = aimlockFOV
-		fovCircle.Visible = showFOVCircle and aimlockEnabled 
-	end
-	if aimAssistFOVCircle then 
-		aimAssistFOVCircle.Position = Vector2.new(cx, cy)
-		aimAssistFOVCircle.Radius = aimAssistFOV
-		aimAssistFOVCircle.Visible = showAimAssistFOV and aimAssistEnabled 
-	end
-	if silentAimFOVCircle then 
-		silentAimFOVCircle.Position = Vector2.new(cx, cy)
-		silentAimFOVCircle.Radius = silentAimFOV
-		silentAimFOVCircle.Visible = silentAimShowFOV and silentAimEnabled 
-	end
-
-	-- Player ESP Update (DITAMBAHKAN)
-	if now - lastESPUpdate >= ESP_UPDATE_RATE then
-		lastESPUpdate = now
-		if espEnabled then updatePlayerESP() end
-	end
-
-	-- No Recoil
-	if now - lastNoRecoilUpdate >= NO_RECOIL_UPDATE_RATE then
-		lastNoRecoilUpdate = now
-		if (noRecoilEnabled or noSpreadEnabled) and noRecoilValueOverride then 
-			refreshRecoilOverrides() 
-		end
-		if noRecoilEnabled then overrideRecoilPhysics() end
-	end
-
-	-- Silent Aim Visual
-	if now - lastSilentAimUpdate >= SILENT_AIM_UPDATE_RATE then
-		lastSilentAimUpdate = now
-		if silentAimEnabled then
-			local t, tp = getSilentAimTarget()
-			silentAimCurrentTarget = t
-			if silentAimVisualLine and t and tp then
-				local sp, onS = camera:WorldToViewportPoint(tp.Position)
-				if onS then
-					silentAimVisualLineObj.From = Vector2.new(cx, cy)
-					silentAimVisualLineObj.To = Vector2.new(sp.X, sp.Y)
-					silentAimVisualLineObj.Visible = true
-					silentAimVisualLineObj.Color = tp.Name == "Head" and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(255, 0, 255)
-				else 
-					silentAimVisualLineObj.Visible = false 
-				end
-			elseif silentAimVisualLineObj then 
-				silentAimVisualLineObj.Visible = false 
-			end
-		else 
-			if silentAimVisualLineObj then 
-				silentAimVisualLineObj.Visible = false 
-			end 
-		end
-	end
-
-	-- Hitbox
-	if now - lastHitboxUpdate >= HITBOX_UPDATE_RATE then
-		lastHitboxUpdate = now
-		if hitboxEnabled then updateHitboxExpander() end
-		if antiHitboxEnabled then updateAntiHitbox() end
-	end
-
-	-- Item ESP
-	if now - lastItemESPUpdate >= ITEM_ESP_UPDATE_RATE then
-		lastItemESPUpdate = now
-		if itemESPEnabled then updateItemESP() end
-	end
-
-	-- Brightness
-	if brightnessEnabled then applyBrightness() end
-end)
--- ==========================================
 -- TAB: Item ESP (XENO COMPATIBLE)
 -- ==========================================
 local ItemESPTab = Window:CreateTab("Item ESP", 4483362458)
@@ -2527,7 +2468,57 @@ local function isTargetValid(t)
 	local myHrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
 	return myHrp and (myHrp.Position - tp.Position).Magnitude <= aimlockDistance
 end
+-- ==========================================
+-- DRAWING FALLBACK (XENO COMPATIBLE)
+-- ==========================================
+local function safeDrawingNew(drawType)
+    local ok, obj = pcall(function()
+        return Drawing.new(drawType)
+    end)
+    if ok and obj then return obj end
+    return nil
+end
 
+-- Silent Aim FOV Circle
+silentAimFOVCircle = safeDrawingNew("Circle")
+if silentAimFOVCircle then
+    silentAimFOVCircle.Color = Color3.fromRGB(255, 0, 255)
+    silentAimFOVCircle.Thickness = 1.5
+    silentAimFOVCircle.Filled = false
+    silentAimFOVCircle.Radius = silentAimFOV
+    silentAimFOVCircle.Visible = false
+    silentAimFOVCircle.Transparency = 0.6
+end
+
+silentAimVisualLineObj = safeDrawingNew("Line")
+if silentAimVisualLineObj then
+    silentAimVisualLineObj.Color = Color3.fromRGB(255, 0, 255)
+    silentAimVisualLineObj.Thickness = 1
+    silentAimVisualLineObj.Visible = false
+    silentAimVisualLineObj.Transparency = 0.5
+end
+
+-- Aim Assist FOV Circle
+aimAssistFOVCircle = safeDrawingNew("Circle")
+if aimAssistFOVCircle then
+    aimAssistFOVCircle.Color = Color3.fromRGB(255, 200, 0)
+    aimAssistFOVCircle.Thickness = 1
+    aimAssistFOVCircle.Filled = false
+    aimAssistFOVCircle.Radius = aimAssistFOV
+    aimAssistFOVCircle.Visible = false
+    aimAssistFOVCircle.Transparency = 0.7
+end
+
+-- Aimlock FOV Circle
+fovCircle = safeDrawingNew("Circle")
+if fovCircle then
+    fovCircle.Color = Color3.fromRGB(255, 255, 255)
+    fovCircle.Thickness = 1
+    fovCircle.Filled = false
+    fovCircle.Radius = aimlockFOV
+    fovCircle.Visible = false
+    fovCircle.Transparency = 1
+end
 -- ==========================================
 -- INPUT HANDLING
 -- ==========================================
@@ -2612,11 +2603,29 @@ RunService.RenderStepped:Connect(function(dt)
 
 	if aimAssistEnabled then applyAimAssist(dt) end
 
-	-- FOV Circles
+	-- FOV Circles (dengan null check untuk Xeno)
 	local cx, cy = camera.ViewportSize.X/2, camera.ViewportSize.Y/2
-	if fovCircle then fovCircle.Position = Vector2.new(cx, cy); fovCircle.Radius = aimlockFOV; fovCircle.Visible = showFOVCircle and aimlockEnabled end
-	if aimAssistFOVCircle then aimAssistFOVCircle.Position = Vector2.new(cx, cy); aimAssistFOVCircle.Radius = aimAssistFOV; aimAssistFOVCircle.Visible = showAimAssistFOV and aimAssistEnabled end
-	if silentAimFOVCircle then silentAimFOVCircle.Position = Vector2.new(cx, cy); silentAimFOVCircle.Radius = silentAimFOV; silentAimFOVCircle.Visible = silentAimShowFOV and silentAimEnabled end
+	if fovCircle then 
+		fovCircle.Position = Vector2.new(cx, cy)
+		fovCircle.Radius = aimlockFOV
+		fovCircle.Visible = showFOVCircle and aimlockEnabled 
+	end
+	if aimAssistFOVCircle then 
+		aimAssistFOVCircle.Position = Vector2.new(cx, cy)
+		aimAssistFOVCircle.Radius = aimAssistFOV
+		aimAssistFOVCircle.Visible = showAimAssistFOV and aimAssistEnabled 
+	end
+	if silentAimFOVCircle then 
+		silentAimFOVCircle.Position = Vector2.new(cx, cy)
+		silentAimFOVCircle.Radius = silentAimFOV
+		silentAimFOVCircle.Visible = silentAimShowFOV and silentAimEnabled 
+	end
+
+	-- Player ESP Update
+	if now - lastESPUpdate >= ESP_UPDATE_RATE then
+		lastESPUpdate = now
+		if espEnabled then updatePlayerESP() end
+	end
 
 	-- No Recoil update
 	if now - lastNoRecoilUpdate >= NO_RECOIL_UPDATE_RATE then
@@ -2625,25 +2634,33 @@ RunService.RenderStepped:Connect(function(dt)
 		if noRecoilEnabled then overrideRecoilPhysics() end
 	end
 
-	-- Silent Aim visual
+	-- Silent Aim visual (dengan null check)
 	if now - lastSilentAimUpdate >= SILENT_AIM_UPDATE_RATE then
 		lastSilentAimUpdate = now
 		if silentAimEnabled then
 			local t, tp = getSilentAimTarget()
 			silentAimCurrentTarget = t
-			if silentAimVisualLine and t and tp then
+			if silentAimVisualLine and silentAimVisualLineObj and t and tp then
 				local sp, onS = camera:WorldToViewportPoint(tp.Position)
 				if onS then
 					silentAimVisualLineObj.From = Vector2.new(cx, cy)
 					silentAimVisualLineObj.To = Vector2.new(sp.X, sp.Y)
 					silentAimVisualLineObj.Visible = true
 					silentAimVisualLineObj.Color = tp.Name == "Head" and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(255, 0, 255)
-				else silentAimVisualLineObj.Visible = false end
-			elseif silentAimVisualLineObj then silentAimVisualLineObj.Visible = false end
-		else if silentAimVisualLineObj then silentAimVisualLineObj.Visible = false end end
+				else 
+					silentAimVisualLineObj.Visible = false 
+				end
+			elseif silentAimVisualLineObj then 
+				silentAimVisualLineObj.Visible = false 
+			end
+		else 
+			if silentAimVisualLineObj then 
+				silentAimVisualLineObj.Visible = false 
+			end 
+		end
 	end
 
-		-- Hitbox
+	-- Hitbox
 	if now - lastHitboxUpdate >= HITBOX_UPDATE_RATE then
 		lastHitboxUpdate = now
 		if hitboxEnabled then updateHitboxExpander() end
