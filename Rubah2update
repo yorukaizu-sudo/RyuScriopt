@@ -2236,21 +2236,22 @@ RunService.RenderStepped:Connect(function(dt)
 		else if silentAimVisualLineObj then silentAimVisualLineObj.Visible = false end end
 	end
 
-	-- ESP
-	if now - lastESPUpdate >= ESP_UPDATE_RATE then lastESPUpdate = now; if espEnabled then updatePlayerESP() end end
-
-	-- Hitbox
+		-- Hitbox
 	if now - lastHitboxUpdate >= HITBOX_UPDATE_RATE then
 		lastHitboxUpdate = now
 		if hitboxEnabled then updateHitboxExpander() end
 		if antiHitboxEnabled then updateAntiHitbox() end
 	end
+
+	-- Item ESP
+	if now - lastItemESPUpdate >= ITEM_ESP_UPDATE_RATE then
+		lastItemESPUpdate = now
+		if itemESPEnabled then updateItemESP() end
+	end
+
+	-- Brightness
+	if brightnessEnabled then applyBrightness() end
 end)
--- Item ESP
-if now - lastItemESPUpdate >= ITEM_ESP_UPDATE_RATE then
-    lastItemESPUpdate = now
-    if itemESPEnabled then updateItemESP() end
-end
 -- ==========================================
 -- CLEANUP
 -- ==========================================
