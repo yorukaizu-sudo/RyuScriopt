@@ -783,20 +783,35 @@ if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Load
 		end
 	end
 -- ==========================================
--- HITBOX SYSTEM v4.3 - FINAL WESTBOUND FIX
--- HANYA EXPAND HRP, TIDAK ADA PART TAMBAHAN
+-- HITBOX SYSTEM v5.0 - WESTBOUND FINAL FIX
+-- TIDAK ADA PART BARU - HANYA EXPAND HRP LANGSUNG
 -- ==========================================
+
+local hitboxEnabled = false
+local hitboxSize = 10
+local hitboxTransparency = 0.7
+local hitboxESPEnabled = false
+local hitboxESPColor = Color3.fromRGB(255, 255, 0)
+local hitboxMountedColor = Color3.fromRGB(0, 255, 255)
+local hitboxData = {}
+
+local function isOnMount(p)
+    if not p or not p.Character then return false end
+    local hum = p.Character:FindFirstChildOfClass("Humanoid")
+    if not hum then return false end
+    return hum.Sit == true
+end
 
 local function cleanHitboxForPlayer(p)
     local dd = hitboxData[p]
     if not dd then return end
 
-    -- Destroy ESP visual
-    if dd.espHighlight and dd.espHighlight.Parent then
-        pcall(function() dd.espHighlight:Destroy() end)
+    -- Destroy highlight
+    if dd.highlight and dd.highlight.Parent then
+        pcall(function() dd.highlight:Destroy() end)
     end
 
-    -- Disconnect connections
+    -- Disconnect
     if dd.updateConn then
         pcall(function() dd.updateConn:Disconnect() end)
     end
@@ -807,7 +822,7 @@ local function cleanHitboxForPlayer(p)
         pcall(function() dd.charRemoveConn:Disconnect() end)
     end
 
-    -- Reset HRP ke ukuran normal
+    -- Reset HRP
     if p and p.Parent and p.Character then
         local hrp = p.Character:FindFirstChild("HumanoidRootPart")
         if hrp then
@@ -815,8 +830,6 @@ local function cleanHitboxForPlayer(p)
                 hrp.Size = Vector3.new(2, 2, 1)
                 hrp.Transparency = 1
                 hrp.CanCollide = false
-                hrp.CanTouch = true
-                hrp.CanQuery = true
                 hrp.Material = Enum.Material.SmoothPlastic
             end)
         end
@@ -831,43 +844,37 @@ local function createHitboxForPlayer(p)
     local hum = p.Character:FindFirstChildOfClass("Humanoid")
     if not hrp or not hum or hum.Health <= 0 then return end
 
-    -- Clean existing
     cleanHitboxForPlayer(p)
 
-    -- Init data
     hitboxData[p] = {}
     local dd = hitboxData[p]
     dd.trackedChar = p.Character
 
-    -- LANGSUNG EXPAND HRP - INI YANG PALING RELIABLE!
-    -- HRP sudah terbukti bergerak mengikuti kuda dari debug
+    -- LANGSUNG EXPAND HRP - TIDAK BUAT PART BARU!
     pcall(function()
         hrp.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
         hrp.Transparency = hitboxTransparency
         hrp.Material = Enum.Material.ForceField
         hrp.Color = hitboxESPColor
         hrp.CanCollide = false
-        hrp.CanTouch = true
-        hrp.CanQuery = true
     end)
 
-    -- ESP menggunakan Highlight (paling smooth, ikut object)
+    -- Highlight untuk visual (otomatis ikut character)
     if hitboxESPEnabled then
-        local highlight = Instance.new("Highlight")
-        highlight.Name = "RyuHitboxHighlight"
-        highlight.Adornee = p.Character
-        highlight.FillColor = hitboxESPColor
-        highlight.OutlineColor = hitboxESPColor
-        highlight.FillTransparency = 0.7
-        highlight.OutlineTransparency = 0
-        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-        highlight.Parent = p.Character
-        dd.espHighlight = highlight
+        local hl = Instance.new("Highlight")
+        hl.Name = "RyuHitboxHL"
+        hl.Adornee = p.Character
+        hl.FillColor = hitboxESPColor
+        hl.OutlineColor = Color3.new(1,1,1)
+        hl.FillTransparency = 0.8
+        hl.OutlineTransparency = 0
+        hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        hl.Parent = p.Character
+        dd.highlight = hl
     end
 
-    -- UPDATE LOOP - Hanya update properties, TIDAK update posisi
+    -- Update loop - HANYA UPDATE PROPERTIES HRP, TIDAK UPDATE POSISI
     dd.updateConn = RunService.Heartbeat:Connect(function()
-        -- Validate
         if not p or not p.Parent then
             cleanHitboxForPlayer(p)
             return
@@ -888,52 +895,43 @@ local function createHitboxForPlayer(p)
             return
         end
 
-        -- Cek mount status untuk warna
         local isMounted = targetHum.Sit
-        local currentColor = isMounted and hitboxMountedColor or hitboxESPColor
+        local color = isMounted and hitboxMountedColor or hitboxESPColor
 
-        -- UPDATE HRP PROPERTIES (bukan posisi, posisi sudah otomatis ikut)
+        -- UPDATE HRP PROPERTIES SAJA
+        -- HRP SUDAH OTOMATIS IKUT KEMANA PUN PLAYER PERGI (termasuk di kuda)
         pcall(function()
-            -- Pastikan size tetap besar
-            if targetHRP.Size.X ~= hitboxSize then
-                targetHRP.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
-            end
+            targetHRP.Size = Vector3.new(hitboxSize, hitboxSize, hitboxSize)
             targetHRP.Transparency = hitboxTransparency
-            targetHRP.Color = currentColor
+            targetHRP.Color = color
             targetHRP.Material = Enum.Material.ForceField
             targetHRP.CanCollide = false
-            targetHRP.CanTouch = true
-            targetHRP.CanQuery = true
         end)
 
-        -- Update highlight color
-        if dd.espHighlight and dd.espHighlight.Parent then
-            pcall(function()
-                dd.espHighlight.FillColor = currentColor
-                dd.espHighlight.OutlineColor = currentColor
-            end)
-        elseif hitboxESPEnabled and not dd.espHighlight then
-            -- Recreate if destroyed
-            local highlight = Instance.new("Highlight")
-            highlight.Name = "RyuHitboxHighlight"
-            highlight.Adornee = p.Character
-            highlight.FillColor = currentColor
-            highlight.OutlineColor = currentColor
-            highlight.FillTransparency = 0.7
-            highlight.OutlineTransparency = 0
-            highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-            highlight.Parent = p.Character
-            dd.espHighlight = highlight
+        -- Update highlight
+        if hitboxESPEnabled then
+            if dd.highlight and dd.highlight.Parent then
+                dd.highlight.FillColor = color
+            elseif not dd.highlight then
+                local hl = Instance.new("Highlight")
+                hl.Name = "RyuHitboxHL"
+                hl.Adornee = p.Character
+                hl.FillColor = color
+                hl.OutlineColor = Color3.new(1,1,1)
+                hl.FillTransparency = 0.8
+                hl.OutlineTransparency = 0
+                hl.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                hl.Parent = p.Character
+                dd.highlight = hl
+            end
         end
     end)
 
-    -- Death handler
     dd.deathConn = hum.Died:Connect(function()
         task.wait(0.3)
         cleanHitboxForPlayer(p)
     end)
 
-    -- Character removing
     dd.charRemoveConn = p.CharacterRemoving:Connect(function()
         cleanHitboxForPlayer(p)
     end)
@@ -949,7 +947,6 @@ local function updateHitboxExpander()
 
             if hum and hrp and hum.Health > 0 then
                 local dd = hitboxData[p]
-                
                 if not dd or dd.trackedChar ~= p.Character then
                     createHitboxForPlayer(p)
                 end
@@ -959,7 +956,6 @@ local function updateHitboxExpander()
         end
     end
 
-    -- Cleanup
     for p, _ in pairs(hitboxData) do
         if not p or not p.Parent then
             cleanHitboxForPlayer(p)
@@ -987,7 +983,6 @@ local function disableHitboxExpander()
         end
     end
 end
-
 	-- ==========================================
 	-- ANTI HITBOX SYSTEM
 	-- ==========================================
