@@ -1765,9 +1765,15 @@ fovCircle.Radius = aimlockFOV; fovCircle.Visible = false; fovCircle.Transparency
 -- ==========================================
 -- TAB: ESP
 -- ==========================================
+-- ==========================================
+-- TAB: ESP (PERBAIKAN)
+-- ==========================================
 local ESPTab = Window:CreateTab("ESP", 4483362458)
 ESPTab:CreateSection("Player ESP")
-ESPTab:CreateToggle({Name = "Enable ESP", CurrentValue = false, Flag = "ESP", Callback = function(V) espEnabled = V; if not V then clearAllESP() end end})
+ESPTab:CreateToggle({Name = "Enable ESP", CurrentValue = false, Flag = "ESP", Callback = function(V) 
+	espEnabled = V
+	if not V then clearAllESP() end
+end})
 ESPTab:CreateToggle({Name = "Name", CurrentValue = false, Flag = "EName", Callback = function(V) espName = V end})
 ESPTab:CreateToggle({Name = "Distance", CurrentValue = false, Flag = "EDist", Callback = function(V) espDistance = V end})
 ESPTab:CreateToggle({Name = "Health", CurrentValue = false, Flag = "EHealth", Callback = function(V) espHealth = V end})
@@ -1775,13 +1781,135 @@ ESPTab:CreateToggle({Name = "Box", CurrentValue = false, Flag = "EBox", Callback
 ESPTab:CreateToggle({Name = "Line", CurrentValue = false, Flag = "ELine", Callback = function(V) espLine = V end})
 ESPTab:CreateToggle({Name = "Highlight", CurrentValue = false, Flag = "EHL", Callback = function(V)
 	espHighlight = V
-	if not V then for _, d in pairs(espObjects) do if d.highlight then pcall(function() d.highlight:Destroy() end); d.highlight = nil end end end
+	if not V then 
+		for _, d in pairs(espObjects) do 
+			if d.highlight then 
+				pcall(function() d.highlight:Destroy() end)
+				d.highlight = nil 
+			end 
+		end 
+	end
 end})
 ESPTab:CreateSlider({Name = "Line Smoothness", Range = {5,100}, Increment = 5, Suffix = "%", CurrentValue = 30, Flag = "ESmooth", Callback = function(V) espLineSmoothing = V/100 end})
-ESPTab:CreateSection("Team")
+ESPTab:CreateSection("Team Settings")
 ESPTab:CreateToggle({Name = "Team Check", CurrentValue = false, Flag = "ETeam", Callback = function(V) espTeamCheck = V end})
 ESPTab:CreateColorPicker({Name = "Enemy Color", Color = Color3.fromRGB(255, 0, 0), Flag = "EEnemy", Callback = function(V) espEnemyColor = V; espColor = V end})
 ESPTab:CreateColorPicker({Name = "Team Color", Color = Color3.fromRGB(0, 255, 0), Flag = "ETeamC", Callback = function(V) espTeamColor = V end})
+
+-- ==========================================
+-- MAIN RENDER LOOP (PERBAIKAN)
+-- ==========================================
+RunService.RenderStepped:Connect(function(dt)
+	local char = player.Character
+	if not char then return end
+	local now = tick()
+
+	-- Movement
+	if noclip then applyNoclip() end
+	applySpeed(dt)
+	applyJump()
+	if noFallDamage then applyNoFall() end
+	if (noRecoilEnabled or noSpreadEnabled) and noRecoilCameraLock then applyNoRecoilCameraLock() end
+
+	-- Aimlock
+	if aimlockEnabled and aimlockHeld then
+		if autoSwitchTarget and not isTargetValid(aimlockTarget) then 
+			aimlockTarget = getClosestInFOV() 
+		end
+		if aimlockTarget and aimlockTarget.Character then
+			local tp = aimlockTarget.Character:FindFirstChild(aimlockPart) or aimlockTarget.Character:FindFirstChild("HumanoidRootPart")
+			local hum = aimlockTarget.Character:FindFirstChildOfClass("Humanoid")
+			if tp and hum and hum.Health > 0 then
+				local myHrp = char:FindFirstChild("HumanoidRootPart")
+				if myHrp and (myHrp.Position - tp.Position).Magnitude <= aimlockDistance then
+					camera.CFrame = camera.CFrame:Lerp(CFrame.new(camera.CFrame.Position, tp.Position), aimlockSmooth)
+				else 
+					aimlockTarget = autoSwitchTarget and getClosestInFOV() or nil 
+				end
+			else 
+				aimlockTarget = autoSwitchTarget and getClosestInFOV() or nil 
+			end
+		end
+	end
+
+	-- Aim Assist
+	if aimAssistEnabled then applyAimAssist(dt) end
+
+	-- FOV Circles
+	local cx, cy = camera.ViewportSize.X/2, camera.ViewportSize.Y/2
+	if fovCircle then 
+		fovCircle.Position = Vector2.new(cx, cy)
+		fovCircle.Radius = aimlockFOV
+		fovCircle.Visible = showFOVCircle and aimlockEnabled 
+	end
+	if aimAssistFOVCircle then 
+		aimAssistFOVCircle.Position = Vector2.new(cx, cy)
+		aimAssistFOVCircle.Radius = aimAssistFOV
+		aimAssistFOVCircle.Visible = showAimAssistFOV and aimAssistEnabled 
+	end
+	if silentAimFOVCircle then 
+		silentAimFOVCircle.Position = Vector2.new(cx, cy)
+		silentAimFOVCircle.Radius = silentAimFOV
+		silentAimFOVCircle.Visible = silentAimShowFOV and silentAimEnabled 
+	end
+
+	-- Player ESP Update (DITAMBAHKAN)
+	if now - lastESPUpdate >= ESP_UPDATE_RATE then
+		lastESPUpdate = now
+		if espEnabled then updatePlayerESP() end
+	end
+
+	-- No Recoil
+	if now - lastNoRecoilUpdate >= NO_RECOIL_UPDATE_RATE then
+		lastNoRecoilUpdate = now
+		if (noRecoilEnabled or noSpreadEnabled) and noRecoilValueOverride then 
+			refreshRecoilOverrides() 
+		end
+		if noRecoilEnabled then overrideRecoilPhysics() end
+	end
+
+	-- Silent Aim Visual
+	if now - lastSilentAimUpdate >= SILENT_AIM_UPDATE_RATE then
+		lastSilentAimUpdate = now
+		if silentAimEnabled then
+			local t, tp = getSilentAimTarget()
+			silentAimCurrentTarget = t
+			if silentAimVisualLine and t and tp then
+				local sp, onS = camera:WorldToViewportPoint(tp.Position)
+				if onS then
+					silentAimVisualLineObj.From = Vector2.new(cx, cy)
+					silentAimVisualLineObj.To = Vector2.new(sp.X, sp.Y)
+					silentAimVisualLineObj.Visible = true
+					silentAimVisualLineObj.Color = tp.Name == "Head" and Color3.fromRGB(255, 50, 50) or Color3.fromRGB(255, 0, 255)
+				else 
+					silentAimVisualLineObj.Visible = false 
+				end
+			elseif silentAimVisualLineObj then 
+				silentAimVisualLineObj.Visible = false 
+			end
+		else 
+			if silentAimVisualLineObj then 
+				silentAimVisualLineObj.Visible = false 
+			end 
+		end
+	end
+
+	-- Hitbox
+	if now - lastHitboxUpdate >= HITBOX_UPDATE_RATE then
+		lastHitboxUpdate = now
+		if hitboxEnabled then updateHitboxExpander() end
+		if antiHitboxEnabled then updateAntiHitbox() end
+	end
+
+	-- Item ESP
+	if now - lastItemESPUpdate >= ITEM_ESP_UPDATE_RATE then
+		lastItemESPUpdate = now
+		if itemESPEnabled then updateItemESP() end
+	end
+
+	-- Brightness
+	if brightnessEnabled then applyBrightness() end
+end)
 -- ==========================================
 -- TAB: Item ESP
 -- ==========================================
