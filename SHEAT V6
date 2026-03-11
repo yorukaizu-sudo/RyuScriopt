@@ -1,30 +1,86 @@
-if not game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Loaded") then
-	local data = Instance.new("NumberValue")
-	data.Name = "Loaded"
-	data.Parent = game:GetService("Players").LocalPlayer.PlayerScripts
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
-	local Rayfield = nil
-	for i = 1, 5 do
-		local s, r = pcall(function()
-			return loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
-		end)
-		if s and r then Rayfield = r break end
-		task.wait(2)
-	end
+if LocalPlayer.PlayerScripts:FindFirstChild("Loaded") then
+    warn("[RyuExploit] Already loaded, skipping...")
+    return
+end
 
-	if not Rayfield then
-		local s, r = pcall(function()
-			return loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Rayfield/main/source"))()
-		end)
-		if s and r then Rayfield = r end
-	end
+-- Tandai sudah loaded
+local data = Instance.new("NumberValue")
+data.Name = "Loaded"
+data.Parent = LocalPlayer.PlayerScripts
 
-	if not Rayfield then
-		warn("[RyuExploit] Cannot load UI library")
-		local m = game:GetService("Players").LocalPlayer.PlayerScripts:FindFirstChild("Loaded")
-		if m then m:Destroy() end
-		return
-	end
+-- Cari fungsi loadstring yang tersedia
+local execFunc = loadstring or load
+if not execFunc then
+    warn("[RyuExploit] loadstring/load not available on this executor")
+    data:Destroy()
+    return
+end
+
+-- Cari fungsi HTTP yang tersedia
+local function httpGet(url)
+    -- Metode 1: game:HttpGet
+    local s1, r1 = pcall(function()
+        return game:HttpGet(url)
+    end)
+    if s1 and r1 then return r1 end
+
+    -- Metode 2: request/http_request/syn.request
+    local requestFunc = request or http_request or (syn and syn.request) or (http and http.request)
+    if requestFunc then
+        local s2, r2 = pcall(function()
+            local resp = requestFunc({Url = url, Method = "GET"})
+            return resp.Body
+        end)
+        if s2 and r2 then return r2 end
+    end
+
+    -- Metode 3: HttpService (biasanya tidak work di client tapi worth trying)
+    local s3, r3 = pcall(function()
+        return game:GetService("HttpService"):GetAsync(url)
+    end)
+    if s3 and r3 then return r3 end
+
+    return nil
+end
+
+-- URL Rayfield (primary & fallback)
+local urls = {
+    "https://sirius.menu/rayfield",
+    "https://raw.githubusercontent.com/shlexware/Rayfield/main/source",
+    "https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source"
+}
+
+local Rayfield = nil
+
+for _, url in ipairs(urls) do
+    for attempt = 1, 3 do
+        local source = httpGet(url)
+        if source then
+            local s, r = pcall(function()
+                return execFunc(source)()
+            end)
+            if s and r then
+                Rayfield = r
+                break
+            else
+                warn("[RyuExploit] pcall error on " .. url .. ": " .. tostring(r))
+            end
+        else
+            warn("[RyuExploit] httpGet failed for " .. url .. " (attempt " .. attempt .. ")")
+        end
+        task.wait(2)
+    end
+    if Rayfield then break end
+end
+
+if not Rayfield then
+    warn("[RyuExploit] Cannot load UI library - executor mungkin tidak support")
+    data:Destroy()
+    return
+end
 
 	-- ==========================================
 	-- SERVICES
