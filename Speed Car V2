@@ -1,0 +1,461 @@
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local Window = Fluent:CreateWindow({
+    Title = "ZalStore | Speed Car",
+    SubTitle = "🏎️ Ultimate Vehicle Controller",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+local Tabs = {
+    Main = Window:AddTab({ Title = "🚗 Vehicle", Icon = "zap" }),
+    Themes = Window:AddTab({ Title = "🎨 Themes", Icon = "palette" }),
+    Settings = Window:AddTab({ Title = "⚙️ Settings", Icon = "settings" })
+}
+
+local Options = Fluent.Options
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS = game:GetService("UserInputService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ==================== VARIABLES ====================
+local speedEnabled = true
+local limitEnabled = true         -- Toggle limit ON/OFF
+local velocityMult = 0.025        -- W acceleration
+local velocityMult2 = 0.150       -- S brake
+local speedLimit = 300            -- Speed limit (studs/s)
+local flightEnabled = false
+local flightSpeed = 1.0
+
+-- ==================== HELPER FUNCTIONS ====================
+
+local function GetVehicleFromDescendant(Descendant)
+    return
+        Descendant:FindFirstAncestor(LocalPlayer.Name .. "'s Car") or
+        (Descendant:FindFirstAncestor("Body") and Descendant:FindFirstAncestor("Body").Parent) or
+        (Descendant:FindFirstAncestor("Misc") and Descendant:FindFirstAncestor("Misc").Parent) or
+        Descendant:FindFirstAncestorWhichIsA("Model")
+end
+
+local function GetSeatPart()
+    local Character = LocalPlayer.Character
+    if not Character then return nil end
+    local Humanoid = Character:FindFirstChildWhichIsA("Humanoid")
+    if not Humanoid then return nil end
+    local SeatPart = Humanoid.SeatPart
+    if SeatPart and SeatPart:IsA("VehicleSeat") then
+        return SeatPart
+    end
+    return nil
+end
+
+local function GetHorizontalSpeed(SeatPart)
+    local vel = SeatPart.AssemblyLinearVelocity
+    return Vector3.new(vel.X, 0, vel.Z).Magnitude
+end
+
+local function ClampVelocity(SeatPart)
+    local vel = SeatPart.AssemblyLinearVelocity
+    local horizontal = Vector3.new(vel.X, 0, vel.Z)
+    local currentSpeed = horizontal.Magnitude
+    if currentSpeed > speedLimit then
+        local clamped = horizontal.Unit * speedLimit
+        SeatPart.AssemblyLinearVelocity = Vector3.new(clamped.X, vel.Y, clamped.Z)
+    end
+end
+
+-- ==================== FLIGHT SYSTEM ====================
+
+local defaultCharacterParent
+RunService.Stepped:Connect(function()
+    local Character = LocalPlayer.Character
+    if flightEnabled then
+        if Character then
+            local Humanoid = Character:FindFirstChildWhichIsA("Humanoid")
+            if Humanoid then
+                local SeatPart = Humanoid.SeatPart
+                if SeatPart and SeatPart:IsA("VehicleSeat") then
+                    local Vehicle = GetVehicleFromDescendant(SeatPart)
+                    if Vehicle and Vehicle:IsA("Model") then
+                        Character.Parent = Vehicle
+                        if not Vehicle.PrimaryPart then
+                            Vehicle.PrimaryPart = SeatPart.Parent == Vehicle and SeatPart or Vehicle:FindFirstChildWhichIsA("BasePart")
+                        end
+                        local PrimaryPartCFrame = Vehicle:GetPrimaryPartCFrame()
+                        local moveX = (UIS:IsKeyDown(Enum.KeyCode.D) and flightSpeed) or (UIS:IsKeyDown(Enum.KeyCode.A) and -flightSpeed) or 0
+                        local moveY = (UIS:IsKeyDown(Enum.KeyCode.E) and flightSpeed / 2) or (UIS:IsKeyDown(Enum.KeyCode.Q) and -flightSpeed / 2) or 0
+                        local moveZ = (UIS:IsKeyDown(Enum.KeyCode.S) and flightSpeed) or (UIS:IsKeyDown(Enum.KeyCode.W) and -flightSpeed) or 0
+                        Vehicle:SetPrimaryPartCFrame(
+                            CFrame.new(
+                                PrimaryPartCFrame.Position,
+                                PrimaryPartCFrame.Position + workspace.CurrentCamera.CFrame.LookVector
+                            ) * (UIS:GetFocusedTextBox() and CFrame.new(0,0,0) or CFrame.new(moveX, moveY, moveZ))
+                        )
+                        SeatPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                        SeatPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+                    end
+                end
+            end
+        end
+    else
+        if Character then
+            Character.Parent = defaultCharacterParent or Character.Parent
+            defaultCharacterParent = Character.Parent
+        end
+    end
+end)
+
+-- ==================== SPEED LIMIT ENFORCER ====================
+RunService.Heartbeat:Connect(function()
+    if not speedEnabled then return end
+    if not limitEnabled then return end
+    if flightEnabled then return end
+    local SeatPart = GetSeatPart()
+    if not SeatPart then return end
+    ClampVelocity(SeatPart)
+end)
+
+-- ==================== INPUT: W / S / P ====================
+UIS.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if not speedEnabled then return end
+    if flightEnabled then return end
+
+    -- W = Acceleration
+    if input.KeyCode == Enum.KeyCode.W then
+        task.spawn(function()
+            while UIS:IsKeyDown(Enum.KeyCode.W) do
+                task.wait(0)
+                if not speedEnabled or flightEnabled then break end
+                local SeatPart = GetSeatPart()
+                if SeatPart then
+                    -- Cek limit sebelum boost
+                    local currentSpeed = GetHorizontalSpeed(SeatPart)
+                    if not limitEnabled or currentSpeed < speedLimit then
+                        local vel = SeatPart.AssemblyLinearVelocity
+                        SeatPart.AssemblyLinearVelocity = Vector3.new(
+                            vel.X * (1 + velocityMult),
+                            vel.Y,
+                            vel.Z * (1 + velocityMult)
+                        )
+                        -- Clamp setelah boost jika limit aktif
+                        if limitEnabled then
+                            ClampVelocity(SeatPart)
+                        end
+                    end
+                end
+            end
+        end)
+    end
+
+    -- S = Brake
+    if input.KeyCode == Enum.KeyCode.S then
+        task.spawn(function()
+            while UIS:IsKeyDown(Enum.KeyCode.S) do
+                task.wait(0)
+                if not speedEnabled or flightEnabled then break end
+                local SeatPart = GetSeatPart()
+                if SeatPart then
+                    local vel = SeatPart.AssemblyLinearVelocity
+                    SeatPart.AssemblyLinearVelocity = Vector3.new(
+                        vel.X * (1 - velocityMult2),
+                        vel.Y,
+                        vel.Z * (1 - velocityMult2)
+                    )
+                end
+            end
+        end)
+    end
+
+    -- P = Stop Total
+    if input.KeyCode == Enum.KeyCode.P then
+        local SeatPart = GetSeatPart()
+        if SeatPart then
+            SeatPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            SeatPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            Fluent:Notify({
+                Title = "🛑 ZalStore | STOP",
+                Content = "Kendaraan dihentikan paksa!",
+                Duration = 2
+            })
+        end
+    end
+end)
+
+-- ==================== MAIN TAB ====================
+
+Tabs.Main:AddParagraph({
+    Title = "🏁 ZalStore | Speed Car",
+    Content = "⚡ [W] = Acceleration\n🛞 [S] = Brake\n🛑 [P] = Stop Total\n✈️ Flight: W/A/S/D + Q(Naik)/E(Turun)"
+})
+
+-- Toggle Keybinds
+Tabs.Main:AddToggle("SpeedToggle", {
+    Title = "⚡ Aktifkan Keybinds",
+    Description = "ON = [W] Boost | [S] Brake | [P] Stop",
+    Default = true
+}):OnChanged(function()
+    speedEnabled = Options.SpeedToggle.Value
+    Fluent:Notify({
+        Title = speedEnabled and "✅ Keybinds ON" or "❌ Keybinds OFF",
+        Content = speedEnabled and "Keybinds aktif!" or "Keybinds dinonaktifkan.",
+        Duration = 2
+    })
+end)
+
+-- Flight Toggle
+Tabs.Main:AddToggle("FlightToggle", {
+    Title = "✈️ Flight Mode",
+    Description = "Terbang dengan kendaraan! W/A/S/D + Q/E",
+    Default = false
+}):OnChanged(function()
+    flightEnabled = Options.FlightToggle.Value
+    Fluent:Notify({
+        Title = flightEnabled and "✈️ Flight ON" or "✈️ Flight OFF",
+        Content = flightEnabled and "W/A/S/D terbang | Q Naik | E Turun" or "Flight dimatikan.",
+        Duration = 3
+    })
+end)
+
+-- Flight Speed
+Tabs.Main:AddSlider("FlightSpeed", {
+    Title = "✈️ Flight Speed",
+    Description = "Kecepatan terbang (0 - 800)",
+    Default = 100,
+    Min = 0,
+    Max = 800,
+    Rounding = 0,
+    Callback = function(Value)
+        flightSpeed = tonumber(Value) / 100
+    end
+})
+
+Tabs.Main:AddParagraph({
+    Title = "🔧 Acceleration & Brake",
+    Content = "Atur multiplier boost dan rem kendaraan"
+})
+
+-- Acceleration Multiplier
+Tabs.Main:AddSlider("AccelSlider", {
+    Title = "⚡ Acceleration Multiplier",
+    Description = "Seberapa cepat boost saat tekan W (0 - 50)",
+    Default = 25,
+    Min = 0,
+    Max = 50,
+    Rounding = 0,
+    Callback = function(Value)
+        velocityMult = tonumber(Value) / 1000
+    end
+})
+
+-- Brake Force
+Tabs.Main:AddSlider("BrakeSlider", {
+    Title = "🛞 Brake Force",
+    Description = "Kekuatan rem saat tekan S (0 - 300)",
+    Default = 150,
+    Min = 0,
+    Max = 300,
+    Rounding = 0,
+    Callback = function(Value)
+        velocityMult2 = tonumber(Value) / 1000
+    end
+})
+
+Tabs.Main:AddParagraph({
+    Title = "🚧 Speed Limit Settings",
+    Content = "Atur batas maksimal kecepatan kendaraan"
+})
+
+-- Toggle Speed Limit
+Tabs.Main:AddToggle("LimitToggle", {
+    Title = "🚧 Aktifkan Speed Limit",
+    Description = "ON = Kecepatan dibatasi | OFF = Bebas",
+    Default = true
+}):OnChanged(function()
+    limitEnabled = Options.LimitToggle.Value
+    Fluent:Notify({
+        Title = limitEnabled and "🚧 Limit ON" or "🚧 Limit OFF",
+        Content = limitEnabled and "Speed limit aktif! Max: " .. speedLimit .. " studs/s" or "Speed limit dimatikan! Gas poll! 🔥",
+        Duration = 2
+    })
+end)
+
+-- Speed Limit Value
+Tabs.Main:AddSlider("LimitSlider", {
+    Title = "🚧 Speed Limit (Studs/s)",
+    Description = "Batas maksimal kecepatan (10 - 1000)",
+    Default = 300,
+    Min = 10,
+    Max = 1000,
+    Rounding = 0,
+    Callback = function(Value)
+        speedLimit = tonumber(Value)
+    end
+})
+
+-- Stop Button
+Tabs.Main:AddButton({
+    Title = "🛑 Stop Kendaraan Sekarang",
+    Description = "Hentikan kendaraan paksa (sama seperti [P])",
+    Callback = function()
+        local SeatPart = GetSeatPart()
+        if SeatPart then
+            SeatPart.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            SeatPart.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+            Fluent:Notify({ Title = "🛑 STOP", Content = "Kendaraan dihentikan paksa!", Duration = 2 })
+        else
+            Fluent:Notify({ Title = "⚠️ ZalStore", Content = "Kamu tidak sedang di kendaraan!", Duration = 2 })
+        end
+    end
+})
+
+-- ==================== QUICK PRESETS ====================
+
+Tabs.Main:AddParagraph({
+    Title = "⚡ Quick Presets",
+    Content = "Pilih preset kecepatan instan"
+})
+
+Tabs.Main:AddButton({
+    Title = "🐢 Mode Santai",
+    Description = "Accel: 10 | Brake: 100 | Limit: 100",
+    Callback = function()
+        Options.AccelSlider:SetValue(10)
+        Options.BrakeSlider:SetValue(100)
+        Options.LimitSlider:SetValue(100)
+        Options.LimitToggle:SetValue(true)
+        velocityMult = 10 / 1000
+        velocityMult2 = 100 / 1000
+        speedLimit = 100
+        limitEnabled = true
+        Fluent:Notify({ Title = "🐢 Santai", Content = "Preset santai aktif!", Duration = 2 })
+    end
+})
+
+Tabs.Main:AddButton({
+    Title = "🚗 Mode Normal",
+    Description = "Accel: 25 | Brake: 150 | Limit: 300",
+    Callback = function()
+        Options.AccelSlider:SetValue(25)
+        Options.BrakeSlider:SetValue(150)
+        Options.LimitSlider:SetValue(300)
+        Options.LimitToggle:SetValue(true)
+        velocityMult = 25 / 1000
+        velocityMult2 = 150 / 1000
+        speedLimit = 300
+        limitEnabled = true
+        Fluent:Notify({ Title = "🚗 Normal", Content = "Preset normal aktif!", Duration = 2 })
+    end
+})
+
+Tabs.Main:AddButton({
+    Title = "🏎️ Mode Racing",
+    Description = "Accel: 40 | Brake: 200 | Limit: 600",
+    Callback = function()
+        Options.AccelSlider:SetValue(40)
+        Options.BrakeSlider:SetValue(200)
+        Options.LimitSlider:SetValue(600)
+        Options.LimitToggle:SetValue(true)
+        velocityMult = 40 / 1000
+        velocityMult2 = 200 / 1000
+        speedLimit = 600
+        limitEnabled = true
+        Fluent:Notify({ Title = "🏎️ Racing", Content = "Preset racing aktif!", Duration = 2 })
+    end
+})
+
+Tabs.Main:AddButton({
+    Title = "🚀 Mode MAX (No Limit)",
+    Description = "Accel: 50 | Brake: 300 | Limit: OFF",
+    Callback = function()
+        Options.AccelSlider:SetValue(50)
+        Options.BrakeSlider:SetValue(300)
+        Options.LimitToggle:SetValue(false)
+        velocityMult = 50 / 1000
+        velocityMult2 = 300 / 1000
+        limitEnabled = false
+        Fluent:Notify({ Title = "🚀 MAX POWER!", Content = "No limit! Gas poll! 🔥", Duration = 2 })
+    end
+})
+
+Tabs.Main:AddButton({
+    Title = "🔄 Reset Default",
+    Description = "Kembalikan semua ke default",
+    Callback = function()
+        Options.SpeedToggle:SetValue(true)
+        Options.FlightToggle:SetValue(false)
+        Options.FlightSpeed:SetValue(100)
+        Options.AccelSlider:SetValue(25)
+        Options.BrakeSlider:SetValue(150)
+        Options.LimitToggle:SetValue(true)
+        Options.LimitSlider:SetValue(300)
+        velocityMult = 25 / 1000
+        velocityMult2 = 150 / 1000
+        speedLimit = 300
+        limitEnabled = true
+        speedEnabled = true
+        flightEnabled = false
+        flightSpeed = 1.0
+        Fluent:Notify({ Title = "🔄 Reset", Content = "Semua dikembalikan ke default!", Duration = 2 })
+    end
+})
+
+-- ==================== THEMES TAB ====================
+
+Tabs.Themes:AddParagraph({
+    Title = "🎨 ZalStore Themes",
+    Content = "Pilih tema favoritmu!"
+})
+
+local ThemeDropdown = Tabs.Themes:AddDropdown("ThemeSelector", {
+    Title = "🎨 Pilih Tema",
+    Description = "Ganti tema tampilan UI",
+    Values = {"Dark", "Light", "Aqua", "Amethyst", "Rose"},
+    Default = "Dark",
+    Multi = false,
+})
+
+ThemeDropdown:OnChanged(function(Value)
+    Fluent:SetTheme(Value)
+    Fluent:Notify({ Title = "🎨 Theme", Content = "Tema " .. Value .. " diaktifkan!", Duration = 2 })
+end)
+
+Tabs.Themes:AddButton({ Title = "🌙 Dark", Description = "Tema gelap", Callback = function() Fluent:SetTheme("Dark") Options.ThemeSelector:SetValue("Dark") end })
+Tabs.Themes:AddButton({ Title = "☀️ Light", Description = "Tema terang", Callback = function() Fluent:SetTheme("Light") Options.ThemeSelector:SetValue("Light") end })
+Tabs.Themes:AddButton({ Title = "🌊 Aqua", Description = "Tema biru aqua", Callback = function() Fluent:SetTheme("Aqua") Options.ThemeSelector:SetValue("Aqua") end })
+Tabs.Themes:AddButton({ Title = "💜 Amethyst", Description = "Tema ungu", Callback = function() Fluent:SetTheme("Amethyst") Options.ThemeSelector:SetValue("Amethyst") end })
+Tabs.Themes:AddButton({ Title = "🌹 Rose", Description = "Tema merah rose", Callback = function() Fluent:SetTheme("Rose") Options.ThemeSelector:SetValue("Rose") end })
+
+Tabs.Themes:AddParagraph({
+    Title = "📌 Credits",
+    Content = "🏪 ZalStore | Speed Car\n👨‍💻 Script by ZalStore\n🎨 UI: Fluent by dawid\n⭐ Terima kasih sudah menggunakan ZalStore!"
+})
+
+-- ==================== SETTINGS TAB ====================
+
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+InterfaceManager:SetFolder("ZalStore_SpeedCar")
+SaveManager:SetFolder("ZalStore_SpeedCar/configs")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+Window:SelectTab(1)
+
+Fluent:Notify({
+    Title = "🏪 ZalStore | Speed Car",
+    Content = "✅ Script berhasil dimuat!\n⚡ [W] Boost | [S] Brake | [P] Stop\n🚧 Speed Limit: ON (300 studs/s)\n✈️ Flight tersedia!",
+    Duration = 6
+})
+
+SaveManager:LoadAutoloadConfig()
