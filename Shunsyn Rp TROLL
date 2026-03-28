@@ -1,0 +1,694 @@
+-- ZallStore Troll By Nubycode
+local NothingLibrary = loadstring(game:HttpGetAsync('https://raw.githubusercontent.com/3345-c-a-t-s-u-s/NOTHING/main/source.lua'))();
+local Notification = NothingLibrary.Notification();
+
+Notification.new({
+    Title = "ZallStore",
+    Description = "Script Loaded Successfully!",
+    Duration = 5,
+    Icon = "rbxassetid://8997385628"
+})
+
+local Windows = NothingLibrary.new({
+    Title = "ZallStore",
+    Description = "Troll By Nubycode",
+    Keybind = Enum.KeyCode.LeftControl,
+    Logo = 'http://www.roblox.com/asset/?id=18898582662'
+})
+
+local TabFrame = Windows:NewTab({
+    Title = "Main",
+    Description = "Main Features",
+    Icon = "rbxassetid://7733960981"
+})
+
+local Section = TabFrame:NewSection({
+    Title = "Auto Farm",
+    Icon = "rbxassetid://7743869054",
+    Position = "Left"
+})
+
+local InfoSection = TabFrame:NewSection({
+    Title = "Settings",
+    Icon = "rbxassetid://7733964719",
+    Position = "Right"
+})
+
+-- Variables
+local AutoPunchEnabled = false
+local AutoFlingTPEnabled = false
+local HitboxSize = 20
+local PunchSpeed = 0.01
+local FlingSpeed = 0.02
+local SelectedTarget = nil
+local CurrentTargetIndex = 1
+local HitboxMethod = "Size Only"
+local PunchesPerTarget = 10
+
+-- Get Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Player = Players.LocalPlayer
+
+-- Function to get character safely
+local function GetCharacter()
+    return Player.Character or Player.CharacterAdded:Wait()
+end
+
+local function GetHumanoidRootPart()
+    local char = GetCharacter()
+    return char and char:FindFirstChild("HumanoidRootPart")
+end
+
+local function GetPunchEvent()
+    local char = GetCharacter()
+    if char then
+        local punch = char:FindFirstChild("Punch")
+        if punch then
+            return punch:FindFirstChild("PunchEvent")
+        end
+    end
+    return nil
+end
+
+-- Update when character respawns
+Player.CharacterAdded:Connect(function(char)
+    wait(1)
+    Notification.new({
+        Title = "Character Loaded",
+        Description = "Ready to fling & punch!",
+        Duration = 3,
+        Icon = "rbxassetid://8997385628"
+    })
+end)
+
+-- Check if player is in vehicle
+local function IsPlayerInVehicle(player)
+    if not player.Character then return false end
+    
+    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+    if humanoid and humanoid.SeatPart then
+        return true
+    end
+    return false
+end
+
+-- Get valid targets (not in vehicles)
+local function GetValidTargets()
+    local validTargets = {}
+    for _, target in pairs(Players:GetPlayers()) do
+        if target ~= Player and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+            if not IsPlayerInVehicle(target) then
+                table.insert(validTargets, target)
+            end
+        end
+    end
+    return validTargets
+end
+
+-- Auto Punch Function
+spawn(function()
+    while true do
+        wait(PunchSpeed)
+        if AutoPunchEnabled then
+            pcall(function()
+                local event = GetPunchEvent()
+                if event then
+                    event:FireServer(7)
+                end
+            end)
+        end
+    end
+end)
+
+-- FLING TP MODE - TP Cepet Banget Kayak Fling
+local FlingTPConnection
+local currentPunchCount = 0
+spawn(function()
+    while true do
+        wait()
+        if AutoFlingTPEnabled then
+            pcall(function()
+                local validTargets = GetValidTargets()
+                local hrp = GetHumanoidRootPart()
+                local event = GetPunchEvent()
+                
+                if #validTargets > 0 and hrp then
+                    -- Reset index jika melebihi
+                    if CurrentTargetIndex > #validTargets then
+                        CurrentTargetIndex = 1
+                        currentPunchCount = 0
+                    end
+                    
+                    local target = validTargets[CurrentTargetIndex]
+                    
+                    if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") then
+                        local targetHRP = target.Character.HumanoidRootPart
+                        
+                        -- FLING STYLE TP - Random offset setiap frame
+                        local randomOffset = CFrame.new(
+                            math.random(-3, 3),
+                            math.random(-1, 2),
+                            math.random(-3, 3)
+                        )
+                        
+                        hrp.CFrame = targetHRP.CFrame * randomOffset
+                        
+                        -- Punch super cepat
+                        if event then
+                            event:FireServer(7)
+                            currentPunchCount = currentPunchCount + 1
+                        end
+                        
+                        -- Pindah ke target berikutnya setelah X punches
+                        if currentPunchCount >= PunchesPerTarget then
+                            CurrentTargetIndex = CurrentTargetIndex + 1
+                            currentPunchCount = 0
+                            wait(0.1) -- Delay kecil sebelum pindah
+                        end
+                        
+                        wait(FlingSpeed) -- Delay per fling
+                    else
+                        CurrentTargetIndex = CurrentTargetIndex + 1
+                        currentPunchCount = 0
+                    end
+                end
+            end)
+        else
+            currentPunchCount = 0
+        end
+    end
+end)
+
+-- HITBOX METHOD 1: Size Only
+local OriginalSizes = {}
+local function ExpandHitbox_SizeOnly(size)
+    pcall(function()
+        for _, v in pairs(Players:GetPlayers()) do
+            if v ~= Player and v.Character then
+                if not IsPlayerInVehicle(v) then
+                    for _, part in pairs(v.Character:GetDescendants()) do
+                        if part:IsA("BasePart") and part.Name == "HumanoidRootPart" then
+                            if not OriginalSizes[part] then
+                                OriginalSizes[part] = part.Size
+                            end
+                            
+                            part.Size = Vector3.new(size, size, size)
+                            part.Transparency = 0.5
+                            part.CanCollide = false
+                            part.Massless = true
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- HITBOX METHOD 2: Invisible Part
+local InvisibleParts = {}
+local function ExpandHitbox_InvisiblePart(size)
+    pcall(function()
+        for _, v in pairs(Players:GetPlayers()) do
+            if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+                if not IsPlayerInVehicle(v) then
+                    local hrp = v.Character.HumanoidRootPart
+                    
+                    if InvisibleParts[v.UserId] then
+                        InvisibleParts[v.UserId]:Destroy()
+                    end
+                    
+                    local hitbox = Instance.new("Part")
+                    hitbox.Name = "Hitbox"
+                    hitbox.Size = Vector3.new(size, size, size)
+                    hitbox.Transparency = 1
+                    hitbox.CanCollide = true
+                    hitbox.Anchored = false
+                    hitbox.Massless = true
+                    hitbox.Parent = v.Character
+                    
+                    local weld = Instance.new("WeldConstraint")
+                    weld.Part0 = hrp
+                    weld.Part1 = hitbox
+                    weld.Parent = hitbox
+                    
+                    InvisibleParts[v.UserId] = hitbox
+                end
+            end
+        end
+    end)
+end
+
+-- HITBOX METHOD 3: All Body Parts
+local function ExpandHitbox_AllParts(size)
+    pcall(function()
+        for _, v in pairs(Players:GetPlayers()) do
+            if v ~= Player and v.Character then
+                if not IsPlayerInVehicle(v) then
+                    for _, part in pairs(v.Character:GetDescendants()) do
+                        if part:IsA("BasePart") and part.Name ~= "HumanoidRootPart" then
+                            part.Size = Vector3.new(size/2, size/2, size/2)
+                            part.Transparency = 0.7
+                            part.CanCollide = false
+                            part.Massless = true
+                        end
+                    end
+                    
+                    if v.Character:FindFirstChild("HumanoidRootPart") then
+                        local hrp = v.Character.HumanoidRootPart
+                        hrp.Size = Vector3.new(size, size, size)
+                        hrp.Transparency = 0.5
+                        hrp.CanCollide = false
+                        hrp.Massless = true
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- HITBOX METHOD 4: Force Field Style
+local SelectionBoxes = {}
+local function ExpandHitbox_ForceField(size)
+    pcall(function()
+        for _, v in pairs(Players:GetPlayers()) do
+            if v ~= Player and v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+                if not IsPlayerInVehicle(v) then
+                    local hrp = v.Character.HumanoidRootPart
+                    
+                    hrp.Size = Vector3.new(size, size, size)
+                    hrp.Transparency = 0.9
+                    hrp.CanCollide = false
+                    hrp.Massless = true
+                    
+                    if not SelectionBoxes[v.UserId] then
+                        local box = Instance.new("SelectionBox")
+                        box.Adornee = hrp
+                        box.LineThickness = 0.05
+                        box.Color3 = Color3.fromRGB(255, 0, 0)
+                        box.Parent = hrp
+                        SelectionBoxes[v.UserId] = box
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- Main Expand Hitbox Function
+local function ExpandHitbox(size)
+    if HitboxMethod == "Size Only" then
+        ExpandHitbox_SizeOnly(size)
+    elseif HitboxMethod == "Invisible Part" then
+        ExpandHitbox_InvisiblePart(size)
+    elseif HitboxMethod == "All Body Parts" then
+        ExpandHitbox_AllParts(size)
+    elseif HitboxMethod == "Force Field" then
+        ExpandHitbox_ForceField(size)
+    end
+end
+
+-- Auto Expand Hitbox Loop
+spawn(function()
+    while wait(0.5) do
+        if AutoFlingTPEnabled then
+            ExpandHitbox(HitboxSize)
+        end
+    end
+end)
+
+-- Get Players List
+local function GetPlayers()
+    local playerList = {}
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= Player then
+            table.insert(playerList, v.Name)
+        end
+    end
+    return playerList
+end
+
+-- TP to Single Target
+spawn(function()
+    while wait(0.05) do
+        if SelectedTarget and not AutoFlingTPEnabled then
+            pcall(function()
+                local target = Players:FindFirstChild(SelectedTarget)
+                local hrp = GetHumanoidRootPart()
+                
+                if target and target.Character and target.Character:FindFirstChild("HumanoidRootPart") and hrp then
+                    if not IsPlayerInVehicle(target) then
+                        hrp.CFrame = target.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+                        
+                        if AutoPunchEnabled then
+                            local event = GetPunchEvent()
+                            if event then
+                                event:FireServer(7)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- UI Elements
+Section:NewToggle({
+    Title = "Auto Punch (Ultra Fast)",
+    Default = false,
+    Callback = function(tr)
+        AutoPunchEnabled = tr
+        if tr then
+            local event = GetPunchEvent()
+            if event then
+                event:FireServer(7)
+                Notification.new({
+                    Title = "Auto Punch",
+                    Description = "Enabled! Punch working!",
+                    Duration = 3,
+                    Icon = "rbxassetid://8997385628"
+                })
+            else
+                Notification.new({
+                    Title = "Auto Punch",
+                    Description = "Enabled! Waiting for punch tool...",
+                    Duration = 3,
+                    Icon = "rbxassetid://8997385628"
+                })
+            end
+        end
+    end,
+})
+
+Section:NewToggle({
+    Title = "Auto Fling TP (EXTREME MODE)",
+    Default = false,
+    Callback = function(tr)
+        AutoFlingTPEnabled = tr
+        if tr then
+            CurrentTargetIndex = 1
+            currentPunchCount = 0
+            Notification.new({
+                Title = "FLING MODE",
+                Description = "EXTREME SPEED ACTIVATED!",
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        else
+            Notification.new({
+                Title = "FLING MODE",
+                Description = "Disabled",
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        end
+    end,
+})
+
+Section:NewButton({
+    Title = "Test Punch (Manual)",
+    Callback = function()
+        local event = GetPunchEvent()
+        if event then
+            for i = 1, 5 do
+                event:FireServer(7)
+                wait(0.1)
+            end
+            Notification.new({
+                Title = "Test Punch",
+                Description = "Punched 5 times!",
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        else
+            Notification.new({
+                Title = "Error",
+                Description = "Punch tool not found!",
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        end
+    end,
+})
+
+Section:NewSlider({
+    Title = "Punch Speed",
+    Min = 0.01,
+    Max = 0.5,
+    Default = 0.01,
+    Callback = function(a)
+        PunchSpeed = a
+    end,
+})
+
+Section:NewSlider({
+    Title = "Fling Speed (Lower = Faster)",
+    Min = 0.001,
+    Max = 0.1,
+    Default = 0.02,
+    Callback = function(a)
+        FlingSpeed = a
+        Notification.new({
+            Title = "Fling Speed",
+            Description = "Set to: " .. a .. " (Lower = Crazier!)",
+            Duration = 3,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
+
+Section:NewSlider({
+    Title = "Punches Per Target",
+    Min = 5,
+    Max = 50,
+    Default = 10,
+    Callback = function(a)
+        PunchesPerTarget = a
+    end,
+})
+
+Section:NewDropdown({
+    Title = "Hitbox Method",
+    Data = {'Size Only', 'Invisible Part', 'All Body Parts', 'Force Field'},
+    Default = 'Size Only',
+    Callback = function(a)
+        HitboxMethod = a
+        Notification.new({
+            Title = "Hitbox Method",
+            Description = "Changed to: " .. a,
+            Duration = 3,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
+
+Section:NewSlider({
+    Title = "Hitbox Size",
+    Min = 10,
+    Max = 100,
+    Default = 20,
+    Callback = function(a)
+        HitboxSize = a
+        ExpandHitbox(a)
+    end,
+})
+
+Section:NewButton({
+    Title = "Expand Hitbox NOW",
+    Callback = function()
+        ExpandHitbox(HitboxSize)
+        Notification.new({
+            Title = "Hitbox",
+            Description = "Method: " .. HitboxMethod .. " | Size: " .. HitboxSize,
+            Duration = 3,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
+
+Section:NewButton({
+    Title = "Reset All Hitboxes",
+    Callback = function()
+        pcall(function()
+            for part, originalSize in pairs(OriginalSizes) do
+                if part and part.Parent then
+                    part.Size = originalSize
+                    part.Transparency = 1
+                    part.CanCollide = false
+                end
+            end
+            OriginalSizes = {}
+            
+            for _, part in pairs(InvisibleParts) do
+                if part then part:Destroy() end
+            end
+            InvisibleParts = {}
+            
+            for _, box in pairs(SelectionBoxes) do
+                if box then box:Destroy() end
+            end
+            SelectionBoxes = {}
+        end)
+        Notification.new({
+            Title = "Hitbox",
+            Description = "All methods reset!",
+            Duration = 3,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
+
+Section:NewDropdown({
+    Title = "Select Target",
+    Data = GetPlayers(),
+    Default = nil,
+    Callback = function(a)
+        SelectedTarget = a
+    end,
+})
+
+Section:NewButton({
+    Title = "Refresh Players",
+    Callback = function()
+        Notification.new({
+            Title = "Refreshed",
+            Description = "Player list updated",
+            Duration = 3,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
+
+Section:NewButton({
+    Title = "Kill All (Nuke Mode)",
+    Callback = function()
+        spawn(function()
+            local hrp = GetHumanoidRootPart()
+            local event = GetPunchEvent()
+            
+            if not hrp or not event then
+                Notification.new({
+                    Title = "Error",
+                    Description = "Character or punch tool not ready!",
+                    Duration = 3,
+                    Icon = "rbxassetid://8997385628"
+                })
+                return
+            end
+            
+            for round = 1, 20 do
+                local validTargets = GetValidTargets()
+                for _, v in pairs(validTargets) do
+                    if v.Character and v.Character:FindFirstChild("HumanoidRootPart") then
+                        for fling = 1, 5 do
+                            local offset = CFrame.new(math.random(-2,2), 0, math.random(-2,2))
+                            hrp.CFrame = v.Character.HumanoidRootPart.CFrame * offset
+                            event:FireServer(7)
+                            wait(0.01)
+                        end
+                    end
+                end
+            end
+            Notification.new({
+                Title = "Nuke Mode",
+                Description = "DESTROYED EVERYONE!",
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        end)
+    end,
+})
+
+InfoSection:NewSlider({
+    Title = "WalkSpeed",
+    Min = 16,
+    Max = 300,
+    Default = 16,
+    Callback = function(a)
+        local char = GetCharacter()
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.WalkSpeed = a
+        end
+    end,
+})
+
+InfoSection:NewSlider({
+    Title = "Jump Power",
+    Min = 50,
+    Max = 500,
+    Default = 50,
+    Callback = function(a)
+        local char = GetCharacter()
+        if char and char:FindFirstChild("Humanoid") then
+            char.Humanoid.JumpPower = a
+        end
+    end,
+})
+
+InfoSection:NewButton({
+    Title = "Show Valid Targets",
+    Callback = function()
+        local validTargets = GetValidTargets()
+        local names = ""
+        for _, v in pairs(validTargets) do
+            names = names .. v.Name .. ", "
+        end
+        Notification.new({
+            Title = "Valid Targets",
+            Description = "Total: " .. #validTargets,
+            Duration = 5,
+            Icon = "rbxassetid://8997385628"
+        })
+        print("Valid Targets:", names)
+    end,
+})
+
+InfoSection:NewButton({
+    Title = "Remove Kill Barriers",
+    Callback = function()
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("Part") and (v.Name == "KillBrick" or v.Name == "DeathBrick") then
+                v:Destroy()
+            end
+        end
+        Notification.new({
+            Title = "Barriers",
+            Description = "Kill barriers removed!",
+            Duration = 3,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
+
+InfoSection:NewButton({
+    Title = "Anti-AFK",
+    Callback = function()
+        local VirtualUser = game:GetService("VirtualUser")
+        Player.Idled:Connect(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end)
+        Notification.new({
+            Title = "Anti-AFK",
+            Description = "Activated!",
+            Duration = 3,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
+
+InfoSection:NewTitle('ZallStore')
+InfoSection:NewTitle('By Nubycode')
+InfoSection:NewButton({
+    Title = "Discord",
+    Callback = function()
+        setclipboard('discord.gg/BH6pE7jesa')
+        Notification.new({
+            Title = "Discord",
+            Description = "Link copied to clipboard!",
+            Duration = 3,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
