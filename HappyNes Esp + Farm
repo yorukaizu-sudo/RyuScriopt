@@ -1,0 +1,522 @@
+local NothingLibrary = loadstring(game:HttpGetAsync('https://raw.githubusercontent.com/3345-c-a-t-s-u-s/NOTHING/main/source.lua'))();
+local Notification = NothingLibrary.Notification();
+
+Notification.new({
+	Title = "NubyCode",
+	Description = "Premium ESP + Spam Oil Farm Loaded!",
+	Duration = 5,
+	Icon = "rbxassetid://8997385628"
+})
+
+local Windows = NothingLibrary.new({
+	Title = "By NubyCode",
+	Description = "Premium ESP + Spam Oil Farm Hub",
+	Keybind = Enum.KeyCode.LeftControl,
+	Logo = 'http://www.roblox.com/asset/?id=18898582662'
+})
+
+local TabFrame = Windows:NewTab({
+	Title = "ESP",
+	Description = "Premium ESP",
+	Icon = "rbxassetid://7733960981"
+})
+
+local FarmTab = Windows:NewTab({
+	Title = "Auto Farm",
+	Description = "Spam Oil Farm",
+	Icon = "rbxassetid://7733960981"
+})
+
+local Section = TabFrame:NewSection({
+	Title = "ESP Controls",
+	Icon = "rbxassetid://7743869054",
+	Position = "Left"
+})
+
+local InfoSection = TabFrame:NewSection({
+	Title = "Information",
+	Icon = "rbxassetid://7733964719",
+	Position = "Right"
+})
+
+local FarmSection = FarmTab:NewSection({
+	Title = "Oil Farm Controls",
+	Icon = "rbxassetid://7743869054",
+	Position = "Left"
+})
+
+local FarmInfoSection = FarmTab:NewSection({
+	Title = "Farm Info",
+	Icon = "rbxassetid://7733964719",
+	Position = "Right"
+})
+
+-- ==================== SERVICES ====================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ==================== REMOTES ====================
+local MinigameEvent = nil
+local SellEvent = nil
+
+pcall(function()
+	MinigameEvent = ReplicatedStorage:WaitForChild("Remotes", 5) and ReplicatedStorage.Remotes:FindFirstChild("MinigameResult")
+end)
+pcall(function()
+	SellEvent = ReplicatedStorage:FindFirstChild("SellItemEvent")
+end)
+
+-- ==================== ESP VARIABLES ====================
+local ESPEnabled = false
+local ESPBoxEnabled = false
+local ESPNameEnabled = false
+local ESPHealthEnabled = false
+local ESPDistanceEnabled = false
+local ESPTracerEnabled = false
+local ESPHighlightEnabled = false
+local ESPTeamCheck = false
+local ESPColor = Color3.fromRGB(138, 43, 226)
+local ESPMaxDistance = 2000
+local TracerThickness = 1
+local BoxThickness = 1
+local ESPDrawings = {}
+
+-- ==================== FARM VARIABLES ====================
+local AutoFarmOilEnabled = false
+local OilFarmSpeed = 0.1
+local OilSpamCount = 70
+local OilCycleCount = 0
+local OilTotalCalls = 0
+local FarmCurrentStep = "---"
+local FarmStatus = "Idle"
+local AntiAFKEnabled = false
+
+-- CFrame posisi
+local CFrame1 = CFrame.new(-7686.93604, 191.62619, -3592.86792, -1, 0, 0, 0, 1, 0, 0, 0, -1)
+local CFrame2 = CFrame.new(-6868.41162, 194.157074, -4731.68457, -0.974190593, 0, 0.22572884, 0, 1, 0, -0.22572884, 0, -0.974190593)
+local CFrame3 = CFrame.new(-6845.35938, 194.340088, -4845.50342, 0, 0, 1, 0, 1, -0, -1, 0, 0)
+local CFrameSell = CFrame.new(-3494.24365, 178.300629, -2395.82471, 0.964839458, 0, 0.262839884, 0, 1, 0, -0.262839884, 0, 0.964839458)
+
+-- ==================== ANTI AFK ====================
+local AntiAFKConnection = nil
+
+local function StartAntiAFK()
+	if AntiAFKConnection then return end
+	AntiAFKConnection = LocalPlayer.Idled:Connect(function()
+		pcall(function()
+			VirtualUser:CaptureController()
+			VirtualUser:ClickButton2(Vector2.new())
+		end)
+	end)
+end
+
+local function StopAntiAFK()
+	if AntiAFKConnection then
+		AntiAFKConnection:Disconnect()
+		AntiAFKConnection = nil
+	end
+end
+
+-- ==================== CHARACTER FUNCTIONS ====================
+local function GetHRP()
+	local char = LocalPlayer.Character
+	if char then return char:FindFirstChild("HumanoidRootPart") end
+	return nil
+end
+
+local function TeleportCFrame(cf)
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	hrp.CFrame = cf
+end
+
+-- ==================== ESP SYSTEM ====================
+local function CreateDrawingESP(player)
+	if player == LocalPlayer or ESPDrawings[player] then return end
+	local d = {}
+	for _, k in pairs({"CornerTL1","CornerTL2","CornerTR1","CornerTR2","CornerBL1","CornerBL2","CornerBR1","CornerBR2","OutCornerTL1","OutCornerTL2","OutCornerTR1","OutCornerTR2","OutCornerBL1","OutCornerBL2","OutCornerBR1","OutCornerBR2","Tracer","TracerOutline","HealthBarBG","HealthBarOutline","HealthBar"}) do
+		d[k] = Drawing.new("Line"); d[k].Visible = false; d[k].Transparency = 1
+	end
+	for _, k in pairs({"Name","Distance","HealthText"}) do
+		d[k] = Drawing.new("Text"); d[k].Visible = false; d[k].Outline = true; d[k].OutlineColor = Color3.new(0,0,0); d[k].Font = 2
+	end
+	for _, k in pairs({"CornerTL1","CornerTL2","CornerTR1","CornerTR2","CornerBL1","CornerBL2","CornerBR1","CornerBR2"}) do d[k].Color = ESPColor; d[k].Thickness = BoxThickness end
+	for _, k in pairs({"OutCornerTL1","OutCornerTL2","OutCornerTR1","OutCornerTR2","OutCornerBL1","OutCornerBL2","OutCornerBR1","OutCornerBR2"}) do d[k].Color = Color3.new(0,0,0); d[k].Thickness = BoxThickness+2 end
+	d.Name.Center=true;d.Name.Color=Color3.new(1,1,1);d.Name.Size=14
+	d.Distance.Center=true;d.Distance.Color=Color3.fromRGB(200,200,200);d.Distance.Size=12
+	d.HealthText.Center=false;d.HealthText.Color=Color3.fromRGB(0,255,0);d.HealthText.Size=11
+	d.HealthBarBG.Color=Color3.fromRGB(30,30,30);d.HealthBarBG.Thickness=5
+	d.HealthBarOutline.Color=Color3.new(0,0,0);d.HealthBarOutline.Thickness=7
+	d.HealthBar.Color=Color3.fromRGB(0,255,0);d.HealthBar.Thickness=3
+	d.Tracer.Color=ESPColor;d.Tracer.Thickness=TracerThickness
+	d.TracerOutline.Color=Color3.new(0,0,0);d.TracerOutline.Thickness=TracerThickness+2;d.TracerOutline.Transparency=0.6
+	ESPDrawings[player] = d
+end
+
+local function RemoveDrawingESP(player)
+	if not ESPDrawings[player] then return end
+	for _, obj in pairs(ESPDrawings[player]) do pcall(function() if obj.Remove then obj:Remove() elseif obj.Destroy then obj:Destroy() end end) end
+	if player.Character then local hl=player.Character:FindFirstChild("ESP_HL");if hl then hl:Destroy() end end
+	ESPDrawings[player] = nil
+end
+
+local function RemoveAllESP() for p in pairs(ESPDrawings) do RemoveDrawingESP(p) end end
+local function RefreshAllESP() RemoveAllESP();if ESPEnabled then for _,p in pairs(Players:GetPlayers()) do if p~=LocalPlayer then CreateDrawingESP(p) end end end end
+
+local function GetBoxBounds(char)
+	local hrp,hum=char:FindFirstChild("HumanoidRootPart"),char:FindFirstChild("Humanoid")
+	if not hrp or not hum then return nil end
+	local tS,tO=Camera:WorldToViewportPoint(hrp.Position+Vector3.new(0,3,0))
+	local bS,bO=Camera:WorldToViewportPoint(hrp.Position-Vector3.new(0,3,0))
+	if not tO and not bO then return nil end
+	local t2,b2=Vector2.new(tS.X,tS.Y),Vector2.new(bS.X,bS.Y)
+	local h=math.abs(b2.Y-t2.Y);local w=h*0.55;local cx=(t2.X+b2.X)/2
+	return{TL=Vector2.new(cx-w/2,t2.Y),TR=Vector2.new(cx+w/2,t2.Y),BL=Vector2.new(cx-w/2,b2.Y),BR=Vector2.new(cx+w/2,b2.Y),W=w,H=h,CX=cx,TY=t2.Y,BY=b2.Y}
+end
+
+local function UpdateDrawingESP()
+	for player,d in pairs(ESPDrawings) do
+		if not player or not player.Parent then RemoveDrawingESP(player) continue end
+		local char=player.Character
+		if not char then for _,o in pairs(d) do pcall(function() if o.Visible~=nil then o.Visible=false end end) end continue end
+		local hum,hrp,head=char:FindFirstChild("Humanoid"),char:FindFirstChild("HumanoidRootPart"),char:FindFirstChild("Head")
+		if not hum or not hrp or not head or hum.Health<=0 then for _,o in pairs(d) do pcall(function() if o.Visible~=nil then o.Visible=false end end) end continue end
+		local lc=LocalPlayer.Character;local lh=lc and lc:FindFirstChild("HumanoidRootPart")
+		local dist=lh and(hrp.Position-lh.Position).Magnitude or 0
+		if(ESPTeamCheck and player.Team and LocalPlayer.Team and player.Team==LocalPlayer.Team)or dist>ESPMaxDistance then for _,o in pairs(d) do pcall(function() if o.Visible~=nil then o.Visible=false end end) end continue end
+		local b=GetBoxBounds(char)
+		if not b then for _,o in pairs(d) do pcall(function() if o.Visible~=nil then o.Visible=false end end) end continue end
+		local cl=b.W*0.25
+		if ESPBoxEnabled then
+			local corners={{d.OutCornerTL1,d.OutCornerTL2,d.CornerTL1,d.CornerTL2,b.TL,Vector2.new(cl,0),Vector2.new(0,cl)},{d.OutCornerTR1,d.OutCornerTR2,d.CornerTR1,d.CornerTR2,b.TR,Vector2.new(-cl,0),Vector2.new(0,cl)},{d.OutCornerBL1,d.OutCornerBL2,d.CornerBL1,d.CornerBL2,b.BL,Vector2.new(cl,0),Vector2.new(0,-cl)},{d.OutCornerBR1,d.OutCornerBR2,d.CornerBR1,d.CornerBR2,b.BR,Vector2.new(-cl,0),Vector2.new(0,-cl)}}
+			for _,c in pairs(corners) do
+				c[1].From=c[5];c[1].To=c[5]+c[6];c[1].Visible=true;c[1].Thickness=BoxThickness+2
+				c[2].From=c[5];c[2].To=c[5]+c[7];c[2].Visible=true;c[2].Thickness=BoxThickness+2
+				c[3].From=c[5];c[3].To=c[5]+c[6];c[3].Visible=true;c[3].Color=ESPColor;c[3].Thickness=BoxThickness
+				c[4].From=c[5];c[4].To=c[5]+c[7];c[4].Visible=true;c[4].Color=ESPColor;c[4].Thickness=BoxThickness
+			end
+		else for _,k in pairs({"CornerTL1","CornerTL2","CornerTR1","CornerTR2","CornerBL1","CornerBL2","CornerBR1","CornerBR2","OutCornerTL1","OutCornerTL2","OutCornerTR1","OutCornerTR2","OutCornerBL1","OutCornerBL2","OutCornerBR1","OutCornerBR2"}) do d[k].Visible=false end end
+		if ESPNameEnabled then d.Name.Visible=true;d.Name.Text=player.DisplayName.." [@"..player.Name.."]";d.Name.Position=Vector2.new(b.CX,b.TY-18);d.Name.Color=ESPColor else d.Name.Visible=false end
+		if ESPDistanceEnabled then d.Distance.Visible=true;d.Distance.Text="["..math.floor(dist).."m]";d.Distance.Position=Vector2.new(b.CX,b.BY+3) else d.Distance.Visible=false end
+		if ESPHealthEnabled then
+			local r=math.clamp(hum.Health/hum.MaxHealth,0,1);local bx=b.TL.X-6;local fy=b.BL.Y-((b.BL.Y-b.TL.Y)*r)
+			d.HealthBarOutline.From=Vector2.new(bx,b.TL.Y-1);d.HealthBarOutline.To=Vector2.new(bx,b.BL.Y+1);d.HealthBarOutline.Visible=true
+			d.HealthBarBG.From=Vector2.new(bx,b.TL.Y);d.HealthBarBG.To=Vector2.new(bx,b.BL.Y);d.HealthBarBG.Visible=true
+			d.HealthBar.From=Vector2.new(bx,fy);d.HealthBar.To=Vector2.new(bx,b.BL.Y);d.HealthBar.Visible=true
+			d.HealthBar.Color=r>0.6 and Color3.fromRGB(0,255,80)or r>0.3 and Color3.fromRGB(255,200,0)or Color3.fromRGB(255,30,30)
+			if r<1 then d.HealthText.Visible=true;d.HealthText.Text=tostring(math.floor(hum.Health));d.HealthText.Position=Vector2.new(bx-5,fy-7);d.HealthText.Color=d.HealthBar.Color else d.HealthText.Visible=false end
+		else d.HealthBarOutline.Visible=false;d.HealthBarBG.Visible=false;d.HealthBar.Visible=false;d.HealthText.Visible=false end
+		if ESPTracerEnabled then
+			local ss=Camera.ViewportSize;local bc=Vector2.new(ss.X/2,ss.Y);local ts=Vector2.new(b.CX,b.BY)
+			d.TracerOutline.From=bc;d.TracerOutline.To=ts;d.TracerOutline.Visible=true;d.TracerOutline.Thickness=TracerThickness+2;d.TracerOutline.Transparency=0.5
+			d.Tracer.From=bc;d.Tracer.To=ts;d.Tracer.Visible=true;d.Tracer.Thickness=TracerThickness;d.Tracer.Color=ESPColor
+		else d.Tracer.Visible=false;d.TracerOutline.Visible=false end
+		if ESPHighlightEnabled then
+			local hl=char:FindFirstChild("ESP_HL")
+			if not hl then hl=Instance.new("Highlight");hl.Name="ESP_HL";hl.FillTransparency=0.65;hl.OutlineTransparency=0;hl.DepthMode=Enum.HighlightDepthMode.AlwaysOnTop;hl.Parent=char end
+			hl.FillColor=ESPColor;hl.OutlineColor=ESPColor;hl.Enabled=true
+		else local hl=char:FindFirstChild("ESP_HL");if hl then hl.Enabled=false end end
+	end
+end
+
+RunService.RenderStepped:Connect(function() if ESPEnabled then UpdateDrawingESP() end end)
+Players.PlayerAdded:Connect(function(p) if ESPEnabled and p~=LocalPlayer then task.wait(2);CreateDrawingESP(p) end end)
+Players.PlayerRemoving:Connect(function(p) RemoveDrawingESP(p) end)
+
+-- ==================== OIL FARM SPAM LOOP (AUTO TP + NO ANCHOR) ====================
+local function OilFarmCycle()
+	if not AutoFarmOilEnabled then return end
+
+	pcall(function()
+		-- STEP 1: TP ke Oil Pump + SPAM
+		FarmCurrentStep = "⚡ Step 1: Pump"
+		TeleportCFrame(CFrame1)
+		task.wait(0.3)
+
+		for i = 1, OilSpamCount do
+			if not AutoFarmOilEnabled then break end
+			pcall(function()
+				local oilArea = workspace:FindFirstChild("OilArea")
+				if oilArea then
+					local children = oilArea:GetChildren()
+					if children[2] then
+						local p = children[2]:FindFirstChild("Prompt")
+						if p then
+							local prox = p:FindFirstChildOfClass("ProximityPrompt")
+							if prox and MinigameEvent then
+								MinigameEvent:FireServer(prox)
+								OilTotalCalls = OilTotalCalls + 1
+							end
+						end
+					end
+				end
+			end)
+			task.wait(OilFarmSpeed)
+		end
+
+		if not AutoFarmOilEnabled then return end
+
+		-- STEP 2: TP ke Refinery 1 + SPAM
+		FarmCurrentStep = "⚡ Step 2: Refinery 1"
+		TeleportCFrame(CFrame2)
+		task.wait(0.3)
+
+		for i = 1, OilSpamCount do
+			if not AutoFarmOilEnabled then break end
+			pcall(function()
+				local oilArea = workspace:FindFirstChild("OilArea")
+				if oilArea then
+					local children = oilArea:GetChildren()
+					if children[13] then
+						local p = children[13]:FindFirstChild("Part")
+						if p then
+							local prox = p:FindFirstChildOfClass("ProximityPrompt")
+							if prox and MinigameEvent then
+								MinigameEvent:FireServer(prox)
+								OilTotalCalls = OilTotalCalls + 1
+							end
+						end
+					end
+				end
+			end)
+			task.wait(OilFarmSpeed)
+		end
+
+		if not AutoFarmOilEnabled then return end
+
+		-- STEP 3: TP ke Refinery 2 + SPAM
+		FarmCurrentStep = "⚡ Step 3: Refinery 2"
+		TeleportCFrame(CFrame3)
+		task.wait(0.3)
+
+		for i = 1, OilSpamCount do
+			if not AutoFarmOilEnabled then break end
+			pcall(function()
+				local oilArea = workspace:FindFirstChild("OilArea")
+				if oilArea then
+					local children = oilArea:GetChildren()
+					if children[14] then
+						local p = children[14]:FindFirstChild("Part")
+						if p then
+							local prox = p:FindFirstChildOfClass("ProximityPrompt")
+							if prox and MinigameEvent then
+								MinigameEvent:FireServer(prox)
+								OilTotalCalls = OilTotalCalls + 1
+							end
+						end
+					end
+				end
+			end)
+			task.wait(OilFarmSpeed)
+		end
+
+		if not AutoFarmOilEnabled then return end
+
+		-- STEP 4: TP ke Sell + Sell 1x
+		FarmCurrentStep = "💰 Step 4: Selling"
+		TeleportCFrame(CFrameSell)
+		task.wait(0.3)
+
+		pcall(function()
+			if SellEvent then
+				SellEvent:FireServer("Oil", 3)
+				OilTotalCalls = OilTotalCalls + 1
+			end
+		end)
+
+		task.wait(0.5)
+		OilCycleCount = OilCycleCount + 1
+		FarmCurrentStep = "✅ Cycle #" .. OilCycleCount .. " Done!"
+	end)
+end
+
+-- ==================== ESP UI ====================
+
+Section:NewToggle({Title="🔘 Enable ESP",Default=false,Callback=function(s) ESPEnabled=s;if s then RefreshAllESP() else RemoveAllESP() end end})
+Section:NewToggle({Title="📦 Corner Box",Default=false,Callback=function(s) ESPBoxEnabled=s;if ESPEnabled then RefreshAllESP() end end})
+Section:NewToggle({Title="📝 Names",Default=false,Callback=function(s) ESPNameEnabled=s;if ESPEnabled then RefreshAllESP() end end})
+Section:NewToggle({Title="❤️ Health Bar",Default=false,Callback=function(s) ESPHealthEnabled=s;if ESPEnabled then RefreshAllESP() end end})
+Section:NewToggle({Title="📏 Distance",Default=false,Callback=function(s) ESPDistanceEnabled=s;if ESPEnabled then RefreshAllESP() end end})
+Section:NewToggle({Title="📍 Tracers",Default=false,Callback=function(s) ESPTracerEnabled=s;if ESPEnabled then RefreshAllESP() end end})
+Section:NewToggle({Title="✨ Highlight",Default=false,Callback=function(s) ESPHighlightEnabled=s;if ESPEnabled then RefreshAllESP() end end})
+Section:NewToggle({Title="👥 Team Check",Default=false,Callback=function(s) ESPTeamCheck=s end})
+Section:NewSlider({Title="Tracer Width",Min=1,Max=5,Default=1,Callback=function(v) TracerThickness=v end})
+Section:NewSlider({Title="Box Width",Min=1,Max=5,Default=1,Callback=function(v) BoxThickness=v end})
+Section:NewSlider({Title="Max Distance",Min=100,Max=5000,Default=2000,Callback=function(v) ESPMaxDistance=v end})
+Section:NewDropdown({Title="ESP Color",Data={"Purple","Red","Green","Blue","Cyan","Yellow","Orange","Pink","White"},Default="Purple",Callback=function(s)
+	local c={Purple=Color3.fromRGB(138,43,226),Red=Color3.fromRGB(255,50,50),Green=Color3.fromRGB(0,255,100),Blue=Color3.fromRGB(50,100,255),Cyan=Color3.fromRGB(0,255,255),Yellow=Color3.fromRGB(255,255,0),Orange=Color3.fromRGB(255,165,0),Pink=Color3.fromRGB(255,105,180),White=Color3.fromRGB(255,255,255)}
+	ESPColor=c[s]or Color3.fromRGB(138,43,226) end})
+Section:NewKeybind({Title="Toggle ESP Key",Default=Enum.KeyCode.E,Callback=function() ESPEnabled=not ESPEnabled;if ESPEnabled then RefreshAllESP()else RemoveAllESP()end end})
+Section:NewButton({Title="🔄 Refresh ESP",Callback=function() RefreshAllESP() end})
+
+-- ==================== FARM UI ====================
+
+FarmSection:NewToggle({
+	Title = "🛢️ Auto Farm Oil (Spam Loop)",
+	Default = false,
+	Callback = function(state)
+		AutoFarmOilEnabled = state
+		if state then
+			OilCycleCount = 0
+			OilTotalCalls = 0
+			FarmStatus = "🔥 FARMING"
+			Notification.new({
+				Title = "🛢️ Oil Farm",
+				Description = "🔥 SPAM LOOP STARTED!\nSpeed: " .. OilFarmSpeed .. "s | Spam: x" .. OilSpamCount,
+				Duration = 3,
+				Icon = "rbxassetid://8997385628"
+			})
+			task.spawn(function()
+				while AutoFarmOilEnabled do
+					OilFarmCycle()
+					task.wait(0.3)
+				end
+				FarmStatus = "⏹️ Stopped"
+				FarmCurrentStep = "---"
+			end)
+		else
+			FarmStatus = "⏹️ Stopped"
+			Notification.new({
+				Title = "🛢️ Oil Farm",
+				Description = "⏹️ Stopped!\nCycles: " .. OilCycleCount .. " | Calls: " .. OilTotalCalls,
+				Duration = 3,
+				Icon = "rbxassetid://8997385628"
+			})
+		end
+	end,
+})
+
+FarmSection:NewToggle({
+	Title = "🔒 Anti AFK",
+	Default = false,
+	Callback = function(state)
+		AntiAFKEnabled = state
+		if state then
+			StartAntiAFK()
+			Notification.new({Title="🔒 Anti AFK",Description="✅ Enabled! You won't be kicked.",Duration=2,Icon="rbxassetid://8997385628"})
+		else
+			StopAntiAFK()
+			Notification.new({Title="🔒 Anti AFK",Description="❌ Disabled!",Duration=2,Icon="rbxassetid://8997385628"})
+		end
+	end,
+})
+
+FarmSection:NewSlider({
+	Title = "🔥 Farm Speed (s)",
+	Min = 1,
+	Max = 100,
+	Default = 10,
+	Callback = function(v)
+		OilFarmSpeed = v / 100
+	end,
+})
+
+FarmSection:NewSlider({
+	Title = "🔁 Spam Count",
+	Min = 10,
+	Max = 200,
+	Default = 70,
+	Callback = function(v)
+		OilSpamCount = v
+	end,
+})
+
+FarmSection:NewDropdown({
+	Title = "⚡ Speed Preset",
+	Data = {"Slow (0.2s x50)", "Normal (0.1s x70)", "Fast (0.05s x100)", "Insane (0.01s x150)"},
+	Default = "Normal (0.1s x70)",
+	Callback = function(s)
+		if s == "Slow (0.2s x50)" then OilFarmSpeed = 0.2; OilSpamCount = 50
+		elseif s == "Normal (0.1s x70)" then OilFarmSpeed = 0.1; OilSpamCount = 70
+		elseif s == "Fast (0.05s x100)" then OilFarmSpeed = 0.05; OilSpamCount = 100
+		elseif s == "Insane (0.01s x150)" then OilFarmSpeed = 0.01; OilSpamCount = 150
+		end
+		Notification.new({Title="⚡",Description=s,Duration=2,Icon="rbxassetid://8997385628"})
+	end,
+})
+
+FarmSection:NewButton({Title="📊 Status",Callback=function()
+	Notification.new({
+		Title="📊 Farm Status",
+		Description="Status: " .. FarmStatus .. "\nStep: " .. FarmCurrentStep .. "\n🔁 Cycles: " .. OilCycleCount .. "\n📡 Calls: " .. OilTotalCalls .. "\n🔒 Anti AFK: " .. (AntiAFKEnabled and "ON" or "OFF"),
+		Duration=5,
+		Icon="rbxassetid://8997385628"
+	})
+end})
+
+FarmSection:NewButton({Title="💰 Manual Sell",Callback=function()
+	TeleportCFrame(CFrameSell)
+	task.wait(0.3)
+	pcall(function() if SellEvent then SellEvent:FireServer("Oil", 3) end end)
+	Notification.new({Title="💰",Description="Sold!",Duration=1,Icon="rbxassetid://8997385628"})
+end})
+
+FarmSection:NewButton({Title="📍 TP Pump",Callback=function() TeleportCFrame(CFrame1) end})
+FarmSection:NewButton({Title="📍 TP Refinery 1",Callback=function() TeleportCFrame(CFrame2) end})
+FarmSection:NewButton({Title="📍 TP Refinery 2",Callback=function() TeleportCFrame(CFrame3) end})
+FarmSection:NewButton({Title="📍 TP Sell",Callback=function() TeleportCFrame(CFrameSell) end})
+
+-- ==================== FARM INFO ====================
+
+FarmInfoSection:NewTitle("By NubyCode")
+FarmInfoSection:NewTitle("─────────────────")
+FarmInfoSection:NewTitle("🔥 SPAM LOOP FARM v7.0")
+FarmInfoSection:NewTitle("─────────────────")
+FarmInfoSection:NewTitle("📋 Flow per Cycle:")
+FarmInfoSection:NewTitle("")
+FarmInfoSection:NewTitle("TP1 → SPAM Pump x70")
+FarmInfoSection:NewTitle("  ↓ auto TP")
+FarmInfoSection:NewTitle("TP2 → SPAM Refine1 x70")
+FarmInfoSection:NewTitle("  ↓ auto TP")
+FarmInfoSection:NewTitle("TP3 → SPAM Refine2 x70")
+FarmInfoSection:NewTitle("  ↓ auto TP")
+FarmInfoSection:NewTitle("TP4 → Sell 1x")
+FarmInfoSection:NewTitle("  ↓")
+FarmInfoSection:NewTitle("🔄 LOOP ULANG!")
+FarmInfoSection:NewTitle("")
+FarmInfoSection:NewTitle("─────────────────")
+FarmInfoSection:NewTitle("✅ No Anchor!")
+FarmInfoSection:NewTitle("✅ Auto TP terus!")
+FarmInfoSection:NewTitle("✅ Anti AFK!")
+FarmInfoSection:NewTitle("─────────────────")
+FarmInfoSection:NewTitle("⚡ Speed Presets:")
+FarmInfoSection:NewTitle("Slow = 0.2s x50")
+FarmInfoSection:NewTitle("Normal = 0.1s x70")
+FarmInfoSection:NewTitle("Fast = 0.05s x100")
+FarmInfoSection:NewTitle("Insane = 0.01s x150")
+FarmInfoSection:NewTitle("─────────────────")
+FarmInfoSection:NewTitle("📡 Remote: " .. (MinigameEvent and "✅" or "❌"))
+FarmInfoSection:NewTitle("💰 Sell: " .. (SellEvent and "✅" or "❌"))
+
+FarmInfoSection:NewButton({Title="📊 Live Stats",Callback=function()
+	Notification.new({Title="📊",Description="🔁 "..OilCycleCount.." | 📡 "..OilTotalCalls.." | 🔒 "..(AntiAFKEnabled and "ON" or "OFF"),Duration=5,Icon="rbxassetid://8997385628"})
+end})
+
+-- ==================== ESP INFO ====================
+
+InfoSection:NewTitle("By NubyCode")
+InfoSection:NewTitle("Premium ESP Hub v2.0")
+InfoSection:NewTitle("─────────────────")
+InfoSection:NewButton({Title="📋 Copy Discord",Callback=function() if setclipboard then setclipboard("https://discord.gg/BH6pE7jesa") end end})
+InfoSection:NewButton({Title="👥 Players",Callback=function() Notification.new({Title="Server",Description=#Players:GetPlayers().."/"..Players.MaxPlayers,Duration=3,Icon="rbxassetid://8997385628"}) end})
+InfoSection:NewButton({Title="🎮 Game Info",Callback=function() Notification.new({Title="Game",Description="PlaceId: "..game.PlaceId,Duration=5,Icon="rbxassetid://8997385628"}) end})
+
+-- ==================== DONE ====================
+Notification.new({
+	Title = "✅ Ready!",
+	Description = "Oil Farm + ESP Loaded!\n📡 Remote: " .. (MinigameEvent and "✅" or "❌") .. " | Sell: " .. (SellEvent and "✅" or "❌"),
+	Duration = 4,
+	Icon = "rbxassetid://8997385628"
+})
+
+print("==========================================")
+print("✅ NubyCode Oil Farm + ESP Loaded!")
+print("Oil Remote:", MinigameEvent and "✅" or "❌")
+print("Sell Remote:", SellEvent and "✅" or "❌")
+print("==========================================")
