@@ -1,0 +1,1220 @@
+-- ==================== ZALLSTORE BY NUBYCODE ====================
+-- Premium Edition with ESP + Troll Carry + Auto Fish
+
+local NothingLibrary = loadstring(game:HttpGetAsync('https://raw.githubusercontent.com/3345-c-a-t-s-u-s/NOTHING/main/source.lua'))();
+local Notification = NothingLibrary.Notification();
+
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local RunService = game:GetService("RunService")
+local VIM = game:GetService("VirtualInputManager")
+local UIS = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+local Camera = workspace.CurrentCamera
+
+-- ==================== VARIABLES ====================
+local autoFishing = false
+local autoMinigame = false
+local selectedRod = "Basic Rod"
+local fishingLoop = nil
+local minigameConnection = nil
+local renderConnection = nil
+local isHoldingInput = false
+
+-- ESP Variables
+local espEnabled = false
+local espBoxes = false
+local espNames = true
+local espHealth = true
+local espDistance = true
+local espTracers = false
+local espChams = false
+local espTeamCheck = false
+local espColor = Color3.fromRGB(0, 255, 130) -- Premium green
+local espEnemyColor = Color3.fromRGB(255, 50, 50)
+local espTeamColor = Color3.fromRGB(50, 150, 255)
+local espMaxDistance = 5000
+local espObjects = {}
+local espRenderConnection = nil
+
+-- Troll Carry Variables
+local trollCarryEnabled = false
+local trollCarryLoop = nil
+local trollCarryTarget = "All Players"
+local carrySpeed = 1
+
+-- ==================== ESP SYSTEM (PREMIUM) ====================
+
+local function createESPFolder()
+    local folder = CoreGui:FindFirstChild("ZallStore_ESP")
+    if not folder then
+        folder = Instance.new("Folder")
+        folder.Name = "ZallStore_ESP"
+        folder.Parent = CoreGui
+    end
+    return folder
+end
+
+local function removeESP(player)
+    if espObjects[player] then
+        for _, obj in pairs(espObjects[player]) do
+            if obj and obj.Parent then
+                obj:Destroy()
+            end
+        end
+        espObjects[player] = nil
+    end
+end
+
+local function removeAllESP()
+    for player, _ in pairs(espObjects) do
+        removeESP(player)
+    end
+    local folder = CoreGui:FindFirstChild("ZallStore_ESP")
+    if folder then
+        folder:Destroy()
+    end
+end
+
+local function isTeammate(player)
+    if not espTeamCheck then return false end
+    if LocalPlayer.Team and player.Team then
+        return LocalPlayer.Team == player.Team
+    end
+    return false
+end
+
+local function getPlayerColor(player)
+    if isTeammate(player) then
+        return espTeamColor
+    else
+        return espEnemyColor
+    end
+end
+
+local function createBillboardGui(player, character)
+    local espFolder = createESPFolder()
+    removeESP(player)
+
+    local head = character:FindFirstChild("Head")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+
+    if not head or not humanoid or not rootPart then return end
+
+    espObjects[player] = {}
+    local color = getPlayerColor(player)
+
+    -- ===== NAME + INFO BILLBOARD =====
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "ZallESP_Info_" .. player.Name
+    billboard.Adornee = head
+    billboard.Size = UDim2.new(0, 200, 0, 80)
+    billboard.StudsOffset = Vector3.new(0, 3, 0)
+    billboard.AlwaysOnTop = true
+    billboard.LightInfluence = 0
+    billboard.MaxDistance = espMaxDistance
+    billboard.Parent = espFolder
+
+    -- Premium frame background
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(1, 0, 1, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
+    frame.BackgroundTransparency = 0.4
+    frame.BorderSizePixel = 0
+    frame.Parent = billboard
+
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, 6)
+    uiCorner.Parent = frame
+
+    local uiStroke = Instance.new("UIStroke")
+    uiStroke.Color = color
+    uiStroke.Thickness = 1.5
+    uiStroke.Transparency = 0.3
+    uiStroke.Parent = frame
+
+    -- Premium badge
+    local badge = Instance.new("Frame")
+    badge.Size = UDim2.new(0, 60, 0, 14)
+    badge.Position = UDim2.new(0.5, -30, 0, -8)
+    badge.BackgroundColor3 = color
+    badge.BorderSizePixel = 0
+    badge.Parent = frame
+
+    local badgeCorner = Instance.new("UICorner")
+    badgeCorner.CornerRadius = UDim.new(0, 3)
+    badgeCorner.Parent = badge
+
+    local badgeText = Instance.new("TextLabel")
+    badgeText.Size = UDim2.new(1, 0, 1, 0)
+    badgeText.BackgroundTransparency = 1
+    badgeText.Text = "PREMIUM"
+    badgeText.TextColor3 = Color3.fromRGB(0, 0, 0)
+    badgeText.TextScaled = true
+    badgeText.Font = Enum.Font.GothamBold
+    badgeText.Parent = badge
+
+    -- Player name
+    if espNames then
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Name = "NameLabel"
+        nameLabel.Size = UDim2.new(1, -10, 0, 18)
+        nameLabel.Position = UDim2.new(0, 5, 0, 8)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = "👤 " .. player.DisplayName
+        nameLabel.TextColor3 = color
+        nameLabel.TextScaled = true
+        nameLabel.Font = Enum.Font.GothamBold
+        nameLabel.TextStrokeTransparency = 0.5
+        nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+        nameLabel.Parent = frame
+    end
+
+    -- Username
+    local usernameLabel = Instance.new("TextLabel")
+    usernameLabel.Name = "UsernameLabel"
+    usernameLabel.Size = UDim2.new(1, -10, 0, 12)
+    usernameLabel.Position = UDim2.new(0, 5, 0, 26)
+    usernameLabel.BackgroundTransparency = 1
+    usernameLabel.Text = "@" .. player.Name
+    usernameLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+    usernameLabel.TextScaled = true
+    usernameLabel.Font = Enum.Font.Gotham
+    usernameLabel.TextStrokeTransparency = 0.7
+    usernameLabel.Parent = frame
+
+    -- Health bar background
+    if espHealth then
+        local healthBg = Instance.new("Frame")
+        healthBg.Name = "HealthBg"
+        healthBg.Size = UDim2.new(0.85, 0, 0, 6)
+        healthBg.Position = UDim2.new(0.075, 0, 0, 42)
+        healthBg.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        healthBg.BorderSizePixel = 0
+        healthBg.Parent = frame
+
+        local healthCorner = Instance.new("UICorner")
+        healthCorner.CornerRadius = UDim.new(0, 3)
+        healthCorner.Parent = healthBg
+
+        local healthFill = Instance.new("Frame")
+        healthFill.Name = "HealthFill"
+        healthFill.Size = UDim2.new(humanoid.Health / humanoid.MaxHealth, 0, 1, 0)
+        healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+        healthFill.BorderSizePixel = 0
+        healthFill.Parent = healthBg
+
+        local healthFillCorner = Instance.new("UICorner")
+        healthFillCorner.CornerRadius = UDim.new(0, 3)
+        healthFillCorner.Parent = healthFill
+
+        local healthText = Instance.new("TextLabel")
+        healthText.Name = "HealthText"
+        healthText.Size = UDim2.new(1, 0, 0, 12)
+        healthText.Position = UDim2.new(0, 0, 0, 50)
+        healthText.BackgroundTransparency = 1
+        healthText.Text = "❤️ " .. math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth)
+        healthText.TextColor3 = Color3.fromRGB(255, 100, 100)
+        healthText.TextScaled = true
+        healthText.Font = Enum.Font.GothamBold
+        healthText.TextStrokeTransparency = 0.7
+        healthText.Parent = frame
+    end
+
+    -- Distance label
+    if espDistance then
+        local distLabel = Instance.new("TextLabel")
+        distLabel.Name = "DistLabel"
+        distLabel.Size = UDim2.new(1, 0, 0, 12)
+        distLabel.Position = UDim2.new(0, 0, 0, 64)
+        distLabel.BackgroundTransparency = 1
+        distLabel.Text = "📍 0m"
+        distLabel.TextColor3 = Color3.fromRGB(150, 200, 255)
+        distLabel.TextScaled = true
+        distLabel.Font = Enum.Font.GothamBold
+        distLabel.TextStrokeTransparency = 0.7
+        distLabel.Parent = frame
+    end
+
+    table.insert(espObjects[player], billboard)
+
+    -- ===== CHAMS (Highlight) =====
+    if espChams then
+        local highlight = Instance.new("Highlight")
+        highlight.Name = "ZallESP_Chams"
+        highlight.FillColor = color
+        highlight.FillTransparency = 0.65
+        highlight.OutlineColor = color
+        highlight.OutlineTransparency = 0.2
+        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+        highlight.Adornee = character
+        highlight.Parent = espFolder
+
+        table.insert(espObjects[player], highlight)
+    end
+
+    -- ===== BOX ESP =====
+    if espBoxes then
+        local boxBillboard = Instance.new("BillboardGui")
+        boxBillboard.Name = "ZallESP_Box_" .. player.Name
+        boxBillboard.Adornee = rootPart
+        boxBillboard.Size = UDim2.new(4, 0, 5.5, 0)
+        boxBillboard.StudsOffset = Vector3.new(0, 0.5, 0)
+        boxBillboard.AlwaysOnTop = true
+        boxBillboard.LightInfluence = 0
+        boxBillboard.MaxDistance = espMaxDistance
+        boxBillboard.Parent = espFolder
+
+        local boxFrame = Instance.new("Frame")
+        boxFrame.Size = UDim2.new(1, 0, 1, 0)
+        boxFrame.BackgroundTransparency = 1
+        boxFrame.BorderSizePixel = 0
+        boxFrame.Parent = boxBillboard
+
+        local boxStroke = Instance.new("UIStroke")
+        boxStroke.Color = color
+        boxStroke.Thickness = 2
+        boxStroke.Transparency = 0.2
+        boxStroke.Parent = boxFrame
+
+        local boxCorner = Instance.new("UICorner")
+        boxCorner.CornerRadius = UDim.new(0, 4)
+        boxCorner.Parent = boxFrame
+
+        -- Corner decorations
+        for i, pos in ipairs({
+            UDim2.new(0, 0, 0, 0),
+            UDim2.new(1, -12, 0, 0),
+            UDim2.new(0, 0, 1, -12),
+            UDim2.new(1, -12, 1, -12)
+        }) do
+            local corner = Instance.new("Frame")
+            corner.Size = UDim2.new(0, 12, 0, 12)
+            corner.Position = pos
+            corner.BackgroundColor3 = color
+            corner.BackgroundTransparency = 0.5
+            corner.BorderSizePixel = 0
+            corner.Parent = boxFrame
+
+            local cc = Instance.new("UICorner")
+            cc.CornerRadius = UDim.new(0, 2)
+            cc.Parent = corner
+        end
+
+        table.insert(espObjects[player], boxBillboard)
+    end
+
+    -- ===== TRACER =====
+    if espTracers then
+        local tracerGui = Instance.new("ScreenGui")
+        tracerGui.Name = "ZallESP_Tracer_" .. player.Name
+        tracerGui.IgnoreGuiInset = true
+        tracerGui.Parent = espFolder
+
+        local tracerLine = Instance.new("Frame")
+        tracerLine.Name = "TracerLine"
+        tracerLine.BackgroundColor3 = color
+        tracerLine.BackgroundTransparency = 0.4
+        tracerLine.BorderSizePixel = 0
+        tracerLine.AnchorPoint = Vector2.new(0.5, 0)
+        tracerLine.Parent = tracerGui
+
+        table.insert(espObjects[player], tracerGui)
+    end
+end
+
+local function updateESP()
+    if espRenderConnection then
+        espRenderConnection:Disconnect()
+    end
+
+    espRenderConnection = RunService.RenderStepped:Connect(function()
+        if not espEnabled then return end
+
+        for _, player in pairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character then
+                local character = player.Character
+                local rootPart = character:FindFirstChild("HumanoidRootPart")
+                local humanoid = character:FindFirstChildOfClass("Humanoid")
+                local localRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+
+                if rootPart and humanoid and localRoot then
+                    local distance = (rootPart.Position - localRoot.Position).Magnitude
+
+                    -- Update distance label
+                    if espObjects[player] then
+                        for _, obj in pairs(espObjects[player]) do
+                            if obj:IsA("BillboardGui") and obj.Name:find("Info") then
+                                local frame = obj:FindFirstChild("Frame") or obj:FindFirstChildWhichIsA("Frame")
+                                if frame then
+                                    local distLabel = frame:FindFirstChild("DistLabel")
+                                    if distLabel then
+                                        distLabel.Text = "📍 " .. math.floor(distance) .. "m"
+                                    end
+
+                                    local healthFillParent = frame:FindFirstChild("HealthBg")
+                                    if healthFillParent then
+                                        local healthFill = healthFillParent:FindFirstChild("HealthFill")
+                                        if healthFill then
+                                            local ratio = humanoid.Health / humanoid.MaxHealth
+                                            healthFill.Size = UDim2.new(ratio, 0, 1, 0)
+
+                                            if ratio > 0.6 then
+                                                healthFill.BackgroundColor3 = Color3.fromRGB(0, 255, 100)
+                                            elseif ratio > 0.3 then
+                                                healthFill.BackgroundColor3 = Color3.fromRGB(255, 200, 0)
+                                            else
+                                                healthFill.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+                                            end
+                                        end
+                                    end
+
+                                    local healthText = frame:FindFirstChild("HealthText")
+                                    if healthText then
+                                        healthText.Text = "❤️ " .. math.floor(humanoid.Health) .. "/" .. math.floor(humanoid.MaxHealth)
+                                    end
+                                end
+                            end
+
+                            -- Update tracer
+                            if obj:IsA("ScreenGui") and obj.Name:find("Tracer") then
+                                local line = obj:FindFirstChild("TracerLine")
+                                if line and rootPart then
+                                    local screenPos, onScreen = Camera:WorldToViewportPoint(rootPart.Position)
+                                    if onScreen then
+                                        local viewportSize = Camera.ViewportSize
+                                        local startX = viewportSize.X / 2
+                                        local startY = viewportSize.Y
+                                        local endX = screenPos.X
+                                        local endY = screenPos.Y
+
+                                        local dx = endX - startX
+                                        local dy = endY - startY
+                                        local length = math.sqrt(dx * dx + dy * dy)
+                                        local angle = math.atan2(dy, dx)
+
+                                        line.Size = UDim2.new(0, length, 0, 2)
+                                        line.Position = UDim2.new(0, startX, 0, startY)
+                                        line.Rotation = math.deg(angle)
+                                        line.Visible = true
+                                    else
+                                        line.Visible = false
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function refreshAllESP()
+    removeAllESP()
+    if not espEnabled then return end
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            createBillboardGui(player, player.Character)
+        end
+    end
+    updateESP()
+end
+
+-- Auto-create ESP when character spawns
+Players.PlayerAdded:Connect(function(player)
+    player.CharacterAdded:Connect(function(character)
+        task.wait(1)
+        if espEnabled then
+            createBillboardGui(player, character)
+        end
+    end)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+    removeESP(player)
+end)
+
+for _, player in pairs(Players:GetPlayers()) do
+    if player ~= LocalPlayer then
+        player.CharacterAdded:Connect(function(character)
+            task.wait(1)
+            if espEnabled then
+                createBillboardGui(player, character)
+            end
+        end)
+    end
+end
+
+-- ==================== TROLL CARRY SYSTEM ====================
+
+local function getCarryRemote()
+    local success, result = pcall(function()
+        return ReplicatedStorage.CarryReplic.CarryRemotes.CarryRemote
+    end)
+    return success and result or nil
+end
+
+local function getCarryChoice()
+    local success, result = pcall(function()
+        return ReplicatedStorage.CarryReplic.CarryChoices.Hug
+    end)
+    return success and result or nil
+end
+
+local function startTrollCarry()
+    if trollCarryLoop then
+        pcall(function() task.cancel(trollCarryLoop) end)
+    end
+
+    trollCarryLoop = task.spawn(function()
+        while trollCarryEnabled do
+            pcall(function()
+                local Event = getCarryRemote()
+                local CarryChoice = getCarryChoice()
+
+                if Event and CarryChoice then
+                    if trollCarryTarget == "All Players" then
+                        for _, player in pairs(Players:GetPlayers()) do
+                            if player ~= LocalPlayer then
+                                Event:FireServer({
+                                    cmd = "Carry",
+                                    carrychoicesss = CarryChoice,
+                                    firstPlr = player
+                                })
+                                task.wait(0.1)
+                            end
+                        end
+                    else
+                        local target = Players:FindFirstChild(trollCarryTarget)
+                        if target and target ~= LocalPlayer then
+                            Event:FireServer({
+                                cmd = "Carry",
+                                carrychoicesss = CarryChoice,
+                                firstPlr = target
+                            })
+                        end
+                    end
+                end
+            end)
+            task.wait(carrySpeed)
+        end
+    end)
+end
+
+local function stopTrollCarry()
+    trollCarryEnabled = false
+    if trollCarryLoop then
+        pcall(function() task.cancel(trollCarryLoop) end)
+        trollCarryLoop = nil
+    end
+end
+
+local function getPlayerList()
+    local list = {"All Players"}
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            table.insert(list, player.Name)
+        end
+    end
+    return list
+end
+
+-- ==================== CORE FISHING FUNCTIONS ====================
+
+local function getRod()
+    local rod = LocalPlayer.Backpack:FindFirstChild(selectedRod) or
+        (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild(selectedRod))
+    return rod
+end
+
+local function equipRod()
+    local rod = LocalPlayer.Backpack:FindFirstChild(selectedRod)
+    if rod and LocalPlayer.Character then
+        local humanoid = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid:EquipTool(rod)
+        end
+    end
+end
+
+local function findMinigameGUI()
+    for _, gui in pairs(LocalPlayer.PlayerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") or gui:IsA("BillboardGui") then
+            local bg = gui:FindFirstChild("Background", true)
+            if bg then
+                local filler = bg:FindFirstChild("Filler")
+                local reel = bg:FindFirstChild("Reel")
+                if filler and reel then
+                    local progressBg = gui:FindFirstChild("ProgressBackground", true)
+                    if progressBg then
+                        return {
+                            GUI = gui,
+                            Background = bg,
+                            Filler = filler,
+                            Reel = reel,
+                            ProgressFiller = progressBg:FindFirstChild("ProgressFiller")
+                        }
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function pressSpace()
+    if not isHoldingInput then
+        isHoldingInput = true
+        VIM:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+    end
+end
+
+local function releaseSpace()
+    if isHoldingInput then
+        isHoldingInput = false
+        VIM:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+    end
+end
+
+local function startAutoMinigameTracker()
+    if renderConnection then
+        renderConnection:Disconnect()
+        renderConnection = nil
+    end
+
+    renderConnection = RunService.RenderStepped:Connect(function()
+        if not autoMinigame then
+            releaseSpace()
+            return
+        end
+
+        local mgui = findMinigameGUI()
+        if not mgui then
+            releaseSpace()
+            return
+        end
+
+        local filler = mgui.Filler
+        local reel = mgui.Reel
+
+        if not filler or not reel then
+            releaseSpace()
+            return
+        end
+
+        if not filler.Parent or not reel.Parent then
+            releaseSpace()
+            return
+        end
+
+        local fillerPos = filler.Position.X.Scale
+        local fillerSize = filler.Size.X.Scale
+        local fillerCenter = fillerPos + (fillerSize / 2)
+
+        local reelPos = reel.Position.X.Scale
+        local reelSize = reel.Size.X.Scale
+        local reelCenter = reelPos + (reelSize / 2)
+
+        local offset = 0.02
+
+        if reelCenter < fillerCenter - offset then
+            pressSpace()
+        elseif reelCenter > fillerCenter + offset then
+            releaseSpace()
+        else
+            if reelCenter < fillerCenter then
+                pressSpace()
+            else
+                releaseSpace()
+            end
+        end
+    end)
+end
+
+local function castRod()
+    local rod = getRod()
+    if rod and rod.Parent == LocalPlayer.Character then
+        local isFishing = rod:FindFirstChild("IsFishingOrMinigameActive")
+        if isFishing and not isFishing.Value then
+            rod:Activate()
+            task.wait(1.0 + math.random() * 0.8)
+            rod:Deactivate()
+        end
+    end
+end
+
+local function setupMinigameListener()
+    if minigameConnection then
+        minigameConnection:Disconnect()
+        minigameConnection = nil
+    end
+
+    local rod = getRod()
+    if not rod then return end
+
+    local miniGame = rod:FindFirstChild("MiniGame")
+    if not miniGame then return end
+
+    minigameConnection = miniGame.OnClientEvent:Connect(function(action, rarity)
+        if action == "Start" and autoMinigame then
+            Notification.new({
+                Title = "🐟 Fish Hooked!",
+                Description = "Rarity: " .. tostring(rarity),
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+            task.wait(0.3)
+            startAutoMinigameTracker()
+        end
+    end)
+end
+
+local function startFishingLoop()
+    if fishingLoop then
+        pcall(function() task.cancel(fishingLoop) end)
+    end
+
+    fishingLoop = task.spawn(function()
+        while autoFishing do
+            pcall(function()
+                local rod = getRod()
+
+                if rod and rod.Parent == LocalPlayer.Backpack then
+                    equipRod()
+                    task.wait(0.5)
+                end
+
+                rod = getRod()
+                if rod and rod.Parent == LocalPlayer.Character then
+                    local isFishing = rod:FindFirstChild("IsFishingOrMinigameActive")
+                    if isFishing and not isFishing.Value then
+                        castRod()
+                    end
+                end
+            end)
+
+            task.wait(3 + math.random() * 2)
+        end
+    end)
+end
+
+local function getRodList()
+    local rods = {}
+    for _, item in pairs(LocalPlayer.Backpack:GetChildren()) do
+        if item:IsA("Tool") and item:FindFirstChild("MiniGame") then
+            table.insert(rods, item.Name)
+        end
+    end
+    if LocalPlayer.Character then
+        for _, item in pairs(LocalPlayer.Character:GetChildren()) do
+            if item:IsA("Tool") and item:FindFirstChild("MiniGame") then
+                if not table.find(rods, item.Name) then
+                    table.insert(rods, item.Name)
+                end
+            end
+        end
+    end
+    if #rods == 0 then
+        table.insert(rods, "Basic Rod")
+    end
+    return rods
+end
+
+-- ==================== UI SETUP ====================
+
+Notification.new({
+    Title = "⚡ ZallStore Loaded",
+    Description = "Premium Edition by NubyCode",
+    Duration = 5,
+    Icon = "rbxassetid://8997385628"
+})
+
+local Windows = NothingLibrary.new({
+    Title = "ZallStore",
+    Description = "By NubyCode | Premium Edition",
+    Keybind = Enum.KeyCode.LeftControl,
+    Logo = 'http://www.roblox.com/asset/?id=18898582662'
+})
+
+-- ==================== TAB 1: FISHING ====================
+local FishingTab = Windows:NewTab({
+    Title = "🎣 Fishing",
+    Description = "Auto fishing controls",
+    Icon = "rbxassetid://7733960981"
+})
+
+local MainSection = FishingTab:NewSection({
+    Title = "⚡ Auto Controls",
+    Icon = "rbxassetid://7743869054",
+    Position = "Left"
+})
+
+local SettingsSection = FishingTab:NewSection({
+    Title = "⚙️ Settings",
+    Icon = "rbxassetid://7733964719",
+    Position = "Right"
+})
+
+MainSection:NewToggle({
+    Title = "Auto Fish (Auto Cast)",
+    Default = false,
+    Callback = function(state)
+        autoFishing = state
+        if state then
+            setupMinigameListener()
+            startFishingLoop()
+            Notification.new({
+                Title = "🎣 Auto Fish",
+                Description = "ENABLED",
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        else
+            Notification.new({
+                Title = "🎣 Auto Fish",
+                Description = "DISABLED",
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        end
+    end,
+})
+
+MainSection:NewToggle({
+    Title = "Auto Minigame",
+    Default = false,
+    Callback = function(state)
+        autoMinigame = state
+        if state then
+            startAutoMinigameTracker()
+            Notification.new({
+                Title = "🎮 Auto Minigame",
+                Description = "ENABLED",
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        else
+            releaseSpace()
+            if renderConnection then
+                renderConnection:Disconnect()
+                renderConnection = nil
+            end
+            Notification.new({
+                Title = "🎮 Auto Minigame",
+                Description = "DISABLED",
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        end
+    end,
+})
+
+MainSection:NewButton({
+    Title = "🎯 Manual Cast",
+    Callback = function()
+        equipRod()
+        task.wait(0.5)
+        castRod()
+    end,
+})
+
+MainSection:NewButton({
+    Title = "⚡ Force Complete",
+    Callback = function()
+        local rod = getRod()
+        if rod then
+            local mg = rod:FindFirstChild("MiniGame")
+            if mg then
+                for i = 1, 5 do
+                    mg:FireServer("UpdateProgress", 0.5 + (i * 0.1))
+                    task.wait(0.2)
+                end
+                task.wait(0.1)
+                mg:FireServer("Complete", 1)
+                Notification.new({
+                    Title = "⚡ Force Complete",
+                    Description = "Sent!",
+                    Duration = 2,
+                    Icon = "rbxassetid://8997385628"
+                })
+            end
+        end
+    end,
+})
+
+SettingsSection:NewDropdown({
+    Title = "Select Rod",
+    Data = getRodList(),
+    Default = selectedRod,
+    Callback = function(value)
+        selectedRod = value
+        setupMinigameListener()
+        Notification.new({
+            Title = "🎣 Rod Changed",
+            Description = "Using: " .. value,
+            Duration = 3,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
+
+SettingsSection:NewButton({
+    Title = "🔄 Refresh Rod List",
+    Callback = function()
+        local rods = getRodList()
+        Notification.new({
+            Title = "Rods Found",
+            Description = table.concat(rods, ", "),
+            Duration = 4,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
+
+SettingsSection:NewTitle('📋 Cara Pakai:')
+SettingsSection:NewTitle('1. Pilih Rod')
+SettingsSection:NewTitle('2. ON Auto Fish')
+SettingsSection:NewTitle('3. ON Auto Minigame')
+SettingsSection:NewTitle('4. AFK & Profit! 💰')
+
+-- ==================== TAB 2: ESP (PREMIUM) ====================
+local ESPTab = Windows:NewTab({
+    Title = "👁️ ESP Premium",
+    Description = "Premium player wallhack",
+    Icon = "rbxassetid://7733960981"
+})
+
+local ESPMainSection = ESPTab:NewSection({
+    Title = "👁️ ESP Controls",
+    Icon = "rbxassetid://7743869054",
+    Position = "Left"
+})
+
+local ESPSettingsSection = ESPTab:NewSection({
+    Title = "🎨 ESP Settings",
+    Icon = "rbxassetid://7733964719",
+    Position = "Right"
+})
+
+ESPMainSection:NewToggle({
+    Title = "Enable ESP",
+    Default = false,
+    Callback = function(state)
+        espEnabled = state
+        if state then
+            refreshAllESP()
+            Notification.new({
+                Title = "👁️ ESP",
+                Description = "PREMIUM ESP ENABLED",
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        else
+            removeAllESP()
+            if espRenderConnection then
+                espRenderConnection:Disconnect()
+                espRenderConnection = nil
+            end
+            Notification.new({
+                Title = "👁️ ESP",
+                Description = "DISABLED",
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        end
+    end,
+})
+
+ESPMainSection:NewToggle({
+    Title = "📛 Show Names",
+    Default = true,
+    Callback = function(state)
+        espNames = state
+        if espEnabled then refreshAllESP() end
+    end,
+})
+
+ESPMainSection:NewToggle({
+    Title = "❤️ Show Health",
+    Default = true,
+    Callback = function(state)
+        espHealth = state
+        if espEnabled then refreshAllESP() end
+    end,
+})
+
+ESPMainSection:NewToggle({
+    Title = "📍 Show Distance",
+    Default = true,
+    Callback = function(state)
+        espDistance = state
+        if espEnabled then refreshAllESP() end
+    end,
+})
+
+ESPMainSection:NewToggle({
+    Title = "📦 Box ESP",
+    Default = false,
+    Callback = function(state)
+        espBoxes = state
+        if espEnabled then refreshAllESP() end
+    end,
+})
+
+ESPMainSection:NewToggle({
+    Title = "🌈 Chams (Highlight)",
+    Default = false,
+    Callback = function(state)
+        espChams = state
+        if espEnabled then refreshAllESP() end
+    end,
+})
+
+ESPMainSection:NewToggle({
+    Title = "📐 Tracers",
+    Default = false,
+    Callback = function(state)
+        espTracers = state
+        if espEnabled then refreshAllESP() end
+    end,
+})
+
+ESPSettingsSection:NewToggle({
+    Title = "🤝 Team Check",
+    Default = false,
+    Callback = function(state)
+        espTeamCheck = state
+        if espEnabled then refreshAllESP() end
+    end,
+})
+
+ESPSettingsSection:NewButton({
+    Title = "🔄 Refresh ESP",
+    Callback = function()
+        refreshAllESP()
+        Notification.new({
+            Title = "👁️ ESP",
+            Description = "Refreshed for " .. #Players:GetPlayers() - 1 .. " players",
+            Duration = 3,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
+
+ESPSettingsSection:NewTitle('✨ Premium ESP Features:')
+ESPSettingsSection:NewTitle('• Player Names + Display Name')
+ESPSettingsSection:NewTitle('• Health Bars (Color coded)')
+ESPSettingsSection:NewTitle('• Distance Tracking')
+ESPSettingsSection:NewTitle('• Box ESP with Corners')
+ESPSettingsSection:NewTitle('• Rainbow Chams')
+ESPSettingsSection:NewTitle('• Screen Tracers')
+ESPSettingsSection:NewTitle('• Team Check Support')
+
+-- ==================== TAB 3: TROLL CARRY ====================
+local TrollTab = Windows:NewTab({
+    Title = "🤡 Troll Carry",
+    Description = "Carry troll system",
+    Icon = "rbxassetid://7733960981"
+})
+
+local TrollMainSection = TrollTab:NewSection({
+    Title = "🤡 Troll Controls",
+    Icon = "rbxassetid://7743869054",
+    Position = "Left"
+})
+
+local TrollSettingsSection = TrollTab:NewSection({
+    Title = "⚙️ Troll Settings",
+    Icon = "rbxassetid://7733964719",
+    Position = "Right"
+})
+
+TrollMainSection:NewToggle({
+    Title = "Enable Troll Carry",
+    Default = false,
+    Callback = function(state)
+        trollCarryEnabled = state
+        if state then
+            startTrollCarry()
+            Notification.new({
+                Title = "🤡 Troll Carry",
+                Description = "ENABLED - Targeting: " .. trollCarryTarget,
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        else
+            stopTrollCarry()
+            Notification.new({
+                Title = "🤡 Troll Carry",
+                Description = "DISABLED",
+                Duration = 3,
+                Icon = "rbxassetid://8997385628"
+            })
+        end
+    end,
+})
+
+TrollMainSection:NewButton({
+    Title = "🤗 Carry Once (All)",
+    Callback = function()
+        pcall(function()
+            local Event = getCarryRemote()
+            local CarryChoice = getCarryChoice()
+            if Event and CarryChoice then
+                for _, player in pairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer then
+                        Event:FireServer({
+                            cmd = "Carry",
+                            carrychoicesss = CarryChoice,
+                            firstPlr = player
+                        })
+                        task.wait(0.1)
+                    end
+                end
+                Notification.new({
+                    Title = "🤗 Carry",
+                    Description = "Carried all players!",
+                    Duration = 2,
+                    Icon = "rbxassetid://8997385628"
+                })
+            end
+        end)
+    end,
+})
+
+TrollMainSection:NewButton({
+    Title = "❌ Drop All",
+    Callback = function()
+        pcall(function()
+            local Event = getCarryRemote()
+            if Event then
+                Event:FireServer({
+                    cmd = "Drop"
+                })
+                Notification.new({
+                    Title = "❌ Drop",
+                    Description = "Dropped everyone!",
+                    Duration = 2,
+                    Icon = "rbxassetid://8997385628"
+                })
+            end
+        end)
+    end,
+})
+
+TrollSettingsSection:NewDropdown({
+    Title = "Target Player",
+    Data = getPlayerList(),
+    Default = "All Players",
+    Callback = function(value)
+        trollCarryTarget = value
+        Notification.new({
+            Title = "🎯 Target Set",
+            Description = "Targeting: " .. value,
+            Duration = 3,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
+
+TrollSettingsSection:NewButton({
+    Title = "🔄 Refresh Player List",
+    Callback = function()
+        local list = getPlayerList()
+        Notification.new({
+            Title = "Players Found",
+            Description = table.concat(list, ", "),
+            Duration = 4,
+            Icon = "rbxassetid://8997385628"
+        })
+    end,
+})
+
+TrollSettingsSection:NewTitle('🤡 Troll Carry Info:')
+TrollSettingsSection:NewTitle('• Auto carries players')
+TrollSettingsSection:NewTitle('• Hug animation style')
+TrollSettingsSection:NewTitle('• Target specific player')
+TrollSettingsSection:NewTitle('• or all players at once')
+TrollSettingsSection:NewTitle('')
+TrollSettingsSection:NewTitle('⚠️ Use responsibly!')
+
+-- ==================== TAB 4: CREDITS ====================
+local CreditsTab = Windows:NewTab({
+    Title = "📜 Credits",
+    Description = "About ZallStore",
+    Icon = "rbxassetid://7733960981"
+})
+
+local CreditsSection = CreditsTab:NewSection({
+    Title = "📜 ZallStore By NubyCode",
+    Icon = "rbxassetid://7743869054",
+    Position = "Left"
+})
+
+local FeaturesSection = CreditsTab:NewSection({
+    Title = "✨ Features List",
+    Icon = "rbxassetid://7733964719",
+    Position = "Right"
+})
+
+CreditsSection:NewTitle('═══════════════════')
+CreditsSection:NewTitle('   ZallStore Premium')
+CreditsSection:NewTitle('   By NubyCode')
+CreditsSection:NewTitle('═══════════════════')
+CreditsSection:NewTitle('')
+CreditsSection:NewTitle('🔑 Premium Features:')
+CreditsSection:NewTitle('• Full ESP System')
+CreditsSection:NewTitle('• Auto Fish + Minigame')
+CreditsSection:NewTitle('• Troll Carry System')
+CreditsSection:NewTitle('')
+CreditsSection:NewTitle('⌨️ Keybind: Left CTRL')
+CreditsSection:NewTitle('📌 Version: 3.0 Premium')
+
+FeaturesSection:NewTitle('🎣 AUTO FISHING:')
+FeaturesSection:NewTitle('  ✅ Auto Cast Rod')
+FeaturesSection:NewTitle('  ✅ Auto Complete Minigame')
+FeaturesSection:NewTitle('  ✅ Force Complete')
+FeaturesSection:NewTitle('  ✅ Rod Selection')
+FeaturesSection:NewTitle('')
+FeaturesSection:NewTitle('👁️ PREMIUM ESP:')
+FeaturesSection:NewTitle('  ✅ Player Names')
+FeaturesSection:NewTitle('  ✅ Health Bars')
+FeaturesSection:NewTitle('  ✅ Distance Tracker')
+FeaturesSection:NewTitle('  ✅ Box ESP')
+FeaturesSection:NewTitle('  ✅ Chams/Highlight')
+FeaturesSection:NewTitle('  ✅ Tracers')
+FeaturesSection:NewTitle('  ✅ Team Check')
+FeaturesSection:NewTitle('')
+FeaturesSection:NewTitle('🤡 TROLL CARRY:')
+FeaturesSection:NewTitle('  ✅ Auto Carry Loop')
+FeaturesSection:NewTitle('  ✅ Target Selection')
+FeaturesSection:NewTitle('  ✅ Carry All / Single')
+FeaturesSection:NewTitle('  ✅ Drop All')
+
+-- ==================== INITIALIZATION ====================
+setupMinigameListener()
+
+LocalPlayer.Backpack.ChildAdded:Connect(function(child)
+    if child:IsA("Tool") and child:FindFirstChild("MiniGame") then
+        task.wait(0.5)
+        setupMinigameListener()
+    end
+end)
+
+-- Auto refresh ESP when new players join
+Players.PlayerAdded:Connect(function(player)
+    task.wait(2)
+    if espEnabled and player.Character then
+        createBillboardGui(player, player.Character)
+    end
+end)
+
+print("═══════════════════════════════")
+print("  ZallStore By NubyCode")
+print("  Premium Edition v3.0")
+print("  Loaded Successfully! ✅")
+print("═══════════════════════════════")
